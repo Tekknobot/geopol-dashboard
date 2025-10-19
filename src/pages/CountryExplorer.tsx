@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from 'react'
 import Card from '../components/Card'
 import Loading from '../components/Loading'
@@ -65,49 +64,83 @@ export default function CountryExplorer() {
 
   return (
     <div className="space-y-6">
-      <Card title="Country search" right={
-        <input
-          value={query}
-          onChange={e=>setQuery(e.target.value)}
-          className="rounded-lg border px-3 py-1 text-sm"
-          placeholder="Try: Ukraine, Canada, China..."
-        />
-      }>
+      {/* Desktop header input stays in the Card header; on mobile we show an in-body input (below) */}
+      <Card
+        title="Country search"
+        right={
+          <div className="hidden md:block">
+            <input
+              value={query}
+              onChange={e=>setQuery(e.target.value)}
+              className="rounded-lg border px-3 py-1 text-sm w-72"
+              placeholder="Try: Ukraine, Canada, China..."
+            />
+          </div>
+        }
+      >
+        {/* Mobile input: full width and stacked */}
+        <div className="md:hidden mb-3">
+          <input
+            value={query}
+            onChange={e=>setQuery(e.target.value)}
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+            placeholder="Search a country..."
+          />
+        </div>
+
         {loading && <Loading/>}
+
         {country && (
-          <div className="flex gap-4 items-start">
-            {country.flags?.png && <img src={country.flags.png} className="w-16 h-10 object-cover rounded-md border" alt="flag" />}
-            <div>
-              <div className="text-xl font-semibold">{country.name.common}</div>
-              <div className="grid md:grid-cols-2 gap-x-6 gap-y-1 mt-2 text-sm">
-                {facts?.map(([k,v]) => (
-                  <div key={k} className="flex">
-                    <div className="w-40 text-slate-500">{k}</div>
-                    <div className="font-medium">{v}</div>
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center min-w-0">
+            {country.flags?.png && (
+              <img
+                src={country.flags.png}
+                className="w-20 h-12 sm:w-24 sm:h-16 object-cover rounded-md border shrink-0"
+                alt="flag"
+                loading="lazy"
+              />
+            )}
+
+            <div className="min-w-0 w-full">
+              <div className="text-lg sm:text-xl font-semibold break-words">{country.name.common}</div>
+
+              {/* On mobile use 1 column; from sm+ use 2 columns. Allow wrapping of long values */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mt-3 text-sm">
+                {facts?.map(([k, v]) => (
+                  <div key={k} className="min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:items-baseline sm:gap-2">
+                      <div className="text-slate-500 sm:w-44">{k}</div>
+                      <div className="font-medium break-words">{v}</div>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           </div>
         )}
+
         {error && <div className="text-red-600 text-sm mt-2">{error}</div>}
       </Card>
 
+      {/* Charts: keep as-is; they already scale with ResponsiveContainer */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {INDICATORS.map(ind => (
           <Card key={ind.code} title={ind.label}>
-            {!series[ind.code] ? <Loading/> :
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={series[ind.code]}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" tick={{fontSize: 10}}/>
-                  <YAxis domain={['auto','auto']} tick={{fontSize: 10}}/>
-                  <Tooltip />
-                  <Line type="monotone" dataKey="value" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>}
+            {!series[ind.code] ? (
+              <Loading/>
+            ) : (
+              <div className="h-56 sm:h-64"> {/* slightly shorter on mobile to avoid vertical cram */}
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={series[ind.code]}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tick={{fontSize: 10}}/>
+                    <YAxis domain={['auto','auto']} tick={{fontSize: 10}}/>
+                    <Tooltip />
+                    <Line type="monotone" dataKey="value" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </Card>
         ))}
       </div>
