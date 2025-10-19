@@ -78,7 +78,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Dedicated, larger map section */}
-      <Card title="Global Socio-Political Events (Last 48h)">
+      <Card title="Global Socio-Political Events (Last 24h)">
         {!events ? <Loading label="Preparing map..." /> : <LazyEventMap events={events} />}
         {/* The map now sources GDELT internally; removing the EONET count below */}
       </Card>
