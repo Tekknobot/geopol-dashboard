@@ -194,7 +194,7 @@ function inferCategory(name: string, html: string) {
 }
 
 /** ---------- Robust fetch (direct to GDELT) ---------- */
-async function fetchGeo(query: string, timespan = '48h', maxpoints = 700) {
+async function fetchGeo(query: string, timespan = '24h', maxpoints = 700) { // default changed to 24h
   const base = "https://api.gdeltproject.org"
   const url = `${base}/api/v2/geo/geo?query=${encodeURIComponent(query)}&mode=PointData&format=GeoJSON&timespan=${encodeURIComponent(timespan)}&maxpoints=${maxpoints}`
   const controller = new AbortController()
@@ -226,13 +226,13 @@ async function fetchGeo(query: string, timespan = '48h', maxpoints = 700) {
   }
 }
 
-/** ---------- Progressive queries (48h) ---------- */
-async function fetchSocio48h(): Promise<SocioPoint[]> {
+/** ---------- Progressive queries (24h) ---------- */
+async function fetchSocio24h(): Promise<SocioPoint[]> {
   const Q1 = '(protest OR strike OR coup OR sanctions OR election OR energy OR oil OR gas OR shipping OR blockade OR "supply chain" OR tariff OR "export control" OR ransomware OR cyber OR refugee OR migration OR summit OR treaty OR alliance OR corruption OR impeachment)'
   const Q2 = '(protest OR strike OR coup OR sanctions OR election OR energy OR shipping OR tariff OR cyber OR refugee OR summit OR corruption)'
   const Q3 = '(politics OR government OR protest OR security)'
   for (const q of [Q1, Q2, Q3]) {
-    const feats = await fetchGeo(q, '48h', 900)
+    const feats = await fetchGeo(q, '24h', 900) // 24h here
     if (feats.length) {
       const pts = feats.map((f: any) => {
         const coords = f?.geometry?.coordinates
@@ -248,17 +248,9 @@ async function fetchSocio48h(): Promise<SocioPoint[]> {
         const isOther = category === 'Other'
         const trustworthy = (best.score >= 10) || (best.source ? TRUSTED_DOMAINS.has(best.source) : false)
 
-        // OPTION A: drop noisy "Other" without decent sources
+        // Drop noisy "Other" without decent sources
         if (isOther && !trustworthy) return null
 
-        // OPTION B (if you prefer to keep but mark unverified):
-        // const showLink = best.score >= 0
-        // const headline = showLink ? best.headline : undefined
-        // const source = showLink ? best.source : undefined
-        // const url     = showLink ? best.url     : undefined
-        // return { lat: lat!, lon: lon!, label, category, headline, source, url }
-
-        // Using Option A behavior (drop weak Others); otherwise show link if accepted
         const showLink = best.score >= 0
         const headline = showLink ? best.headline : undefined
         const source = showLink ? best.source : undefined
@@ -272,7 +264,7 @@ async function fetchSocio48h(): Promise<SocioPoint[]> {
   return []
 }
 
-/** ---------- Component (socio only, 48h) ---------- */
+/** ---------- Component (socio only, 24h) ---------- */
 export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
   const [points, setPoints] = useState<SocioPoint[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -282,7 +274,7 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
     let alive = true
     const id = requestAnimationFrame(async () => {
       try {
-        const pts = await fetchSocio48h()
+        const pts = await fetchSocio24h() // 24h loader
         if (!alive) return
         setPoints(pts)
         const all = new Set(pts.map(p => p.category))
@@ -379,7 +371,7 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
       {/* Off-map, fully interactive legend */}
       <div className="bg-white rounded-xl border shadow-sm px-3 py-3 text-[12px]">
         <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="font-semibold">Socio (48h)</div>
+          <div className="font-semibold">Socio (24h)</div> {/* label updated */}
           <div className="text-slate-600">Shown: {shown}/{total}</div>
         </div>
 
