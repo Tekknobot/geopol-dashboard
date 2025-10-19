@@ -1,0 +1,154 @@
+
+import { useEffect, useMemo, useState } from 'react'
+import Card from '../components/Card'
+import Loading from '../components/Loading'
+import ErrorState from '../components/ErrorState'
+import { getLatestReports, ReliefWebItem } from '../services/reliefweb'
+import { getOpenEvents, EonetEvent } from '../services/eonet'
+import { wbGetGlobalIndicator, toSeries, WbPoint } from '../services/worldBank'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import LazyEventMap from '../components/LazyEventMap'
+import { getCache, setCache } from '../services/cache'
+
+// Polyfill requestIdleCallback for Safari
+const ric = (cb: () => void) => {
+  const fn = (window as any).requestIdleCallback as any
+  if (typeof fn === 'function') return fn(cb)
+  return setTimeout(cb, 1)
+}
+
+export default function Dashboard() {
+  const [reports, setReports] = useState<ReliefWebItem[] | null>(null)
+  const [events, setEvents] = useState<EonetEvent[] | null>(null)
+  const [gdpSeries, setGdpSeries] = useState<WbPoint[] | null>(null)
+  const [cpiSeries, setCpiSeries] = useState<WbPoint[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  // 6-hour cache
+  const TTL = 6 * 60 * 60 * 1000
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // Try cache first
+        const cgdp = getCache<WbPoint[]>('wld:gdp', TTL)
+        const ccpi = getCache<WbPoint[]>('wld:cpi', TTL)
+        const crw = getCache<ReliefWebItem[]>('rw:latest', TTL)
+
+        if (cgdp) setGdpSeries(cgdp)
+        if (ccpi) setCpiSeries(ccpi)
+        if (crw) setReports(crw)
+
+        // Load charts quickly (20y window is enough for trend)
+        const [gdp, cpi] = await Promise.all([
+          wbGetGlobalIndicator('NY.GDP.MKTP.KD.ZG', 20),
+          wbGetGlobalIndicator('FP.CPI.TOTL.ZG', 20),
+        ])
+        const gdpS = toSeries(gdp)
+        const cpiS = toSeries(cpi)
+        setGdpSeries(gdpS); setCache('wld:gdp', gdpS)
+        setCpiSeries(cpiS); setCache('wld:cpi', cpiS)
+
+        // ReliefWeb feed
+        if (!crw) {
+          const rw = await getLatestReports(10)
+          setReports(rw); setCache('rw:latest', rw)
+        }
+      } catch (e:any) {
+        setError(e?.message || 'Failed to load data')
+      }
+    })()
+
+    // Defer heavier EONET fetch to idle time for faster first paint
+    ric(async () => {
+      try {
+        const cev = getCache<EonetEvent[]>('eonet:open', TTL)
+        if (cev) setEvents(cev)
+        const ev = await getOpenEvents()
+        setEvents(ev); setCache('eonet:open', ev)
+      } catch (e:any) {
+        // ignore map errors in initial load
+      }
+    })
+  }, [])
+
+  const lastGDP = useMemo(() => gdpSeries?.filter(p => p.value !== null).slice(-1)[0], [gdpSeries])
+  const lastCPI = useMemo(() => cpiSeries?.filter(p => p.value !== null).slice(-1)[0], [cpiSeries])
+
+  return (
+    <div className="space-y-6">
+      {/* Dedicated, larger map section */}
+      <Card title="Global Socio-Political Events (Last 48h)">
+        {!events ? <Loading label="Preparing map..." /> : <LazyEventMap events={events} />}
+        {/* The map now sources GDELT internally; removing the EONET count below */}
+      </Card>
+
+      {/* KPI charts row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card title="Global GDP Growth (WLD)">
+          {!gdpSeries ? <Loading/> :
+          <div className="h-60">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={gdpSeries}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" tick={{fontSize: 10}}/>
+                <YAxis domain={['auto','auto']} tick={{fontSize: 10}}/>
+                <Tooltip />
+                <Line type="monotone" dataKey="value" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>}
+          {lastGDP && <div className="text-xs text-slate-600 mt-2">Latest: {lastGDP.date} — {lastGDP.value?.toFixed(2)}%</div>}
+        </Card>
+
+        <Card title="Global CPI (Inflation % YOY)">
+          {!cpiSeries ? <Loading/> :
+          <div className="h-60">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={cpiSeries}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" tick={{fontSize: 10}}/>
+                <YAxis domain={['auto','auto']} tick={{fontSize: 10}}/>
+                <Tooltip />
+                <Line type="monotone" dataKey="value" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>}
+          {lastCPI && <div className="text-xs text-slate-600 mt-2">Latest: {lastCPI.date} — {lastCPI.value?.toFixed(2)}%</div>}
+        </Card>
+      </div>
+
+      {/* ReliefWeb feed and notes */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <Card title="Latest Humanitarian Updates (ReliefWeb)">
+            {!reports ? <Loading/> :
+            <ul className="divide-y">
+              {reports.map(item => (
+                <li key={item.id} className="py-3">
+                  <a href={item.fields.url} target="_blank" rel="noreferrer" className="font-medium hover:underline">
+                    {item.fields.title}
+                  </a>
+                  <div className="text-xs text-slate-500">
+                    {new Date(item.fields.date.created).toLocaleString()} — {item.fields.country?.map(c=>c.name).join(', ') || 'Global'}
+                  </div>
+                </li>
+              ))}
+            </ul>}
+          </Card>
+        </div>
+        <div className="lg:col-span-1">
+          <Card title="What this dashboard tracks">
+            <ul className="list-disc list-inside text-sm text-slate-700 space-y-1">
+              <li>Macro backdrop (World Bank GDP growth, CPI)</li>
+              <li>Humanitarian situation snapshots (ReliefWeb)</li>
+              <li>Geophysical risks that can impact geopolitics (NASA EONET)</li>
+              <li>Drill down by country for governance indicators</li>
+            </ul>
+            {error && <div className="mt-3"><ErrorState message={error}/></div>}
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
+}
