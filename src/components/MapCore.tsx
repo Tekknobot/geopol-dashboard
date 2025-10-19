@@ -132,8 +132,8 @@ function inferCategory(name: string, html: string) {
 
 /** ---------- Robust fetch via Vite proxy (text-first) ---------- */
 async function fetchGeo(query: string, timespan = '48h', maxpoints = 700) {
-  const url = `/gdelt/api/v2/geo/geo?query=${encodeURIComponent(query)}&mode=PointData&format=GeoJSON&timespan=${encodeURIComponent(timespan)}&maxpoints=${maxpoints}`
-  const controller = new AbortController()
+  const base = "https://api.gdeltproject.org";
+  const url = `${base}/api/v2/geo/geo?query=${encodeURIComponent(query)}&mode=PointData&format=GeoJSON&timespan=${encodeURIComponent(timespan)}&maxpoints=${maxpoints}`;const controller = new AbortController()
   const to = setTimeout(() => controller.abort(), 15000)
   try {
     const res = await fetch(url, {
