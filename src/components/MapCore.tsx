@@ -86,29 +86,91 @@ function decodeEntities(s: string) {
     .replace(/&gt;/g, '>')
 }
 
-/** Extract first headline + source + href (sanitized to http/https only) */
-function extractHeadlineSourceUrl(html: string): { headline?: string; source?: string; url?: string } {
-  if (!html) return {}
-  const aTag = html.match(/<a [^>]*>(.*?)<\/a>/i)          // inner text
-  const titleAttr = html.match(/title="([^"]+)"/i)         // title
-  const hrefAttr = html.match(/href="([^"]+)"/i)           // href
+/** ---------- Ranked & sanitized news link extraction ---------- */
+type PickedLink = { headline?: string; source?: string; url?: string; score: number; reason?: string };
 
-  let headline = titleAttr?.[1] || aTag?.[1] || undefined
-  if (headline) headline = decodeEntities(headline).trim()
+const TRUSTED_DOMAINS = new Set([
+  // Global wires / majors
+  'reuters.com','apnews.com','bbc.com','theguardian.com','nytimes.com','washingtonpost.com',
+  'ft.com','bloomberg.com','aljazeera.com','axios.com','npr.org','cnn.com','cnbc.com',
+  // Canada focus (Toronto etc.)
+  'cbc.ca','ctvnews.ca','globalnews.ca','thestar.com','theglobeandmail.com','nationalpost.com','cp24.com',
+  // Other reliable regional outlets (extend as needed)
+  'france24.com','dw.com','elpais.com','lemonde.fr','scmp.com','straitstimes.com','abc.net.au'
+])
+const TLD_BONUS = new Set(['ca','com','org','net','gov','edu','int'])
+const BLOCKED_PARTS = [
+  /\.blogspot\./i, /medium\.com/i, /wordpress\.com/i, /substack\.com/i,
+  /vk\.com/i, /\.ru$/i, /t\.me$/i, /telegraph\.co/i, /weebly\.com/i,
+  /newsbreak\.com/i, /pressrelease/i, /prnews/i
+]
+const STRIP_PARAMS = ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','fbclid','gclid','mc_cid','mc_eid']
 
-  let source: string | undefined
-  let url: string | undefined
-  const href = hrefAttr?.[1]
-  if (href) {
+function cleanUrl(u: URL) {
+  STRIP_PARAMS.forEach(k => u.searchParams.delete(k))
+  return u.toString()
+}
+
+function domainFrom(u: URL) {
+  return u.hostname.toLowerCase().replace(/^www\./,'')
+}
+
+function headlineFrom(html: string, fallback?: string) {
+  const titleAttr = html.match(/title="([^"]+)"/i)?.[1]
+  const aText = html.match(/<a [^>]*>(.*?)<\/a>/i)?.[1]
+  const raw = titleAttr || aText || fallback || ''
+  return decodeEntities(raw).trim().replace(/\s+/g,' ').slice(0, 160)
+}
+
+function scoreDomain(domain: string) {
+  let score = 0
+  if (TRUSTED_DOMAINS.has(domain)) score += 50
+  const tld = domain.split('.').pop() || ''
+  if (TLD_BONUS.has(tld)) score += 5
+  if (domain.length > 25) score -= 2
+  if ((domain.match(/-/g)||[]).length > 2) score -= 2
+  if (/\d/.test(domain)) score -= 1
+  if (BLOCKED_PARTS.some(rx => rx.test(domain))) score -= 25
+  return score
+}
+
+function extractAllLinks(html: string): URL[] {
+  const urls: URL[] = []
+  const rx = /href="([^"]+)"/ig
+  let m: RegExpExecArray | null
+  while ((m = rx.exec(html))) {
     try {
-      const u = new URL(href)
-      if (u.protocol === 'http:' || u.protocol === 'https:') {
-        url = u.toString()
-        source = u.hostname.replace(/^www\./, '')
-      }
+      const u = new URL(m[1])
+      if (u.protocol === 'http:' || u.protocol === 'https:') urls.push(u)
     } catch {}
   }
-  return { headline, source, url }
+  return urls
+}
+
+function extractBestLink(html: string, fallbackName: string): PickedLink {
+  if (!html) return { score: -999 }
+  const links = extractAllLinks(html)
+  if (!links.length) return { score: -999 }
+
+  const ranked = links.map(u => {
+    const domain = domainFrom(u)
+    const score = scoreDomain(domain) + (u.protocol === 'https:' ? 2 : 0)
+    return { url: cleanUrl(u), domain, score }
+  }).sort((a,b) => b.score - a.score)
+
+  const best = ranked[0]
+  if (!best) return { score: -999 }
+
+  // Only accept above threshold; adjust as desired.
+  const ACCEPT_THRESHOLD = 0
+  if (best.score < ACCEPT_THRESHOLD) return { score: best.score }
+
+  return {
+    url: best.url,
+    source: best.domain,
+    headline: headlineFrom(html, fallbackName),
+    score: best.score,
+  }
 }
 
 /** ---------- Category inference (broadened) ---------- */
@@ -117,23 +179,25 @@ function inferCategory(name: string, html: string) {
   if (/\b(protest|demonstration|rally|march|mobiliza|manifest|huelga|strike|picket|union|walkout)\b/.test(s)) return 'Protest/Strike'
   if (/\b(coup|golpe|junta|seize power|overthrow|putsch)\b/.test(s)) return 'Coup'
   if (/\b(sanction|embargo|blacklist|asset freeze|export control|entity list|trade restriction)\b/.test(s)) return 'Sanctions'
-  if (/\b(election|vote|polls|ballot|campaign|parliament|congress|senate|president|cabinet|assembly)\b/.test(s)) return 'Elections/Politics'
+  if (/\b(election|vote|polls|ballot|campaign|parliament|congress|senate|president|cabinet|assembly|council|budget)\b/.test(s)) return 'Elections/Politics'
   if (/\b(energy|oil|gas|lng|pipeline|refinery|power grid|electricity|fuel|diesel)\b/.test(s)) return 'Energy'
   if (/\b(supply chain|shipping|port|blockade|strait|canal|freight|container|logistics)\b/.test(s)) return 'Supply Chain'
   if (/\b(currency|fx|devaluation|inflation|interest rate|bond|debt|default|imf|world bank|tariff|gdp|recession)\b/.test(s)) return 'Macro/Finance'
-  if (/\b(clash|unrest|riot|security|militia|insurg|airstrike|shelling|ceasefire|attack|terror|hostage|troop)\b/.test(s)) return 'Security/Conflict'
+  if (/\b(clash|unrest|riot|security|militia|insurg|airstrike|shelling|ceasefire|attack|terror|hostage|troop|shooting|stabbing|police|arrest|homicide|investigation)\b/.test(s)) return 'Security/Conflict'
   if (/\b(migrant|refugee|asylum|displacement|idp)\b/.test(s)) return 'Migration'
   if (/\b(cyber|hacker|ransomware|ddos|malware|data breach|phishing)\b/.test(s)) return 'Cyber'
   if (/\b(tariff|quota|anti-dumping|export ban|import ban|trade deal|fta|wto)\b/.test(s)) return 'Trade/Export Controls'
   if (/\b(summit|talks|negotiation|accord|treaty|alliance|normalization|dialogue|mediator)\b/.test(s)) return 'Diplomacy/Alliances'
   if (/\b(corruption|bribery|graft|kickback|impeachment|resign|no-confidence|ombudsman)\b/.test(s)) return 'Governance/Corruption'
+  if (/\b(transit|subway|ttc|strike|bus|service disruption)\b/.test(s)) return 'Protest/Strike' // transit labour tilt
   return 'Other'
 }
 
-/** ---------- Robust fetch via Vite proxy (text-first) ---------- */
+/** ---------- Robust fetch (direct to GDELT) ---------- */
 async function fetchGeo(query: string, timespan = '48h', maxpoints = 700) {
-  const base = "https://api.gdeltproject.org";
-  const url = `${base}/api/v2/geo/geo?query=${encodeURIComponent(query)}&mode=PointData&format=GeoJSON&timespan=${encodeURIComponent(timespan)}&maxpoints=${maxpoints}`;const controller = new AbortController()
+  const base = "https://api.gdeltproject.org"
+  const url = `${base}/api/v2/geo/geo?query=${encodeURIComponent(query)}&mode=PointData&format=GeoJSON&timespan=${encodeURIComponent(timespan)}&maxpoints=${maxpoints}`
+  const controller = new AbortController()
   const to = setTimeout(() => controller.abort(), 15000)
   try {
     const res = await fetch(url, {
@@ -179,8 +243,26 @@ async function fetchSocio48h(): Promise<SocioPoint[]> {
         const category = inferCategory(name, html)
         const label = name || category
 
-        // Extract headline, source, safe url
-        const { headline, source, url } = extractHeadlineSourceUrl(html)
+        // Pick & sanitize best link
+        const best = extractBestLink(html, name)
+        const isOther = category === 'Other'
+        const trustworthy = (best.score >= 10) || (best.source ? TRUSTED_DOMAINS.has(best.source) : false)
+
+        // OPTION A: drop noisy "Other" without decent sources
+        if (isOther && !trustworthy) return null
+
+        // OPTION B (if you prefer to keep but mark unverified):
+        // const showLink = best.score >= 0
+        // const headline = showLink ? best.headline : undefined
+        // const source = showLink ? best.source : undefined
+        // const url     = showLink ? best.url     : undefined
+        // return { lat: lat!, lon: lon!, label, category, headline, source, url }
+
+        // Using Option A behavior (drop weak Others); otherwise show link if accepted
+        const showLink = best.score >= 0
+        const headline = showLink ? best.headline : undefined
+        const source = showLink ? best.source : undefined
+        const url     = showLink ? best.url     : undefined
 
         return { lat: lat!, lon: lon!, label, category, headline, source, url }
       }).filter(Boolean) as SocioPoint[]
@@ -269,12 +351,12 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
                   <div className="text-xs text-slate-600">{p.category}</div>
 
                   {/* Clickable headline + source (safe) */}
-                  {p.headline && p.url && (
+                  {p.headline && p.url ? (
                     <div className="text-[11px]">
                       <a
                         href={p.url}
                         target="_blank"
-                        rel="noopener noreferrer"
+                        rel="noopener noreferrer nofollow ugc"
                         className="text-blue-600 underline"
                         title={p.headline}
                       >
@@ -282,6 +364,8 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
                       </a>
                       {p.source ? <span className="text-slate-500"> — {p.source}</span> : null}
                     </div>
+                  ) : (
+                    <div className="text-[11px] text-amber-600">Unverified source</div>
                   )}
 
                   <div className="text-[11px] text-slate-500">Lat/Lon: {round2(p.lat)}, {round2(p.lon)}</div>
