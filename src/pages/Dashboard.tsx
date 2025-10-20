@@ -11,6 +11,82 @@ import { getCache, setCache } from '../services/cache'
 import { Newspaper, ExternalLink, Tag as TagIcon } from 'lucide-react'
 import type { MapNewsItem } from '../components/MapCore'
 
+// ---------- Tiny helpers for collapsible sections (with localStorage memory)
+function usePersistedToggle(key: string, defaultOpen = false) {
+  const [open, setOpen] = useState<boolean>(defaultOpen)
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(key)
+      if (v !== null) setOpen(v === '1')
+    } catch {}
+  }, [key])
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, open ? '1' : '0')
+    } catch {}
+  }, [key, open])
+  return [open, setOpen] as const
+}
+
+function CollapsibleSection({
+  title,
+  storageKey,
+  defaultOpen = false,
+  rightHint,
+  children,
+}: {
+  title: string
+  storageKey: string
+  defaultOpen?: boolean
+  rightHint?: React.ReactNode
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = usePersistedToggle(storageKey, defaultOpen)
+  return (
+    <details
+      className="group rounded-xl border bg-white shadow-sm"
+      open={open}
+      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+    >
+      <summary className="flex cursor-pointer select-none items-center justify-between gap-3 rounded-xl px-4 py-2">
+        <span className="font-semibold">{title}</span>
+        <span className="ml-auto text-xs text-slate-500">{rightHint}</span>
+        <span className="i-chevron transition-transform group-open:rotate-180 text-slate-500">
+          {/* caret icon using plain text to avoid extra deps */}
+          <span className="inline-block rotate-90 select-none">⌃</span>
+        </span>
+      </summary>
+      <div className="px-4 pb-4 pt-2">{children}</div>
+    </details>
+  )
+}
+
+function MiniSection({
+  title,
+  storageKey,
+  defaultOpen = false,
+  children,
+}: {
+  title: string
+  storageKey: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = usePersistedToggle(storageKey, defaultOpen)
+  return (
+    <details
+      className="rounded-lg border"
+      open={open}
+      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+    >
+      <summary className="cursor-pointer select-none px-3 py-2 text-[13px] font-semibold">
+        {title}
+      </summary>
+      <div className="px-3 pb-3 pt-1 text-[13px] text-slate-700">{children}</div>
+    </details>
+  )
+}
+
 // Polyfill requestIdleCallback for Safari
 const ric = (cb: () => void) => {
   const fn = (window as any).requestIdleCallback as any
@@ -83,8 +159,13 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Intro / What this site does (appears ABOVE the map) */}
-      <Card title="About this dashboard">
+      {/* Intro (collapsed by default, with collapsible subpanels) */}
+      <CollapsibleSection
+        title="About this dashboard"
+        storageKey="intro:open"
+        defaultOpen={false}
+        rightHint="What it does · Who uses it · What it offers"
+      >
         <div className="space-y-3 text-sm text-slate-700">
           <p>
             This dashboard tracks <span className="font-medium">real-time socio-political signals</span> around the world and pairs them with a quick macro backdrop.
@@ -92,46 +173,50 @@ export default function Dashboard() {
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="rounded-lg border p-3">
-              <div className="text-[13px] font-semibold mb-1">Who it’s for</div>
-              <ul className="list-disc list-inside text-[13px] space-y-1">
+            <MiniSection title="Who it’s for" storageKey="intro:who" defaultOpen={false}>
+              <ul className="list-disc list-inside space-y-1">
                 <li>Analysts & researchers</li>
                 <li>Security & risk teams</li>
                 <li>NGOs / humanitarian ops</li>
                 <li>Journalists / editors</li>
               </ul>
-            </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-[13px] font-semibold mb-1">What it shows</div>
-              <ul className="list-disc list-inside text-[13px] space-y-1">
+            </MiniSection>
+
+            <MiniSection title="What it shows" storageKey="intro:what" defaultOpen={false}>
+              <ul className="list-disc list-inside space-y-1">
                 <li>Live map of incidents (last 24h)</li>
                 <li>Latest headlines tied to pins</li>
                 <li>GDP growth & CPI (World Bank)</li>
                 <li>ReliefWeb updates (fallback)</li>
               </ul>
-            </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-[13px] font-semibold mb-1">How to use it</div>
-              <ul className="list-disc list-inside text-[13px] space-y-1">
+            </MiniSection>
+
+            <MiniSection title="How to use it" storageKey="intro:how" defaultOpen={false}>
+              <ul className="list-disc list-inside space-y-1">
                 <li>Toggle categories in the legend</li>
                 <li>Click pins to open sources</li>
                 <li>Browse country drilldowns</li>
                 <li>Compare with macro trends</li>
               </ul>
-            </div>
+            </MiniSection>
           </div>
         </div>
-      </Card>
+      </CollapsibleSection>
 
-      {/* Map section */}
+      {/* Map (not collapsed; primary interactive surface) */}
       <Card title="Global Socio-Political Events (Last 24h)">
         {!events ? <Loading label="Preparing map..." /> : <LazyEventMap events={events} onNews={setMapNews} />}
         {/* The map sources GDELT internally. */}
       </Card>
 
-      {/* KPI charts row */}
+      {/* KPI charts — both collapsible & persisted */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card title="Global GDP Growth (WLD)">
+        <CollapsibleSection
+          title="Global GDP Growth (WLD)"
+          storageKey="kpi:gdp"
+          defaultOpen={false}
+          rightHint={lastGDP ? `Latest: ${lastGDP.date} · ${lastGDP.value?.toFixed(2)}%` : undefined}
+        >
           {!gdpSeries ? <Loading/> :
           <div className="h-60">
             <ResponsiveContainer width="100%" height="100%">
@@ -144,10 +229,14 @@ export default function Dashboard() {
               </LineChart>
             </ResponsiveContainer>
           </div>}
-          {lastGDP && <div className="text-xs text-slate-600 mt-2">Latest: {lastGDP.date} — {lastGDP.value?.toFixed(2)}%</div>}
-        </Card>
+        </CollapsibleSection>
 
-        <Card title="Global CPI (Inflation % YOY)">
+        <CollapsibleSection
+          title="Global CPI (Inflation % YOY)"
+          storageKey="kpi:cpi"
+          defaultOpen={false}
+          rightHint={lastCPI ? `Latest: ${lastCPI.date} · ${lastCPI.value?.toFixed(2)}%` : undefined}
+        >
           {!cpiSeries ? <Loading/> :
           <div className="h-60">
             <ResponsiveContainer width="100%" height="100%">
@@ -160,101 +249,99 @@ export default function Dashboard() {
               </LineChart>
             </ResponsiveContainer>
           </div>}
-          {lastCPI && <div className="text-xs text-slate-600 mt-2">Latest: {lastCPI.date} — {lastCPI.value?.toFixed(2)}%</div>}
-        </Card>
+        </CollapsibleSection>
       </div>
 
-      {/* News list driven by the map; falls back to ReliefWeb if needed */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <Card title={hasMapNews ? 'Latest Headlines (from Map, 24h)' : 'Latest Humanitarian Updates (ReliefWeb)'}>
-            {!hasMapNews ? (
-              !reports ? <Loading/> : (
-                <ul className="divide-y">
-                  {reports.map(item => (
-                    <li key={item.id} className="py-3">
-                      <div className="flex items-start gap-2">
-                        <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
-                        <div className="min-w-0 flex-1">
-                          <a
-                            href={item.fields.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            title={item.fields.title}
-                            className="block font-medium leading-snug hover:underline whitespace-normal break-words"
-                          >
-                            {item.fields.title}
-                          </a>
-                          <div className="mt-1 text-xs text-slate-500 whitespace-normal break-words">
-                            {new Date(item.fields.date.created).toLocaleString()} — {item.fields.country?.map(c=>c.name).join(', ') || 'Global'}
-                          </div>
-                        </div>
-                        <a href={item.fields.url} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
-                          <ExternalLink className="h-3.5 w-3.5 opacity-60" />
-                        </a>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )
-            ) : (
-              <ul className="divide-y">
-                {mapNews.slice(0, 40).map(item => (
-                  <li key={item.id} className="py-3">
-                    <div className="flex items-start gap-2">
-                      <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
-                      <div className="min-w-0 flex-1">
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          title={item.headline}
-                          className="block font-medium leading-snug hover:underline whitespace-normal break-words"
-                        >
-                          {item.headline}
-                        </a>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-                          {item.source && <span className="shrink-0">{item.source}</span>}
-                          <span className="opacity-60 shrink-0">·</span>
-                          <span className="inline-flex items-center gap-1 shrink-0">
-                            <TagIcon className="h-3 w-3 opacity-60" />
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200">
-                              {item.category}
-                            </span>
-                          </span>
-                          <span className="opacity-60 shrink-0">·</span>
-                          <span className="shrink-0">Lat/Lon: {item.lat.toFixed(2)}, {item.lon.toFixed(2)}</span>
-                        </div>
-                      </div>
-                      <a href={item.url} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
-                        <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+      {/* Headlines — collapsible & persisted; still falls back to ReliefWeb */}
+      <CollapsibleSection
+        title={hasMapNews ? 'Latest Headlines (from Map, 24h)' : 'Latest Humanitarian Updates (ReliefWeb)'}
+        storageKey="news:list"
+        defaultOpen={false}
+        rightHint={hasMapNews ? `${mapNews.length} items` : (reports ? `${reports.length} items` : undefined)}
+      >
+        {!hasMapNews ? (
+          !reports ? <Loading/> : (
+            <ul className="divide-y">
+              {reports.map(item => (
+                <li key={item.id} className="py-3">
+                  <div className="flex items-start gap-2">
+                    <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
+                    <div className="min-w-0 flex-1">
+                      <a
+                        href={item.fields.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={item.fields.title}
+                        className="block font-medium leading-snug hover:underline whitespace-normal break-words"
+                      >
+                        {item.fields.title}
                       </a>
+                      <div className="mt-1 text-xs text-slate-500 whitespace-normal break-words">
+                        {new Date(item.fields.date.created).toLocaleString()} — {item.fields.country?.map(c=>c.name).join(', ') || 'Global'}
+                      </div>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </div>
-
-        <div className="lg:col-span-1">
-          {/* What this app tracks */}
-          <Card title="What this app tracks">
-            <ul className="list-disc list-inside text-sm text-slate-700 space-y-1">
-              <li>Real-time global incidents & unrest mapped from news signals (GDELT)</li>
-              <li>Macro backdrop: World Bank GDP growth (WLD)</li>
-              <li>Global inflation: World Bank CPI (YOY, WLD)</li>
-              <li>Humanitarian situation updates (ReliefWeb latest reports)</li>
-              <li>Country drilldowns for governance & development indicators</li>
+                    <a href={item.fields.url} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
+                      <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+                    </a>
+                  </div>
+                </li>
+              ))}
             </ul>
-            {error && (
-              <div className="mt-3">
-                <ErrorState message={error} />
-              </div>
-            )}
-          </Card>
-        </div>
-      </div>
+          )
+        ) : (
+          <ul className="divide-y">
+            {mapNews.slice(0, 40).map(item => (
+              <li key={item.id} className="py-3">
+                <div className="flex items-start gap-2">
+                  <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
+                  <div className="min-w-0 flex-1">
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={item.headline}
+                      className="block font-medium leading-snug hover:underline whitespace-normal break-words"
+                    >
+                      {item.headline}
+                    </a>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                      {item.source && <span className="shrink-0">{item.source}</span>}
+                      <span className="opacity-60 shrink-0">·</span>
+                      <span className="inline-flex items-center gap-1 shrink-0">
+                        <TagIcon className="h-3 w-3 opacity-60" />
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200">
+                          {item.category}
+                        </span>
+                      </span>
+                      <span className="opacity-60 shrink-0">·</span>
+                      <span className="shrink-0">Lat/Lon: {item.lat.toFixed(2)}, {item.lon.toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <a href={item.url} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
+                    <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+                  </a>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CollapsibleSection>
+
+      {/* Side note card (unchanged) */}
+      <Card title="What this app tracks">
+        <ul className="list-disc list-inside text-sm text-slate-700 space-y-1">
+          <li>Real-time global incidents & unrest mapped from news signals (GDELT)</li>
+          <li>Macro backdrop: World Bank GDP growth (WLD)</li>
+          <li>Global inflation: World Bank CPI (YOY, WLD)</li>
+          <li>Humanitarian situation updates (ReliefWeb latest reports)</li>
+          <li>Country drilldowns for governance & development indicators</li>
+        </ul>
+        {error && (
+          <div className="mt-3">
+            <ErrorState message={error} />
+          </div>
+        )}
+      </Card>
     </div>
   )
 }
