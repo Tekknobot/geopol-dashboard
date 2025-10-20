@@ -797,7 +797,7 @@ export default function Dashboard() {
         </div>
       </Card>
 
-      {/* Context Sidebar (renders when a country is selected) */}
+      {/* Context Sidebar (Renders when a country is selected.) */}
       {contextCountry && (
         <ContextSidebar
           countryName={contextCountry}
