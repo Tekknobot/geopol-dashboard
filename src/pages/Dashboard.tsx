@@ -327,20 +327,38 @@ export default function Dashboard() {
         )}
       </CollapsibleSection>
 
-      {/* Side note card (unchanged) */}
+      {/* Side note card (clean formatted list) */}
       <Card title="What this app tracks">
-        <ul className="list-disc list-inside text-sm text-slate-700 space-y-1">
-          <li>Real-time global incidents & unrest mapped from news signals (GDELT)</li>
-          <li>Macro backdrop: World Bank GDP growth (WLD)</li>
-          <li>Global inflation: World Bank CPI (YOY, WLD)</li>
-          <li>Humanitarian situation updates (ReliefWeb latest reports)</li>
-          <li>Country drilldowns for governance & development indicators</li>
-        </ul>
-        {error && (
-          <div className="mt-3">
-            <ErrorState message={error} />
-          </div>
-        )}
+        <div className="space-y-3 text-sm text-slate-700">
+          <p>
+            The dashboard combines <span className="font-medium">real-time event intelligence</span> with key macroeconomic indicators
+            to provide a single view of emerging global dynamics.
+          </p>
+
+          <ul className="list-disc list-inside pl-2 space-y-1.5">
+            <li>
+              <span className="font-medium">Live incident map:</span> Global unrest, political, and security events via GDELT.
+            </li>
+            <li>
+              <span className="font-medium">Macro backdrop:</span> GDP growth trends (World Bank, WLD series).
+            </li>
+            <li>
+              <span className="font-medium">Inflation data:</span> Year-over-year CPI (World Bank, WLD series).
+            </li>
+            <li>
+              <span className="font-medium">Humanitarian feed:</span> Latest situation reports (ReliefWeb API).
+            </li>
+            <li>
+              <span className="font-medium">Country drilldowns:</span> Governance and development indicators by region.
+            </li>
+          </ul>
+
+          {error && (
+            <div className="pt-2">
+              <ErrorState message={error} />
+            </div>
+          )}
+        </div>
       </Card>
     </div>
   )
