@@ -3,10 +3,7 @@ import Card from '../components/Card'
 import Loading from '../components/Loading'
 import { searchCountryByName, Country } from '../services/restCountries'
 import { wbGetCountryIndicator, wbGetGlobalIndicator, toSeries, WbPoint } from '../services/worldBank'
-import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  ComposedChart, Scatter, ReferenceArea, ReferenceLine
-} from 'recharts'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 const INDICATORS = [
   { code: 'PV.EST', label: 'Political Stability (WGI, est.)' },
@@ -33,7 +30,7 @@ function mapRestRegionToWb(region: string): string[] {
   switch (region) {
     case 'Africa': return ['SSF']
     case 'Americas': return ['NAC', 'LCN'] // North America, Latin America & Caribbean
-    case 'Asia': return ['EAS', 'SAS', 'MEA'] // MEA is MENA; WB uses 'MEA' on v2 meta
+    case 'Asia': return ['EAS', 'SAS', 'MEA'] // WB v2 meta uses 'MEA' for MENA
     case 'Europe': return ['ECS']
     case 'Oceania': return ['EAS']
     default: return []
@@ -142,7 +139,7 @@ export default function CountryExplorer() {
         if (myLoadId === loadIdRef.current) setNeighbors([])
       }
 
-      // regional comparator using WB region of the selected country (industry-style dot plot)
+      // regional comparator using WB region of the selected country (bar list with median ticks)
       if (c.region) {
         try {
           const wbCountries = await fetchWbCountryMeta()
@@ -169,12 +166,11 @@ export default function CountryExplorer() {
             })
           )
 
-          // sort (desc), keep tidy list
+          // sort (desc), keep tidy list, always include selected
           const withData = rows.filter(r => r.value !== null) as RegionalRow[]
           withData.sort((a,b)=> (b.value as number) - (a.value as number))
           const TOP = 20
           let top = withData.slice(0, TOP)
-
           if (!top.some(r => r.iso3 === selISO3)) {
             const me = rows.find(r => r.iso3 === selISO3)
             if (me) top = [...top, me]
@@ -248,13 +244,13 @@ export default function CountryExplorer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // quartiles for comparator
+  // comparator stats (for median tick + scaling)
   const comparatorStats = useMemo(() => {
     const vals = (regionalRows || [])
       .map(r => r.value)
       .filter((v): v is number => v !== null)
       .sort((a,b)=>a-b)
-    if (!vals.length) return { min: 0, q1: 0, med: 0, q3: 0, max: 0 }
+    if (!vals.length) return { min: 0, med: 0, max: 0 }
     const q = (p: number) => {
       const pos = (vals.length - 1) * p
       const base = Math.floor(pos)
@@ -263,12 +259,19 @@ export default function CountryExplorer() {
     }
     return {
       min: vals[0],
-      q1: q(0.25),
       med: q(0.5),
-      q3: q(0.75),
       max: vals[vals.length - 1]
     }
   }, [regionalRows])
+
+  // helper for bar percentage (safe for equal min/max)
+  const pct = (val: number | null) => {
+    if (val === null) return 0
+    const { min, max } = comparatorStats
+    if (max === min) return 50
+    return ((val - min) / (max - min)) * 100
+  }
+  const medPct = pct(comparatorStats.med)
 
   return (
     <div className="space-y-6">
@@ -368,51 +371,51 @@ export default function CountryExplorer() {
         {error && <div className="text-red-600 text-sm mt-2">{error}</div>}
       </Card>
 
-      {/* Regional Comparator — Dot plot with quartiles + median */}
+      {/* Regional Comparator — Ranked bars with median tick */}
       {regionalRows && selected?.name?.common && (
         <Card title={`Regional Comparator · Political Stability (WGI) — ${selected.region}`}>
           {!regionalRows.length ? (
             <div className="text-sm text-slate-600">No regional data available.</div>
           ) : (
-            <div className="h-[360px] w-full">
-              <ResponsiveContainer>
-                <ComposedChart
-                  layout="vertical"
-                  data={regionalRows.map(r => ({ name: r.name, value: r.value, isFocus: r.iso3 === selected.cca3 }))}
-                  margin={{ top: 8, right: 24, bottom: 8, left: 140 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" domain={['auto','auto']} tick={{ fontSize: 11 }} />
-                  <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11 }} />
+            <ul className="space-y-2">
+              {regionalRows.map((r, i) => {
+                const isFocus = r.iso3 === selected.cca3
+                const hasData = typeof r.value === 'number'
+                const widthPct = hasData ? Math.max(0, Math.min(100, pct(r.value!))) : 0
+                return (
+                  <li key={i} className="grid grid-cols-[160px_1fr_56px] items-center gap-3">
+                    {/* Name */}
+                    <div className={`text-xs truncate ${isFocus ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>
+                      {r.name}{!hasData ? ' (no data)' : ''}
+                    </div>
 
-                  {/* Quartile shading */}
-                  <ReferenceArea x1={comparatorStats.min} x2={comparatorStats.q1} y1="dataMin" y2="dataMax" />
-                  <ReferenceArea x1={comparatorStats.q1} x2={comparatorStats.q3} y1="dataMin" y2="dataMax" />
-                  <ReferenceArea x1={comparatorStats.q3} x2={comparatorStats.max} y1="dataMin" y2="dataMax" />
+                    {/* Bar with median tick */}
+                    <div className="relative h-3 rounded bg-slate-100">
+                      {/* bar fill */}
+                      <div
+                        className={`absolute left-0 top-0 h-3 rounded ${isFocus ? 'bg-slate-900' : 'bg-slate-600/80'} ${!hasData ? 'opacity-40' : ''}`}
+                        style={{ width: `${widthPct}%` }}
+                        title={hasData ? `${r.name}: ${Number(r.value).toFixed(2)}` : `${r.name}: No recent WGI value`}
+                      />
+                      {/* median tick */}
+                      <div
+                        className="absolute top-[-2px] w-0.5 h-4 bg-slate-400/80"
+                        style={{ left: `${medPct}%` }}
+                        title={`Regional median: ${Number(comparatorStats.med).toFixed(2)}`}
+                      />
+                    </div>
 
-                  {/* Median */}
-                  <ReferenceLine x={comparatorStats.med} strokeDasharray="4 2" />
-
-                  {/* Dots */}
-                  <Scatter
-                    dataKey="value"
-                    shape={(p: any) => {
-                      const r = p.payload
-                      const size = r.isFocus ? 6 : 4
-                      return <circle cx={p.cx} cy={p.cy} r={size} />
-                    }}
-                  />
-
-                  <Tooltip
-                    formatter={(v: any) => (typeof v === 'number' ? v.toFixed(2) : '—')}
-                    labelFormatter={(n: any) => n}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
+                    {/* Value */}
+                    <div className="text-xs text-right tabular-nums text-slate-600">
+                      {hasData ? Number(r.value).toFixed(2) : '—'}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
           )}
           <div className="mt-2 text-[11px] text-slate-500">
-            Bands show regional quartiles (min–Q1, Q1–Q3, Q3–max). The vertical line is the regional median. The larger dot is the selected country.
+            Bars show country scores; thin tick marks the regional median. Selected country is bold and darker.
           </div>
         </Card>
       )}
