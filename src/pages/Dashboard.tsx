@@ -9,7 +9,7 @@ import { searchCountryByName, type Country } from '../services/restCountries'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import LazyEventMap from '../components/LazyEventMap'
 import { getCache, setCache } from '../services/cache'
-import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pause, Play, Info } from 'lucide-react'
+import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pause, Play, Info, Image as ImageIcon } from 'lucide-react'
 import type { MapNewsItem } from '../components/MapCore'
 
 // ---------- Tiny helpers for collapsible sections (with localStorage memory)
@@ -262,6 +262,52 @@ function NewsCarousel({ items, onOpenContext }: { items: HeadlineItem[], onOpenC
   )
 }
 
+// ---------- “Context Image” block (royalty-free Unsplash Source)
+function pickImageQuery(item?: HeadlineItem) {
+  const base = 'geopolitics'
+  const parts = [
+    item?.countryName?.toLowerCase(),
+    item?.category?.toLowerCase(),
+    'protest',
+    'parliament',
+    'border',
+    'city'
+  ].filter(Boolean)
+  return encodeURIComponent([base, ...parts].slice(0, 3).join(','))
+}
+
+function ContextImageCard({ item }: { item: HeadlineItem }) {
+  const query = pickImageQuery(item)
+  // Unsplash Source: free, no key; returns a topical image per query
+  const src = `https://source.unsplash.com/1600x900/?${query}`
+  return (
+    <figure className="overflow-hidden rounded-2xl border shadow-sm bg-white">
+      <div className="relative aspect-[16/9] w-full bg-slate-100">
+        <img
+          src={src}
+          alt={`${item.countryName || 'Global'} context illustration`}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4 sm:p-6">
+          <a href={item.url} target="_blank" rel="noreferrer" className="group inline-flex items-start gap-2 text-left">
+            <ImageIcon className="mt-0.5 h-4 w-4 shrink-0 text-white/90" />
+            <figcaption className="text-white">
+              <div className="line-clamp-2 text-base sm:text-lg font-semibold leading-snug group-hover:underline">
+                {item.headline}
+              </div>
+              <div className="mt-1 text-xs text-white/80">
+                Illustrative image via Unsplash • Topic: {decodeURIComponent(query).replace(/,/g, ' / ')}
+              </div>
+            </figcaption>
+          </a>
+        </div>
+      </div>
+    </figure>
+  )
+}
+
 // ---------- Lightweight geopolitics helpers
 
 // Small chips showing country vs world signal
@@ -511,12 +557,18 @@ export default function Dashboard() {
     return shuffle(base.filter(b => b.headline && b.url)).slice(0, 12)
   }, [hasMapNews, mapNews, reports])
 
+  // pick hero item (first headline) to illustrate under the carousel
+  const heroItem = carouselItems[0]
+
   return (
     <div className="space-y-6">
       {/* VERY LARGE front-page carousel (random map headlines) */}
       {carouselItems.length > 0 && (
         <NewsCarousel items={carouselItems} onOpenContext={(c) => setContextCountry(c)} />
       )}
+
+      {/* NEW: illustrative image card just below the carousel */}
+      {heroItem && <ContextImageCard item={heroItem} />}
 
       {/* Intro (collapsible; collapsed by default; with collapsible subpanels) */}
       <CollapsibleSection
