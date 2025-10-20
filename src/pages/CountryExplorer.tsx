@@ -138,27 +138,52 @@ export default function CountryExplorer() {
         if (myLoadId === loadIdRef.current) setNeighbors([])
       }
 
-      // regional comparator using WB regions
+      // regional comparator using WB regions (ensure selected is present)
       if (c.region) {
         try {
           const wbRegions = mapRestRegionToWb(c.region)
           const wbCountries = await fetchWbCountryMeta()
+
+          // WB cohort by region
           const candidates = wbCountries
             .filter(cc => wbRegions.includes(cc.region.id))
             .map(cc => ({ name: cc.name, iso3: cc.id }))
 
-          const batches = await Promise.all(
+          // ensure the selected ISO3 is in the cohort (name differences/common edge cases)
+          const selISO3 = c.cca3
+          if (!candidates.some(x => x.iso3 === selISO3)) {
+            candidates.push({ name: c.name?.common || selISO3, iso3: selISO3 })
+          }
+
+          // fetch latest PV.EST for each
+          const rows = await Promise.all(
             candidates.map(async cand => {
               const s = toSeries(await wbGetCountryIndicator(cand.iso3, 'PV.EST', 6))
               const nonNull = s.filter(p => p.value !== null)
-              const v = nonNull.length ? nonNull[nonNull.length - 1].value : null
-              return { name: cand.name, value: v as number | null }
+              const v = nonNull.length ? (nonNull[nonNull.length - 1].value as number) : null
+              return { name: cand.name, iso3: cand.iso3, value: v }
             })
           )
-          const withData = batches.filter(b => b.value !== null) as { name: string; value: number }[]
+
+          // keep those with data (but hang onto the selected even if it has null)
+          const withData = rows.filter(r => r.value !== null) as { name: string; iso3: string; value: number }[]
           withData.sort((a, b) => b.value - a.value)
-          if (myLoadId === loadIdRef.current) setRegionalRows(withData.slice(0, 20))
-        } catch { if (myLoadId === loadIdRef.current) setRegionalRows([]) }
+
+          // create top N, then re-insert selected if missing
+          const TOP = 20
+          let top = withData.slice(0, TOP)
+          if (!top.some(r => r.iso3 === selISO3)) {
+            const me = rows.find(r => r.iso3 === selISO3) // may have null value
+            top = me ? [...top, me] : top
+          }
+
+          if (myLoadId === loadIdRef.current) {
+            // store with iso3 so render can highlight reliably
+            setRegionalRows(top.map(r => ({ name: r.name, value: r.value as number | null, /* @ts-ignore */ iso3: (r as any).iso3 })))
+          }
+        } catch {
+          if (myLoadId === loadIdRef.current) setRegionalRows([])
+        }
       } else {
         if (myLoadId === loadIdRef.current) setRegionalRows([])
       }
@@ -332,28 +357,27 @@ export default function CountryExplorer() {
           ) : (
             <ul className="space-y-1.5">
               {(() => {
-                const max = Math.max(...regionalRows.map(x => Number(x.value)))
-                return regionalRows
-                  .slice()
-                  .sort((a,b)=>Number(b.value)-Number(a.value))
-                  .map((r,i) => {
-                    const pct = max > 0 ? (Number(r.value)/max)*100 : 0
-                    const isFocus = r.name === selected.name.common
-                    return (
-                      <li key={i} className="grid grid-cols-[1fr_auto] items-center gap-3">
-                        <div className="h-2 rounded bg-slate-100">
-                          <div
-                            className={`h-2 rounded ${isFocus ? 'bg-slate-900' : 'bg-slate-600/80'}`}
-                            style={{ width: `${pct}%` }}
-                            title={`${r.name}: ${typeof r.value === 'number' ? r.value.toFixed(2) : r.value}`}
-                          />
-                        </div>
-                        <div className={`text-xs w-32 text-right truncate ${isFocus ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>
-                          {r.name}
-                        </div>
-                      </li>
-                    )
-                  })
+                const max = Math.max(...regionalRows.map(x => Number(x.value ?? 0)))
+                // don’t resort here; we already sorted when building rows
+                return regionalRows.map((r: any, i: number) => {
+                  const isFocus = r.iso3 === selected.cca3
+                  const hasData = typeof r.value === 'number'
+                  const pct = hasData && max > 0 ? (Number(r.value)/max)*100 : 0
+                  return (
+                    <li key={i} className="grid grid-cols-[1fr_auto] items-center gap-3">
+                      <div className="h-2 rounded bg-slate-100">
+                        <div
+                          className={`h-2 rounded ${isFocus ? 'bg-slate-900' : 'bg-slate-600/80'} ${!hasData ? 'opacity-40' : ''}`}
+                          style={{ width: `${pct}%` }}
+                          title={`${r.name}: ${hasData ? Number(r.value).toFixed(2) : 'No recent WGI value'}`}
+                        />
+                      </div>
+                      <div className={`text-xs w-40 text-right truncate ${isFocus ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>
+                        {r.name}{!hasData ? ' (no data)' : ''}
+                      </div>
+                    </li>
+                  )
+                })
               })()}
             </ul>
           )}
