@@ -13,18 +13,18 @@ function svgMarker(color: string, emoji: string) {
         </filter>
       </defs>
       <g filter="url(#shadow)">
-        <circle cx="24" cy="24" r="16" fill="\${color}" />
-        <text x="24" y="28" text-anchor="middle" font-size="18" font-family="system-ui, -apple-system, Segoe UI, Emoji">\${emoji}</text>
+        <circle cx="24" cy="24" r="16" fill="${color}" />
+        <text x="24" y="28" text-anchor="middle" font-size="18" font-family="system-ui, -apple-system, Segoe UI, Emoji">${emoji}</text>
       </g>
     </svg>
-  `.trim()
+  `.trim();
 
   return L.icon({
     iconUrl: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
     iconSize: [36, 36],
     iconAnchor: [18, 18],
     popupAnchor: [0, -18],
-  })
+  });
 }
 
 /** ---------- Icon mapping by category name ---------- */
