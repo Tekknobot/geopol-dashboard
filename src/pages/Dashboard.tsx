@@ -4,11 +4,12 @@ import Loading from '../components/Loading'
 import ErrorState from '../components/ErrorState'
 import { getLatestReports, ReliefWebItem } from '../services/reliefweb'
 import { getOpenEvents, EonetEvent } from '../services/eonet'
-import { wbGetGlobalIndicator, toSeries, WbPoint } from '../services/worldBank'
+import { wbGetGlobalIndicator, toSeries, WbPoint, wbGetCountryIndicator, wbGetGlobalIndicator as wbGlobal } from '../services/worldBank'
+import { searchCountryByName, type Country } from '../services/restCountries'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import LazyEventMap from '../components/LazyEventMap'
 import { getCache, setCache } from '../services/cache'
-import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
+import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pause, Play, Info } from 'lucide-react'
 import type { MapNewsItem } from '../components/MapCore'
 
 // ---------- Tiny helpers for collapsible sections (with localStorage memory)
@@ -102,6 +103,7 @@ type HeadlineItem = {
   category?: string
   lat?: number
   lon?: number
+  countryName?: string // NEW: when known (ReliefWeb often provides)
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -113,7 +115,7 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-function NewsCarousel({ items }: { items: HeadlineItem[] }) {
+function NewsCarousel({ items, onOpenContext }: { items: HeadlineItem[], onOpenContext: (country: string) => void }) {
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
   const total = items.length
@@ -196,6 +198,19 @@ function NewsCarousel({ items }: { items: HeadlineItem[] }) {
             >
               Read article <ExternalLink className="h-4 w-4 opacity-70" />
             </a>
+            {it.countryName && (
+              <>
+                <span className="opacity-50">•</span>
+                <button
+                  type="button"
+                  onClick={() => onOpenContext(it.countryName!)}
+                  className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs ring-1 ring-slate-200 hover:bg-slate-200"
+                  title="Open geopolitical context"
+                >
+                  <Info className="h-4 w-4" /> Open context: {it.countryName}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -247,6 +262,163 @@ function NewsCarousel({ items }: { items: HeadlineItem[] }) {
   )
 }
 
+// ---------- Lightweight geopolitics helpers
+
+// Small chips showing country vs world signal
+function EventContextChips({ countryName }: { countryName: string }) {
+  const [textA, setTextA] = useState<string | null>(null)
+  const [textB, setTextB] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const [country] = await searchCountryByName(countryName)
+        if (!country) return
+        const iso3 = country.cca3
+
+        const [ge, geW, inf, infW] = await Promise.all([
+          wbGetCountryIndicator(iso3, 'GE.EST', 10).then(toSeries),
+          wbGlobal('GE.EST', 10).then(toSeries),
+          wbGetCountryIndicator(iso3, 'FP.CPI.TOTL.ZG', 10).then(toSeries),
+          wbGlobal('FP.CPI.TOTL.ZG', 10).then(toSeries),
+        ])
+        if (!alive) return
+
+        const trend = (s: { value: number | null }[]) => {
+          const vals = s.map(x => x.value).filter((v): v is number => v !== null)
+          if (vals.length < 2) return '—'
+          const d = vals[vals.length - 1] - vals[vals.length - 2]
+          return d > 0 ? '↑' : d < 0 ? '↓' : '→'
+        }
+        const last = (s: { value: number | null }[]) => {
+          const vals = s.map(x => x.value).filter((v): v is number => v !== null)
+          return vals.length ? vals[vals.length - 1] : null
+        }
+
+        setTextA(`Govt effectiveness ${trend(ge)} vs world ${trend(geW)}`)
+        const lv = last(inf), lw = last(infW)
+        setTextB(`Inflation ${lv !== null ? lv.toFixed(1) + '%' : '—'} vs world ${lw !== null ? lw.toFixed(1) + '%' : '—'}`)
+      } catch {}
+    })()
+    return () => { alive = false }
+  }, [countryName])
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {textA && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700 ring-1 ring-slate-200">{textA}</span>}
+      {textB && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700 ring-1 ring-slate-200">{textB}</span>}
+    </div>
+  )
+}
+
+// Right-side country context panel
+function SeriesChart({ country, world, label }: { country: WbPoint[]; world: WbPoint[]; label: string }) {
+  const data = useMemo(() => {
+    const map = new Map<string, any>()
+    world.forEach(p => map.set(p.date, { date: p.date, world: p.value }))
+    country.forEach(p => {
+      const row = map.get(p.date) || { date: p.date }
+      row.country = p.value
+      map.set(p.date, row)
+    })
+    return Array.from(map.values()).sort((a,b) => a.date.localeCompare(b.date))
+  }, [country, world])
+
+  return (
+    <div className="h-44">
+      <ResponsiveContainer>
+        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 11 }} width={38} />
+          <Tooltip />
+          <Line type="monotone" dataKey="country" name="Country" dot={false} />
+          <Line type="monotone" dataKey="world" name="World" strokeDasharray="4 2" dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+      <div className="mt-1 text-xs text-slate-600">{label}</div>
+    </div>
+  )
+}
+
+function ContextSidebar({ countryName, onClose }: { countryName: string | null; onClose: () => void }) {
+  const [country, setCountry] = useState<Country | null>(null)
+  const [series, setSeries] = useState<Record<string, WbPoint[]>>({})
+  const [world, setWorld] = useState<Record<string, WbPoint[]>>({})
+  const [loading, setLoading] = useState(false)
+
+  const INDICATORS = [
+    { code: 'PV.EST', label: 'Political Stability (WGI)' },
+    { code: 'GE.EST', label: 'Government Effectiveness (WGI)' },
+    { code: 'NY.GDP.MKTP.KD.ZG', label: 'GDP Growth (annual %)' },
+    { code: 'FP.CPI.TOTL.ZG', label: 'Inflation, CPI (annual %)' },
+  ]
+
+  useEffect(() => {
+    if (!countryName) return
+    let alive = true
+    ;(async () => {
+      setLoading(true)
+      try {
+        const [c] = await searchCountryByName(countryName)
+        if (!c || !alive) return
+        setCountry(c)
+        const iso3 = c.cca3
+
+        const countryData = Object.fromEntries(
+          await Promise.all(INDICATORS.map(async x => [x.code, toSeries(await wbGetCountryIndicator(iso3, x.code, 30))]))
+        )
+        const worldData = Object.fromEntries(
+          await Promise.all(INDICATORS.map(async x => [x.code, toSeries(await wbGlobal(x.code, 30))]))
+        )
+        if (!alive) return
+        setSeries(countryData)
+        setWorld(worldData)
+      } catch {
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
+    return () => { alive = false }
+  }, [countryName])
+
+  if (!countryName) return null
+
+  return (
+    <aside className="fixed right-0 top-0 z-40 h-screen w-full max-w-md border-l bg-white shadow-xl">
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <h2 className="text-lg font-semibold">Context: {countryName}</h2>
+        <button onClick={onClose} className="rounded bg-slate-100 px-2 py-1 text-sm hover:bg-slate-200">Close</button>
+      </div>
+      <div className="space-y-4 overflow-y-auto p-4">
+        <Card title="Country facts">
+          {!country ? <div className="text-sm text-slate-500">Loading…</div> :
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+              <li><span className="text-slate-500">Region:</span> {country.region}</li>
+              <li><span className="text-slate-500">Capital:</span> {country.capital?.[0] ?? '—'}</li>
+              <li><span className="text-slate-500">Population:</span> {country.population.toLocaleString()}</li>
+              <li><span className="text-slate-500">Area:</span> {country.area.toLocaleString()} km²</li>
+            </ul>
+          }
+        </Card>
+
+        <Card title="Local vs Global">
+          {loading ? <div className="text-sm text-slate-500">Fetching indicators…</div> :
+            <div className="space-y-4">
+              <SeriesChart label="Political Stability (WGI)" country={series['PV.EST'] ?? []} world={world['PV.EST'] ?? []} />
+              <SeriesChart label="Government Effectiveness (WGI)" country={series['GE.EST'] ?? []} world={world['GE.EST'] ?? []} />
+              <SeriesChart label="GDP Growth (annual %)" country={series['NY.GDP.MKTP.KD.ZG'] ?? []} world={world['NY.GDP.MKTP.KD.ZG'] ?? []} />
+              <SeriesChart label="Inflation, CPI (annual %)" country={series['FP.CPI.TOTL.ZG'] ?? []} world={world['FP.CPI.TOTL.ZG'] ?? []} />
+            </div>
+          }
+        </Card>
+      </div>
+    </aside>
+  )
+}
+
+// ---------- Main Dashboard
 export default function Dashboard() {
   const [reports, setReports] = useState<ReliefWebItem[] | null>(null)
   const [events, setEvents] = useState<EonetEvent[] | null>(null)
@@ -256,6 +428,9 @@ export default function Dashboard() {
 
   // 📡 News flowing from the map
   const [mapNews, setMapNews] = useState<MapNewsItem[]>([])
+
+  // NEW: selected country for the context sidebar
+  const [contextCountry, setContextCountry] = useState<string | null>(null)
 
   // 6-hour cache
   const TTL = 6 * 60 * 60 * 1000
@@ -321,16 +496,18 @@ export default function Dashboard() {
           category: n.category,
           lat: n.lat,
           lon: n.lon
+          // no countryName in map items (unknown reliably without reverse-geo)
         }))
       : (reports || []).map(r => ({
           id: String(r.id),
           headline: r.fields.title,
           url: r.fields.url,
           source: new URL(r.fields.url).hostname.replace(/^www\./,''),
-          category: 'Update'
+          category: 'Update',
+          countryName: r.fields.country?.[0]?.name // use first if multiple
         }))
 
-    // Remove empties, shuffle, and cap to a sensible number to keep dots reasonable
+    // Remove empties, shuffle, and cap
     return shuffle(base.filter(b => b.headline && b.url)).slice(0, 12)
   }, [hasMapNews, mapNews, reports])
 
@@ -338,7 +515,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* VERY LARGE front-page carousel (random map headlines) */}
       {carouselItems.length > 0 && (
-        <NewsCarousel items={carouselItems} />
+        <NewsCarousel items={carouselItems} onOpenContext={(c) => setContextCountry(c)} />
       )}
 
       {/* Intro (collapsible; collapsed by default; with collapsible subpanels) */}
@@ -350,8 +527,9 @@ export default function Dashboard() {
       >
         <div className="space-y-3 text-sm text-slate-700">
           <p>
-            This dashboard tracks <span className="font-medium">real-time socio-political signals</span> around the world and pairs them with a quick macro backdrop.
-            Use it to scan what’s happening now, then drill into countries for context.
+            This dashboard applies a <span className="font-medium">geopolitics lens</span>:
+            we surface local events and immediately frame them against regional and global context.
+            Scan what’s happening now, then open the context panel for deeper comparisons.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -367,7 +545,7 @@ export default function Dashboard() {
             <MiniSection title="What it shows" storageKey="intro:what" defaultOpen={false}>
               <ul className="list-disc list-inside space-y-1">
                 <li>Live map of incidents (last 24h)</li>
-                <li>Latest headlines tied to pins</li>
+                <li>Latest headlines tied to pins or feeds</li>
                 <li>GDP growth & CPI (World Bank)</li>
                 <li>ReliefWeb updates (fallback)</li>
               </ul>
@@ -376,9 +554,8 @@ export default function Dashboard() {
             <MiniSection title="How to use it" storageKey="intro:how" defaultOpen={false}>
               <ul className="list-disc list-inside space-y-1">
                 <li>Toggle categories in the legend</li>
-                <li>Click pins to open sources</li>
-                <li>Browse country drilldowns</li>
-                <li>Compare with macro trends</li>
+                <li>Click “Open context” to compare country vs world</li>
+                <li>Browse country drilldowns for peers/region</li>
               </ul>
             </MiniSection>
           </div>
@@ -387,7 +564,14 @@ export default function Dashboard() {
 
       {/* Map */}
       <Card title="Global Socio-Political Events (Last 24h)">
-        {!events ? <Loading label="Preparing map..." /> : <LazyEventMap events={events} onNews={setMapNews} />}
+        {!events ? <Loading label="Preparing map..." /> : (
+          <LazyEventMap
+            events={events}
+            onNews={setMapNews}
+            // If your MapCore/LazyEventMap supports selection, you can pass:
+            // onSelectCountry={(name: string) => setContextCountry(name)}
+          />
+        )}
       </Card>
 
       {/* KPI charts */}
@@ -433,7 +617,7 @@ export default function Dashboard() {
         </CollapsibleSection>
       </div>
 
-      {/* Headlines list (still collapsible & persisted; same as before) */}
+      {/* Headlines list (collapsible & persisted) */}
       <CollapsibleSection
         title={mapNews.length ? 'Latest Headlines (from Map, 24h)' : 'Latest Humanitarian Updates (ReliefWeb)'}
         storageKey="news:list"
@@ -443,30 +627,49 @@ export default function Dashboard() {
         {!mapNews.length ? (
           !reports ? <Loading/> : (
             <ul className="divide-y">
-              {reports.map(item => (
-                <li key={item.id} className="py-3">
-                  <div className="flex items-start gap-2">
-                    <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
-                    <div className="min-w-0 flex-1">
-                      <a
-                        href={item.fields.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={item.fields.title}
-                        className="block font-medium leading-snug hover:underline whitespace-normal break-words"
-                      >
-                        {item.fields.title}
-                      </a>
-                      <div className="mt-1 text-xs text-slate-500 whitespace-normal break-words">
-                        {new Date(item.fields.date.created).toLocaleString()} — {item.fields.country?.map(c=>c.name).join(', ') || 'Global'}
+              {reports.map(item => {
+                const countryName = item.fields.country?.[0]?.name
+                return (
+                  <li key={item.id} className="py-3">
+                    <div className="flex items-start gap-2">
+                      <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
+                      <div className="min-w-0 flex-1">
+                        <a
+                          href={item.fields.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={item.fields.title}
+                          className="block font-medium leading-snug hover:underline whitespace-normal break-words"
+                        >
+                          {item.fields.title}
+                        </a>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 whitespace-normal break-words">
+                          <span>{new Date(item.fields.date.created).toLocaleString()}</span>
+                          <span className="opacity-60">—</span>
+                          <span>{countryName ? countryName : (item.fields.country?.map(c=>c.name).join(', ') || 'Global')}</span>
+                          {countryName && (
+                            <>
+                              <span className="opacity-60">·</span>
+                              <button
+                                type="button"
+                                onClick={() => setContextCountry(countryName)}
+                                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 ring-1 ring-slate-200 hover:bg-slate-200"
+                                title="Open geopolitical context"
+                              >
+                                <Info className="h-3 w-3" /> Open context
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        {countryName && <EventContextChips countryName={countryName} />}
                       </div>
+                      <a href={item.fields.url} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
+                        <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+                      </a>
                     </div>
-                    <a href={item.fields.url} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
-                      <ExternalLink className="h-3.5 w-3.5 opacity-60" />
-                    </a>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                )
+              })}
             </ul>
           )
         ) : (
@@ -513,12 +716,12 @@ export default function Dashboard() {
         <div className="space-y-3 text-sm text-slate-700">
           <p>
             The dashboard combines <span className="font-medium">real-time event intelligence</span> with key macroeconomic indicators
-            to provide a single view of emerging global dynamics.
+            to provide a single view of emerging global dynamics—and situates local events in a broader geopolitical frame.
           </p>
 
           <ul className="list-disc list-inside pl-2 space-y-1.5">
             <li>
-              <span className="font-medium">Live incident map:</span> Global unrest, political, and security events via GDELT.
+              <span className="font-medium">Live incident map:</span> Global unrest, political, and security events.
             </li>
             <li>
               <span className="font-medium">Macro backdrop:</span> GDP growth trends (World Bank, WLD series).
@@ -530,7 +733,7 @@ export default function Dashboard() {
               <span className="font-medium">Humanitarian feed:</span> Latest situation reports (ReliefWeb API).
             </li>
             <li>
-              <span className="font-medium">Country drilldowns:</span> Governance and development indicators by region.
+              <span className="font-medium">Country context:</span> Governance & macro vs. world, on demand.
             </li>
           </ul>
 
@@ -541,6 +744,14 @@ export default function Dashboard() {
           )}
         </div>
       </Card>
+
+      {/* Context Sidebar (renders when a country is selected) */}
+      {contextCountry && (
+        <ContextSidebar
+          countryName={contextCountry}
+          onClose={() => setContextCountry(null)}
+        />
+      )}
     </div>
   )
 }
