@@ -27,8 +27,6 @@ export default function CountryExplorer() {
   const [regionalRows, setRegionalRows] = useState<{ name: string; value: number | null }[] | null>(null)
   const [neighbors, setNeighbors] = useState<string[] | null>(null)
 
-  const iso3 = country?.cca3?.toLowerCase()
-
   // fetch country, indicators (country + world), peers, neighbors
   useEffect(() => {
     (async () => {
@@ -56,33 +54,34 @@ export default function CountryExplorer() {
           }
           setSeries(mapped)
 
-          // neighbors (resolve border codes to names) — lightweight, optional
-          if (pick.borders?.length) {
+          // neighbors (resolve border codes to names) — Country type doesn't declare 'borders', so read defensively
+          const borderCodes = ((pick as any)?.borders as string[] | undefined) || []
+          if (borderCodes.length) {
             try {
-              const codes = pick.borders.join(',')
+              const codes = borderCodes.join(',')
               const res = await fetch(`https://restcountries.com/v3.1/alpha?fields=name,cca3&codes=${encodeURIComponent(codes)}`)
               const js = await res.json() as { name: { common: string }, cca3: string }[]
               setNeighbors(js.map(x => x.name.common).sort())
-            } catch { /* ignore neighbor errors */ }
+            } catch { setNeighbors([]) }
           } else {
             setNeighbors([])
           }
 
           // regional comparator rows (Political Stability as default lens)
-          // we pull up to ~12 region mates and take latest PV.EST point
           if (pick.region) {
             try {
               const mates = await fetch(`https://restcountries.com/v3.1/region/${encodeURIComponent(pick.region)}?fields=name,cca3`)
                 .then(r => r.json()) as { name:{common:string}, cca3:string }[]
               const latest = async (iso3: string) => {
                 const s = toSeries(await wbGetCountryIndicator(iso3, 'PV.EST', 5))
-                const v = s[s.length-1]?.value ?? null
+                const len = s.length
+                const v = len ? s[len - 1].value ?? null : null
                 return v
               }
               const limited = mates.slice(0, 12)
               const rows = await Promise.all(limited.map(async m => ({ name: m.name.common, value: await latest(m.cca3) })))
               setRegionalRows(rows.filter(r => r.value !== null))
-            } catch { /* ignore regional errors */ }
+            } catch { setRegionalRows([]) }
           } else {
             setRegionalRows([])
           }
@@ -113,7 +112,7 @@ export default function CountryExplorer() {
     ]
   }, [country])
 
-  // small helper to merge country+world by date for dual-series charts
+  // merge country+world by date for dual-series charts
   const mergeCW = (bund: SeriesBundle | undefined) => {
     if (!bund) return []
     const map = new Map<string, any>()
@@ -126,11 +125,12 @@ export default function CountryExplorer() {
     return Array.from(map.values()).sort((a,b)=>a.date.localeCompare(b.date))
   }
 
-  // simple trend arrow
+  // simple trend arrow without using Array.prototype.at
   const trend = (arr: WbPoint[] | undefined) => {
     const vals = (arr || []).map(x => x.value).filter((v): v is number => v !== null)
-    if (vals.length < 2) return '→'
-    const d = vals.at(-1)! - vals.at(-2)!
+    const len = vals.length
+    if (len < 2) return '→'
+    const d = vals[len - 1] - vals[len - 2]
     return d > 0 ? '↑' : d < 0 ? '↓' : '→'
   }
 
@@ -209,28 +209,30 @@ export default function CountryExplorer() {
             <div className="text-sm text-slate-600">No regional data available.</div>
           ) : (
             <ul className="space-y-1.5">
-              {regionalRows
-                .slice()
-                .sort((a,b)=>Number(b.value)-Number(a.value))
-                .map((r,i) => {
-                  const max = Math.max(...regionalRows.map(x => Number(x.value)))
-                  const pct = max > 0 ? (Number(r.value)/max)*100 : 0
-                  const isFocus = r.name === country.name.common
-                  return (
-                    <li key={i} className="grid grid-cols-[1fr_auto] items-center gap-3">
-                      <div className="h-2 rounded bg-slate-100">
-                        <div
-                          className={`h-2 rounded ${isFocus ? 'bg-slate-900' : 'bg-slate-600/80'}`}
-                          style={{ width: `${pct}%` }}
-                          title={`${r.name}: ${r.value?.toFixed(2)}`}
-                        />
-                      </div>
-                      <div className={`text-xs w-32 text-right truncate ${isFocus ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>
-                        {r.name}
-                      </div>
-                    </li>
-                  )
-              })}
+              {(() => {
+                const max = Math.max(...regionalRows.map(x => Number(x.value)))
+                return regionalRows
+                  .slice()
+                  .sort((a,b)=>Number(b.value)-Number(a.value))
+                  .map((r,i) => {
+                    const pct = max > 0 ? (Number(r.value)/max)*100 : 0
+                    const isFocus = r.name === country.name.common
+                    return (
+                      <li key={i} className="grid grid-cols-[1fr_auto] items-center gap-3">
+                        <div className="h-2 rounded bg-slate-100">
+                          <div
+                            className={`h-2 rounded ${isFocus ? 'bg-slate-900' : 'bg-slate-600/80'}`}
+                            style={{ width: `${pct}%` }}
+                            title={`${r.name}: ${typeof r.value === 'number' ? r.value.toFixed(2) : r.value}`}
+                          />
+                        </div>
+                        <div className={`text-xs w-32 text-right truncate ${isFocus ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>
+                          {r.name}
+                        </div>
+                      </li>
+                    )
+                  })
+              })()}
             </ul>
           )}
           <div className="mt-2 text-[11px] text-slate-500">
@@ -239,34 +241,31 @@ export default function CountryExplorer() {
         </Card>
       )}
 
-      {/* Charts: Country vs World (dual-series) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Charts: Country vs World (dual-series). Card.title must be a string. */}
+      <div className="grid grid-cols-1 md-grid-cols-2 md:grid-cols-2 gap-6">
         {INDICATORS.map(ind => {
           const bundle = series[ind.code]
           const merged = mergeCW(bundle)
-          const latestCountry = bundle?.country.filter(p => p.value !== null).slice(-1)[0]
-          const latestWorld = bundle?.world.filter(p => p.value !== null).slice(-1)[0]
+
+          // latest values (avoid .at for older targets)
+          const lastCountry = (bundle?.country || []).filter(p => p.value !== null)
+          const lastWorld = (bundle?.world || []).filter(p => p.value !== null)
+          const lc = lastCountry.length ? lastCountry[lastCountry.length - 1] : undefined
+          const lw = lastWorld.length ? lastWorld[lastWorld.length - 1] : undefined
+
+          const rightNode = (
+            <div className="text-xs text-slate-500">
+              {bundle?.country ? (
+                <>
+                  Country {trend(bundle.country)} {lc?.value !== null && lc ? <>· {lc.date}: {typeof lc.value === 'number' ? lc.value.toFixed(2) : '—'}</> : null}
+                </>
+              ) : null}
+              {lw ? <> &nbsp;&nbsp;|&nbsp;&nbsp; World · {lw.date}: {typeof lw.value === 'number' ? lw.value.toFixed(2) : '—'}</> : null}
+            </div>
+          )
+
           return (
-            <Card
-              key={ind.code}
-              title={
-                <div className="flex items-baseline gap-2">
-                  <span>{ind.label}</span>
-                  {bundle?.country && (
-                    <span className="text-xs text-slate-500">
-                      Country {trend(bundle.country)} {latestCountry?.value !== null && `· ${latestCountry.date}: ${latestCountry.value?.toFixed(2)}`}
-                    </span>
-                  )}
-                </div>
-              }
-              right={
-                latestWorld ? (
-                  <div className="text-xs text-slate-500">
-                    World · {latestWorld.date}: {typeof latestWorld.value === 'number' ? latestWorld.value.toFixed(2) : '—'}
-                  </div>
-                ) : undefined
-              }
-            >
+            <Card key={ind.code} title={ind.label} right={rightNode}>
               {!bundle ? (
                 <Loading/>
               ) : (
