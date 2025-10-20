@@ -273,7 +273,12 @@ function pickImageQuery(item?: HeadlineItem) {
     'border',
     'city'
   ].filter(Boolean)
-  return encodeURIComponent([base, ...parts].slice(0, 3).join(','))
+
+  // keep commas plain, encode only the terms
+  return [base, ...parts]
+    .slice(0, 3)
+    .map(s => encodeURIComponent(s))
+    .join(',')
 }
 
 function ContextImageCard({ item }: { item: HeadlineItem }) {
@@ -284,11 +289,17 @@ function ContextImageCard({ item }: { item: HeadlineItem }) {
     <figure className="overflow-hidden rounded-2xl border shadow-sm bg-white">
       <div className="relative aspect-[16/9] w-full bg-slate-100">
         <img
-          src={src}
+          src={`https://source.unsplash.com/1600x900/?${query}`}
           alt={`${item.countryName || 'Global'} context illustration`}
           className="h-full w-full object-cover"
           loading="lazy"
           referrerPolicy="no-referrer"
+          onError={(e) => {
+            // simple fallback: a neutral gradient or a backup provider
+            (e.currentTarget as HTMLImageElement).src =
+              'data:image/svg+xml;charset=utf-8,' +
+              encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900"><defs><linearGradient id="g" x1="0" x2="1"><stop stop-color="#e5e7eb"/><stop offset="1" stop-color="#f8fafc"/></linearGradient></defs><rect width="1600" height="900" fill="url(#g)"/></svg>')
+          }}
         />
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4 sm:p-6">
           <a href={item.url} target="_blank" rel="noreferrer" className="group inline-flex items-start gap-2 text-left">
