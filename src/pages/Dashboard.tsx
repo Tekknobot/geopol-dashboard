@@ -133,13 +133,25 @@ export default function Dashboard() {
                 <ul className="divide-y">
                   {reports.map(item => (
                     <li key={item.id} className="py-3">
-                      <a href={item.fields.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 font-medium hover:underline" title={item.fields.title}>
-                        <Newspaper className="h-4 w-4 opacity-70" />
-                        <span className="truncate">{item.fields.title}</span>
-                        <ExternalLink className="h-3.5 w-3.5 opacity-60" />
-                      </a>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {new Date(item.fields.date.created).toLocaleString()} — {item.fields.country?.map(c=>c.name).join(', ') || 'Global'}
+                      <div className="flex items-start gap-2">
+                        <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
+                        <div className="min-w-0 flex-1">
+                          <a
+                            href={item.fields.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={item.fields.title}
+                            className="block font-medium leading-snug hover:underline whitespace-normal break-words"
+                          >
+                            {item.fields.title}
+                          </a>
+                          <div className="mt-1 text-xs text-slate-500 whitespace-normal break-words">
+                            {new Date(item.fields.date.created).toLocaleString()} — {item.fields.country?.map(c=>c.name).join(', ') || 'Global'}
+                          </div>
+                        </div>
+                        <a href={item.fields.url} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
+                          <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+                        </a>
                       </div>
                     </li>
                   ))}
@@ -149,20 +161,34 @@ export default function Dashboard() {
               <ul className="divide-y">
                 {mapNews.slice(0, 40).map(item => (
                   <li key={item.id} className="py-3">
-                    <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 font-medium hover:underline" title={item.headline}>
-                      <Newspaper className="h-4 w-4 opacity-70" />
-                      <span className="truncate">{item.headline}</span>
-                      <ExternalLink className="h-3.5 w-3.5 opacity-60" />
-                    </a>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                      {item.source && <span>{item.source}</span>}
-                      <span className="opacity-60">·</span>
-                      <span className="inline-flex items-center gap-1">
-                        <TagIcon className="h-3 w-3 opacity-60" />
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200">{item.category}</span>
-                      </span>
-                      <span className="opacity-60">·</span>
-                      <span>Lat/Lon: {item.lat.toFixed(2)}, {item.lon.toFixed(2)}</span>
+                    <div className="flex items-start gap-2">
+                      <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
+                      <div className="min-w-0 flex-1">
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={item.headline}
+                          className="block font-medium leading-snug hover:underline whitespace-normal break-words"
+                        >
+                          {item.headline}
+                        </a>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                          {item.source && <span className="shrink-0">{item.source}</span>}
+                          <span className="opacity-60 shrink-0">·</span>
+                          <span className="inline-flex items-center gap-1 shrink-0">
+                            <TagIcon className="h-3 w-3 opacity-60" />
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200">
+                              {item.category}
+                            </span>
+                          </span>
+                          <span className="opacity-60 shrink-0">·</span>
+                          <span className="shrink-0">Lat/Lon: {item.lat.toFixed(2)}, {item.lon.toFixed(2)}</span>
+                        </div>
+                      </div>
+                      <a href={item.url} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
+                        <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+                      </a>
                     </div>
                   </li>
                 ))}
