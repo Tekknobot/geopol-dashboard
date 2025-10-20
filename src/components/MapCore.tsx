@@ -90,12 +90,9 @@ function decodeEntities(s: string) {
 type PickedLink = { headline?: string; source?: string; url?: string; score: number; reason?: string };
 
 const TRUSTED_DOMAINS = new Set([
-  // Global wires / majors
   'reuters.com','apnews.com','bbc.com','theguardian.com','nytimes.com','washingtonpost.com',
   'ft.com','bloomberg.com','aljazeera.com','axios.com','npr.org','cnn.com','cnbc.com',
-  // Canada focus (Toronto etc.)
   'cbc.ca','ctvnews.ca','globalnews.ca','thestar.com','theglobeandmail.com','nationalpost.com','cp24.com',
-  // Other reliable regional outlets (extend as needed)
   'france24.com','dw.com','elpais.com','lemonde.fr','scmp.com','straitstimes.com','abc.net.au'
 ])
 const TLD_BONUS = new Set(['ca','com','org','net','gov','edu','int'])
@@ -110,18 +107,13 @@ function cleanUrl(u: URL) {
   STRIP_PARAMS.forEach(k => u.searchParams.delete(k))
   return u.toString()
 }
-
-function domainFrom(u: URL) {
-  return u.hostname.toLowerCase().replace(/^www\./,'')
-}
-
+function domainFrom(u: URL) { return u.hostname.toLowerCase().replace(/^www\./,'') }
 function headlineFrom(html: string, fallback?: string) {
   const titleAttr = html.match(/title="([^"]+)"/i)?.[1]
   const aText = html.match(/<a [^>]*>(.*?)<\/a>/i)?.[1]
   const raw = titleAttr || aText || fallback || ''
   return decodeEntities(raw).trim().replace(/\s+/g,' ').slice(0, 160)
 }
-
 function scoreDomain(domain: string) {
   let score = 0
   if (TRUSTED_DOMAINS.has(domain)) score += 50
@@ -133,7 +125,6 @@ function scoreDomain(domain: string) {
   if (BLOCKED_PARTS.some(rx => rx.test(domain))) score -= 25
   return score
 }
-
 function extractAllLinks(html: string): URL[] {
   const urls: URL[] = []
   const rx = /href="([^"]+)"/ig
@@ -146,25 +137,19 @@ function extractAllLinks(html: string): URL[] {
   }
   return urls
 }
-
 function extractBestLink(html: string, fallbackName: string): PickedLink {
   if (!html) return { score: -999 }
   const links = extractAllLinks(html)
   if (!links.length) return { score: -999 }
-
   const ranked = links.map(u => {
     const domain = domainFrom(u)
     const score = scoreDomain(domain) + (u.protocol === 'https:' ? 2 : 0)
     return { url: cleanUrl(u), domain, score }
   }).sort((a,b) => b.score - a.score)
-
   const best = ranked[0]
   if (!best) return { score: -999 }
-
-  // Only accept above threshold; adjust as desired.
   const ACCEPT_THRESHOLD = 0
   if (best.score < ACCEPT_THRESHOLD) return { score: best.score }
-
   return {
     url: best.url,
     source: best.domain,
@@ -189,12 +174,12 @@ function inferCategory(name: string, html: string) {
   if (/\b(tariff|quota|anti-dumping|export ban|import ban|trade deal|fta|wto)\b/.test(s)) return 'Trade/Export Controls'
   if (/\b(summit|talks|negotiation|accord|treaty|alliance|normalization|dialogue|mediator)\b/.test(s)) return 'Diplomacy/Alliances'
   if (/\b(corruption|bribery|graft|kickback|impeachment|resign|no-confidence|ombudsman)\b/.test(s)) return 'Governance/Corruption'
-  if (/\b(transit|subway|ttc|strike|bus|service disruption)\b/.test(s)) return 'Protest/Strike' // transit labour tilt
+  if (/\b(transit|subway|ttc|strike|bus|service disruption)\b/.test(s)) return 'Protest/Strike'
   return 'Other'
 }
 
 /** ---------- Robust fetch (direct to GDELT) ---------- */
-async function fetchGeo(query: string, timespan = '24h', maxpoints = 700) { // default changed to 24h
+async function fetchGeo(query: string, timespan = '24h', maxpoints = 700) {
   const base = "https://api.gdeltproject.org"
   const url = `${base}/api/v2/geo/geo?query=${encodeURIComponent(query)}&mode=PointData&format=GeoJSON&timespan=${encodeURIComponent(timespan)}&maxpoints=${maxpoints}`
   const controller = new AbortController()
@@ -232,7 +217,7 @@ async function fetchSocio24h(): Promise<SocioPoint[]> {
   const Q2 = '(protest OR strike OR coup OR sanctions OR election OR energy OR shipping OR tariff OR cyber OR refugee OR summit OR corruption)'
   const Q3 = '(politics OR government OR protest OR security)'
   for (const q of [Q1, Q2, Q3]) {
-    const feats = await fetchGeo(q, '24h', 900) // 24h here
+    const feats = await fetchGeo(q, '24h', 900)
     if (feats.length) {
       const pts = feats.map((f: any) => {
         const coords = f?.geometry?.coordinates
@@ -242,20 +227,14 @@ async function fetchSocio24h(): Promise<SocioPoint[]> {
         const name = (props.name || '').toString(); const html = (props.html || '').toString()
         const category = inferCategory(name, html)
         const label = name || category
-
-        // Pick & sanitize best link
         const best = extractBestLink(html, name)
         const isOther = category === 'Other'
         const trustworthy = (best.score >= 10) || (best.source ? TRUSTED_DOMAINS.has(best.source) : false)
-
-        // Drop noisy "Other" without decent sources
         if (isOther && !trustworthy) return null
-
         const showLink = best.score >= 0
         const headline = showLink ? best.headline : undefined
         const source = showLink ? best.source : undefined
         const url     = showLink ? best.url     : undefined
-
         return { lat: lat!, lon: lon!, label, category, headline, source, url }
       }).filter(Boolean) as SocioPoint[]
       if (pts.length) return pts
@@ -274,7 +253,7 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
     let alive = true
     const id = requestAnimationFrame(async () => {
       try {
-        const pts = await fetchSocio24h() // 24h loader
+        const pts = await fetchSocio24h()
         if (!alive) return
         setPoints(pts)
         const all = new Set(pts.map(p => p.category))
@@ -321,13 +300,21 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
   function clearAll() { setActiveCats(new Set()) }
 
   return (
-    <div className="space-y-2">
-      {/* Map */}
-      <div className="h-[560px]">
+    <div className="space-y-3">
+      {/* Map: give it as much viewport as possible across devices */}
+      <div
+        className="
+          min-h-[360px]
+          h-[70svh] sm:h-[74svh] md:h-[80svh] lg:h-[84svh] xl:h-[88svh]
+          [height:70dvh] sm:[height:74dvh] md:[height:80dvh] lg:[height:84dvh] xl:[height:88dvh]
+          rounded-xl overflow-hidden border
+        "
+      >
         <MapContainer
           center={[39, -98]}   // North America default
           zoom={4}
-          scrollWheelZoom={false}
+          scrollWheelZoom={true}
+          worldCopyJump={true}
           style={{ height: '100%', width: '100%' }}
         >
           <TileLayer
@@ -342,7 +329,6 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
                   <div className="font-semibold text-sm">{p.label}</div>
                   <div className="text-xs text-slate-600">{p.category}</div>
 
-                  {/* Clickable headline + source (safe) */}
                   {p.headline && p.url ? (
                     <div className="text-[11px]">
                       <a
@@ -368,42 +354,48 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
         </MapContainer>
       </div>
 
-      {/* Off-map, fully interactive legend */}
-      <div className="bg-white rounded-xl border shadow-sm px-3 py-3 text-[12px]">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="font-semibold">Socio (24h)</div> {/* label updated */}
-          <div className="text-slate-600">Shown: {shown}/{total}</div>
-        </div>
+      {/* Legend: collapses on small screens, always open on md+ to save clicks */}
+      <details
+        className="bg-white rounded-xl border shadow-sm px-3 py-3 text-[12px] md:open"
+      >
+        <summary className="cursor-pointer list-none select-none">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold">Socio (24h)</span>
+            <span className="text-slate-600">Shown: {shown}/{total}</span>
+          </div>
+        </summary>
 
-        <div className="flex gap-2 mb-3">
-          <button onClick={selectAll} className="px-2 py-1 rounded border hover:bg-slate-50" type="button">All</button>
-          <button onClick={clearAll} className="px-2 py-1 rounded border hover:bg-slate-50" type="button">None</button>
-        </div>
+        <div className="mt-3">
+          <div className="flex gap-2 mb-3">
+            <button onClick={selectAll} className="px-2 py-1 rounded border hover:bg-slate-50" type="button">All</button>
+            <button onClick={clearAll} className="px-2 py-1 rounded border hover:bg-slate-50" type="button">None</button>
+          </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {LEGEND_ORDER.map(cat => {
-            const n = counts[cat] || 0
-            if (!n) return null
-            const icon = iconForCategory(cat)
-            const on = activeCats.has(cat)
-            return (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => toggleCat(cat)}
-                className={`flex items-center justify-between gap-2 rounded px-2 py-1 border transition ${on ? 'bg-white' : 'opacity-50'} hover:bg-slate-50`}
-                title={`${cat} — ${n} pin(s)`}
-              >
-                <span className="flex items-center gap-2 truncate">
-                  <img src={icon.options.iconUrl as string} alt="" width={14} height={14} className="inline-block" />
-                  <span className="truncate">{cat}</span>
-                </span>
-                <span className="tabular-nums">{n}</span>
-              </button>
-            )
-          })}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {LEGEND_ORDER.map(cat => {
+              const n = counts[cat] || 0
+              if (!n) return null
+              const icon = iconForCategory(cat)
+              const on = activeCats.has(cat)
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => toggleCat(cat)}
+                  className={`flex items-center justify-between gap-2 rounded px-2 py-1 border transition ${on ? 'bg-white' : 'opacity-50'} hover:bg-slate-50`}
+                  title={`${cat} — ${n} pin(s)`}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <img src={icon.options.iconUrl as string} alt="" width={14} height={14} className="inline-block" />
+                    <span className="truncate">{cat}</span>
+                  </span>
+                  <span className="tabular-nums">{n}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </div>
+      </details>
 
       {!hasPins && !err && (
         <div className="text-xs text-slate-500">No pins visible — toggle categories above.</div>
