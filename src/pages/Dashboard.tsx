@@ -821,40 +821,56 @@ export default function Dashboard() {
 
               {typeBreakdown.length > 0 && (
                 <div className="rounded-lg border p-3">
-                  <div className="text-xs font-semibold text-slate-700 mb-1">Event types (last 7 days)</div>
-                  <ul className="text-xs text-slate-700 space-y-1">
+                  <div className="text-xs font-semibold text-slate-700 mb-2">Event types (last 7 days)</div>
+                  <ul className="space-y-1.5">
                     {typeBreakdown.map(t => {
                       const open = openTypeKey === t.type
                       const headlines = typeToHeadlines[t.type] || []
+                      const id = `etype-${t.type.replace(/\s+/g, '-').toLowerCase()}`
                       return (
                         <li key={t.type} className="rounded">
                           <button
                             type="button"
                             onClick={() => setOpenTypeKey(prev => (prev === t.type ? null : t.type))}
-                            className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 hover:bg-slate-50"
+                            className="group flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 ring-1 ring-slate-200 hover:bg-white hover:shadow-sm bg-slate-50"
                             aria-expanded={open}
+                            aria-controls={id}
                           >
-                            <span className="truncate">{t.type}</span>
-                            <span className="ml-2 flex items-center gap-2">
-                              <span className="tabular-nums">{t.count}</span>
-                              <span className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`}>〉</span>
+                            <span className="inline-flex items-center gap-2">
+                              <span className="inline-block rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                                {t.type}
+                              </span>
+                            </span>
+                            <span className="ml-2 flex items-center gap-2 text-[12px]">
+                              <span className="tabular-nums text-slate-700">{t.count}</span>
+                              <span
+                                className={`inline-block transition-transform text-slate-500 group-hover:text-slate-700 ${
+                                  open ? 'rotate-90' : ''
+                                }`}
+                                aria-hidden
+                              >
+                                〉
+                              </span>
                             </span>
                           </button>
 
                           {open && headlines.length > 0 && (
-                            <ul className="mt-1 space-y-1 rounded border-l pl-3">
+                            <ul id={id} className="mt-1.5 space-y-1.5 border-l pl-3">
                               {headlines.map((h, i) => (
-                                <li key={i} className="flex items-start justify-between gap-2">
+                                <li key={i} className="flex items-center justify-between gap-2">
                                   <a
                                     href={h.url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="truncate underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500"
                                     title={h.title}
+                                    className="max-w-[75%] truncate inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1 text-[12px] ring-1 ring-slate-200 hover:bg-white hover:shadow-sm hover:ring-slate-300"
                                   >
-                                    {h.title}
+                                    {/* headline text */}
+                                    <span className="truncate">{h.title}</span>
+                                    {/* external link icon */}
+                                    <ExternalLink className="h-3.5 w-3.5 opacity-60" />
                                   </a>
-                                  <span className="shrink-0 text-[11px] text-slate-500">
+                                  <span className="shrink-0 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 ring-1 ring-slate-200">
                                     {h.country ?? 'Global'}
                                   </span>
                                 </li>
@@ -869,7 +885,6 @@ export default function Dashboard() {
               )}
             </div>
           )}
-
         </Card>
       )}
 
