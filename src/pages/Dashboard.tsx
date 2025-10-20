@@ -430,6 +430,9 @@ export default function Dashboard() {
   // 🗺️ Country -> Region cache for ReliefWeb items  ⬇️ (keep ONE copy only)
   const [countryRegionMap, setCountryRegionMap] = useState<Record<string, string>>({})
 
+  // Which event type row is expanded to show headlines
+  const [openTypeKey, setOpenTypeKey] = useState<string | null>(null)
+
   // 6-hour cache
   const TTL = 6 * 60 * 60 * 1000
 
@@ -565,6 +568,45 @@ export default function Dashboard() {
       .slice(0, 12)
   }, [reports])
 
+  // Map event type -> array of recent headlines (last 7d)
+  const typeToHeadlines = useMemo(() => {
+    if (!reports?.length) return {} as Record<string, { title: string; url: string; country?: string; created: number }[]>
+
+    const now = Date.now()
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000
+    const out: Record<string, { title: string; url: string; country?: string; created: number }[]> = {}
+
+    const getType = (r: ReliefWebItem) => {
+      const f = (r as any)?.fields
+      return (
+        f?.disaster_type?.[0]?.name ||
+        f?.theme?.[0]?.name ||
+        f?.primary_type?.name ||
+        'Update'
+      )
+    }
+
+    for (const r of reports) {
+      const created = new Date(r.fields.date.created).getTime()
+      if (!isFinite(created) || created < sevenDaysAgo) continue
+
+      const type = getType(r)
+      const arr = out[type] || (out[type] = [])
+      arr.push({
+        title: r.fields.title,
+        url: r.fields.url,
+        country: r.fields.country?.[0]?.name,
+        created,
+      })
+    }
+
+    // Sort newest first and cap to a handful per type
+    for (const k of Object.keys(out)) {
+      out[k].sort((a, b) => b.created - a.created)
+      out[k] = out[k].slice(0, 6)
+    }
+    return out
+  }, [reports])
 
   const regionalLeaderboard = useMemo(() => {
     if (!reports?.length) return []
@@ -781,12 +823,47 @@ export default function Dashboard() {
                 <div className="rounded-lg border p-3">
                   <div className="text-xs font-semibold text-slate-700 mb-1">Event types (last 7 days)</div>
                   <ul className="text-xs text-slate-700 space-y-1">
-                    {typeBreakdown.map(t => (
-                      <li key={t.type} className="flex items-center justify-between">
-                        <span className="truncate">{t.type}</span>
-                        <span className="tabular-nums">{t.count}</span>
-                      </li>
-                    ))}
+                    {typeBreakdown.map(t => {
+                      const open = openTypeKey === t.type
+                      const headlines = typeToHeadlines[t.type] || []
+                      return (
+                        <li key={t.type} className="rounded">
+                          <button
+                            type="button"
+                            onClick={() => setOpenTypeKey(prev => (prev === t.type ? null : t.type))}
+                            className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 hover:bg-slate-50"
+                            aria-expanded={open}
+                          >
+                            <span className="truncate">{t.type}</span>
+                            <span className="ml-2 flex items-center gap-2">
+                              <span className="tabular-nums">{t.count}</span>
+                              <span className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`}>〉</span>
+                            </span>
+                          </button>
+
+                          {open && headlines.length > 0 && (
+                            <ul className="mt-1 space-y-1 rounded border-l pl-3">
+                              {headlines.map((h, i) => (
+                                <li key={i} className="flex items-start justify-between gap-2">
+                                  <a
+                                    href={h.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="truncate underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500"
+                                    title={h.title}
+                                  >
+                                    {h.title}
+                                  </a>
+                                  <span className="shrink-0 text-[11px] text-slate-500">
+                                    {h.country ?? 'Global'}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </li>
+                      )
+                    })}
                   </ul>
                 </div>
               )}
