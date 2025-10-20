@@ -360,7 +360,7 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
       >
         <summary className="cursor-pointer list-none select-none">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-semibold">Socio (24h)</span>
+            <span className="font-semibold">Legend (Last 24h)</span>
             <span className="text-slate-600">Shown: {shown}/{total}</span>
           </div>
         </summary>
