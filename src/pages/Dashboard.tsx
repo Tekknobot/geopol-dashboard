@@ -52,7 +52,6 @@ function CollapsibleSection({
         <span className="font-semibold">{title}</span>
         <span className="ml-auto text-xs text-slate-500">{rightHint}</span>
         <span className="i-chevron transition-transform group-open:rotate-180 text-slate-500">
-          {/* caret icon using plain text to avoid extra deps */}
           <span className="inline-block rotate-90 select-none">⌃</span>
         </span>
       </summary>
@@ -92,6 +91,24 @@ const ric = (cb: () => void) => {
   const fn = (window as any).requestIdleCallback as any
   if (typeof fn === 'function') return fn(cb)
   return setTimeout(cb, 1)
+}
+
+// ---------- Simple digest utilities (keywordy, no extra deps)
+const STOP = new Set([
+  'the','a','an','and','or','of','in','on','to','for','by','with','at','from','as','that','this',
+  'is','are','be','was','were','will','after','amid','over','into','new','latest','report','reports'
+])
+
+function words(s: string) {
+  return (s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+}
+
+function topN<T>(entries: [T, number][], n: number) {
+  return entries.sort((a,b) => b[1]-a[1]).slice(0, n).map(([k]) => k)
 }
 
 export default function Dashboard() {
@@ -157,8 +174,115 @@ export default function Dashboard() {
 
   const hasMapNews = mapNews.length > 0
 
+  // ---------- Build a lightweight digest paragraph + bullet picks
+  const digest = useMemo(() => {
+    // Use map headlines if present; else ReliefWeb titles as fallback
+    const items = hasMapNews
+      ? mapNews.map(n => ({ title: n.headline, category: n.category, source: n.source || '' }))
+      : (reports || []).map(r => ({
+          title: r.fields.title,
+          category: (r.fields?.theme?.[0]?.name || 'Update'),
+          source: new URL(r.fields.url).hostname.replace(/^www\./,'')
+        }))
+
+    if (!items.length) return null
+
+    // Category frequency
+    const catCount = new Map<string, number>()
+    // Source frequency
+    const srcCount = new Map<string, number>()
+    // Keyword frequency (from titles, crude but useful)
+    const kw = new Map<string, number>()
+
+    for (const it of items) {
+      catCount.set(it.category, (catCount.get(it.category) || 0) + 1)
+      if (it.source) srcCount.set(it.source, (srcCount.get(it.source) || 0) + 1)
+      for (const w of words(it.title)) {
+        if (STOP.has(w) || w.length < 3) continue
+        kw.set(w, (kw.get(w) || 0) + 1)
+      }
+    }
+
+    const topCats = topN(Array.from(catCount.entries()), 3)
+    const topSrcs = topN(Array.from(srcCount.entries()), 3)
+    const topKws  = topN(Array.from(kw.entries()), 6)
+
+    // Pick a few notable headlines (dedupe by title)
+    const seen = new Set<string>()
+    const picks = items.filter(it => {
+      const key = it.title.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    }).slice(0, 6)
+
+    const summary = [
+      'Past 24h highlights:',
+      topCats.length ? `top categories: ${topCats.join(', ')}.` : '',
+      topSrcs.length ? `notable coverage: ${topSrcs.join(', ')}.` : '',
+      topKws.length  ? `common keywords: ${topKws.join(', ')}.` : ''
+    ].filter(Boolean).join(' ')
+
+    return { summary, picks }
+  }, [hasMapNews, mapNews, reports])
+
   return (
     <div className="space-y-6">
+      {/* Auto summary ABOVE the info panel (collapsed by default, remembers state) */}
+      <CollapsibleSection
+        title="Today’s map summary (auto-generated)"
+        storageKey="digest:open"
+        defaultOpen={false}
+        rightHint={hasMapNews ? `${mapNews.length} headlines` : (reports ? `${reports.length} reports` : undefined)}
+      >
+        {!digest ? (
+          <div className="text-sm text-slate-500">Loading a summary…</div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700">{digest.summary}</p>
+            <ul className="space-y-2">
+              {(hasMapNews ? mapNews : (reports || []).map(r => ({
+                id: String(r.id),
+                headline: r.fields.title,
+                url: r.fields.url,
+                source: new URL(r.fields.url).hostname.replace(/^www\./,''),
+                category: (r.fields?.theme?.[0]?.name || 'Update')
+              })))
+                .slice(0, 6)
+                .map((item) => (
+                <li key={item.id} className="flex items-start gap-2">
+                  <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
+                  <div className="min-w-0 flex-1">
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block font-medium leading-snug hover:underline whitespace-normal break-words"
+                      title={item.headline}
+                    >
+                      {item.headline}
+                    </a>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                      {item.source && <span className="shrink-0">{item.source}</span>}
+                      <span className="opacity-60 shrink-0">·</span>
+                      <span className="inline-flex items-center gap-1 shrink-0">
+                        <TagIcon className="h-3 w-3 opacity-60" />
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200">
+                          {item.category}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                  <a href={item.url} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
+                    <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CollapsibleSection>
+
       {/* Intro (collapsed by default, with collapsible subpanels) */}
       <CollapsibleSection
         title="About this dashboard"
@@ -206,7 +330,6 @@ export default function Dashboard() {
       {/* Map (not collapsed; primary interactive surface) */}
       <Card title="Global Socio-Political Events (Last 24h)">
         {!events ? <Loading label="Preparing map..." /> : <LazyEventMap events={events} onNews={setMapNews} />}
-        {/* The map sources GDELT internally. */}
       </Card>
 
       {/* KPI charts — both collapsible & persisted */}

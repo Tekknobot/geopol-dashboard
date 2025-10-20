@@ -1,7 +1,17 @@
-
+// add or adjust this to match your file
 export type ReliefWebItem = {
-  id: string
-  fields: { title: string, url: string, date: { created: string }, country?: { name: string }[] }
+  id: number | string
+  fields: {
+    title: string
+    url: string
+    date: { created: string }
+    country?: { name: string }[]
+
+    // ⬇️ add these optional fields to match what we read elsewhere
+    theme?: { name: string }[]
+    disaster_type?: { name: string }[]
+    format?: { name: string }[]
+  }
 }
 
 export async function getLatestReports(limit = 12): Promise<ReliefWebItem[]> {
@@ -11,3 +21,4 @@ export async function getLatestReports(limit = 12): Promise<ReliefWebItem[]> {
   const data = await res.json()
   return data?.data || []
 }
+
