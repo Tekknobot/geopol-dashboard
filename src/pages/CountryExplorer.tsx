@@ -3,7 +3,10 @@ import Card from '../components/Card'
 import Loading from '../components/Loading'
 import { searchCountryByName, Country } from '../services/restCountries'
 import { wbGetCountryIndicator, wbGetGlobalIndicator, toSeries, WbPoint } from '../services/worldBank'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  ComposedChart, Scatter, ReferenceArea, ReferenceLine
+} from 'recharts'
 
 const INDICATORS = [
   { code: 'PV.EST', label: 'Political Stability (WGI, est.)' },
@@ -15,6 +18,7 @@ const INDICATORS = [
 
 type SeriesBundle = { country: WbPoint[]; world: WbPoint[] }
 type WbCountryMeta = { id: string; name: string; region: { id: string; value: string } }
+type RegionalRow = { name: string; value: number | null; iso3: string; isFocus?: boolean }
 
 // ----- tiny utilities
 const debounce = (fn: Function, ms: number) => {
@@ -28,8 +32,8 @@ const debounce = (fn: Function, ms: number) => {
 function mapRestRegionToWb(region: string): string[] {
   switch (region) {
     case 'Africa': return ['SSF']
-    case 'Americas': return ['LCN', 'NAC']
-    case 'Asia': return ['EAS', 'SAS', 'MEA']
+    case 'Americas': return ['NAC', 'LCN'] // North America, Latin America & Caribbean
+    case 'Asia': return ['EAS', 'SAS', 'MEA'] // MEA is MENA; WB uses 'MEA' on v2 meta
     case 'Europe': return ['ECS']
     case 'Oceania': return ['EAS']
     default: return []
@@ -49,13 +53,13 @@ async function fetchWbCountryMeta(): Promise<WbCountryMeta[]> {
 
 export default function CountryExplorer() {
   // UI state
-  const [input, setInput] = useState('Canada')                 // what the user types
-  const [suggestions, setSuggestions] = useState<Country[]>([])// search results (debounced)
-  const [selected, setSelected] = useState<Country | null>(null)// the chosen country
+  const [input, setInput] = useState('Canada')
+  const [suggestions, setSuggestions] = useState<Country[]>([])
+  const [selected, setSelected] = useState<Country | null>(null)
 
   // data state
   const [series, setSeries] = useState<Record<string, SeriesBundle>>({})
-  const [regionalRows, setRegionalRows] = useState<{ name: string; value: number | null }[] | null>(null)
+  const [regionalRows, setRegionalRows] = useState<RegionalRow[] | null>(null)
   const [neighbors, setNeighbors] = useState<string[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -63,10 +67,10 @@ export default function CountryExplorer() {
   // prevent out-of-order responses
   const loadIdRef = useRef(0)
 
-  // simple in-memory cache per ISO3 to avoid re-fetching
+  // cache per ISO3
   const seriesCacheRef = useRef<Map<string, Record<string, SeriesBundle>>>(new Map())
 
-  // ---- search suggestions (debounced, lightweight)
+  // ---- search suggestions (debounced)
   useEffect(() => {
     const run = debounce(async (q: string) => {
       if (!q.trim()) { setSuggestions([]); return }
@@ -80,14 +84,14 @@ export default function CountryExplorer() {
     run(input)
   }, [input])
 
-  // ---- choose a country (click suggestion or press Enter)
+  // choose a country
   const choose = (c: Country) => {
     setSelected(c)
     setInput(c.name?.common || c.cca3 || '')
     void loadCountry(c)
   }
 
-  // ---- enter key: pick first suggestion if exists
+  // enter picks first suggestion
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -101,12 +105,12 @@ export default function CountryExplorer() {
     setError(null)
     setNeighbors(null)
     setRegionalRows(null)
-    setSeries({})                 // clear charts immediately to avoid flicker of old data
+    setSeries({})
     setLoading(true)
     const myLoadId = ++loadIdRef.current
 
     try {
-      // use cache if available
+      // cache
       const cached = seriesCacheRef.current.get(iso3)
       let mapped: Record<string, SeriesBundle> | null = cached || null
 
@@ -126,7 +130,7 @@ export default function CountryExplorer() {
         seriesCacheRef.current.set(iso3, m)
       }
 
-      // neighbors (defensive: Country may not declare 'borders')
+      // neighbors (Country may not declare 'borders')
       const borderCodes = ((c as any)?.borders as string[] | undefined) || []
       if (borderCodes.length) {
         try {
@@ -138,51 +142,45 @@ export default function CountryExplorer() {
         if (myLoadId === loadIdRef.current) setNeighbors([])
       }
 
-      // regional comparator using WB region of the *selected* country
+      // regional comparator using WB region of the selected country (industry-style dot plot)
       if (c.region) {
         try {
           const wbCountries = await fetchWbCountryMeta()
           const selISO3 = c.cca3
           const selMeta = wbCountries.find(x => x.id === selISO3)
-          const regionId = selMeta?.region?.id // e.g., 'NAC', 'LCN', etc.
-
-          // Fallback: if unknown, use the coarse mapping you already had
+          const regionId = selMeta?.region?.id
           const regionIds = regionId ? [regionId] : mapRestRegionToWb(c.region)
 
-          const candidates = wbCountries
+          let candidates = wbCountries
             .filter(cc => regionIds.includes(cc.region.id))
             .map(cc => ({ name: cc.name, iso3: cc.id }))
 
-          // Ensure the selected is present even if WB metadata was odd
+          // ensure selected is present
           if (!candidates.some(x => x.iso3 === selISO3)) {
             candidates.push({ name: c.name?.common || selISO3, iso3: selISO3 })
           }
 
-          // Fetch PV.EST latest for each candidate
           const rows = await Promise.all(
             candidates.map(async cand => {
               const s = toSeries(await wbGetCountryIndicator(cand.iso3, 'PV.EST', 6))
               const nonNull = s.filter(p => p.value !== null)
               const v = nonNull.length ? (nonNull[nonNull.length - 1].value as number) : null
-              return { name: cand.name, iso3: cand.iso3, value: v }
+              return { name: cand.name, iso3: cand.iso3, value: v, isFocus: cand.iso3 === selISO3 } as RegionalRow
             })
           )
 
-          // Sort by value desc, keep a tidy set
-          const withData = rows.filter(r => r.value !== null) as {name:string; iso3:string; value:number}[]
-          withData.sort((a,b)=> b.value - a.value)
-
-          // Top N, but re-insert selected if missing
+          // sort (desc), keep tidy list
+          const withData = rows.filter(r => r.value !== null) as RegionalRow[]
+          withData.sort((a,b)=> (b.value as number) - (a.value as number))
           const TOP = 20
           let top = withData.slice(0, TOP)
+
           if (!top.some(r => r.iso3 === selISO3)) {
             const me = rows.find(r => r.iso3 === selISO3)
             if (me) top = [...top, me]
           }
 
-          if (myLoadId === loadIdRef.current) {
-            setRegionalRows(top.map(r => ({ name: r.name, value: r.value as number | null, /* @ts-ignore */ iso3: (r as any).iso3 })))
-          }
+          if (myLoadId === loadIdRef.current) setRegionalRows(top)
         } catch {
           if (myLoadId === loadIdRef.current) setRegionalRows([])
         }
@@ -190,7 +188,6 @@ export default function CountryExplorer() {
         if (myLoadId === loadIdRef.current) setRegionalRows([])
       }
 
-      // finally commit series (only if this is the latest load)
       if (myLoadId === loadIdRef.current) setSeries(mapped!)
     } catch (e: any) {
       if (myLoadId === loadIdRef.current) setError(e?.message || 'Lookup failed')
@@ -214,7 +211,7 @@ export default function CountryExplorer() {
     ]
   }, [selected])
 
-  // merge country+world by date for dual-series charts
+  // merge country+world by date
   const mergeCW = (bund: SeriesBundle | undefined) => {
     if (!bund) return []
     const map = new Map<string, any>()
@@ -235,9 +232,8 @@ export default function CountryExplorer() {
     return d > 0 ? '↑' : d < 0 ? '↓' : '→'
   }
 
-  // initial load: pick first suggestion (Canada) once, then stop
+  // initial load
   useEffect(() => {
-    // only on first mount; if there is no selection yet, try to resolve the initial input
     if (!selected && input) {
       (async () => {
         try {
@@ -251,6 +247,28 @@ export default function CountryExplorer() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // quartiles for comparator
+  const comparatorStats = useMemo(() => {
+    const vals = (regionalRows || [])
+      .map(r => r.value)
+      .filter((v): v is number => v !== null)
+      .sort((a,b)=>a-b)
+    if (!vals.length) return { min: 0, q1: 0, med: 0, q3: 0, max: 0 }
+    const q = (p: number) => {
+      const pos = (vals.length - 1) * p
+      const base = Math.floor(pos)
+      const rest = pos - base
+      return vals[base] + (vals[base + 1] !== undefined ? rest * (vals[base + 1] - vals[base]) : 0)
+    }
+    return {
+      min: vals[0],
+      q1: q(0.25),
+      med: q(0.5),
+      q3: q(0.75),
+      max: vals[vals.length - 1]
+    }
+  }, [regionalRows])
 
   return (
     <div className="space-y-6">
@@ -266,7 +284,6 @@ export default function CountryExplorer() {
               className="rounded-lg border px-3 py-1 text-sm w-72"
               placeholder="Type to search…"
             />
-            {/* suggestions dropdown */}
             {suggestions.length > 0 && (
               <ul className="absolute z-10 mt-1 w-72 max-h-64 overflow-auto rounded-lg border bg-white shadow">
                 {suggestions.map(s => (
@@ -337,7 +354,7 @@ export default function CountryExplorer() {
                 ))}
               </div>
 
-              {/* Neighbors quick list */}
+              {/* Neighbors */}
               {neighbors && (
                 <div className="mt-3 text-xs text-slate-600">
                   <span className="font-semibold text-slate-700">Neighbors:</span>{' '}
@@ -351,40 +368,51 @@ export default function CountryExplorer() {
         {error && <div className="text-red-600 text-sm mt-2">{error}</div>}
       </Card>
 
-      {/* Regional Comparator (Political Stability vs region peers) */}
+      {/* Regional Comparator — Dot plot with quartiles + median */}
       {regionalRows && selected?.name?.common && (
         <Card title={`Regional Comparator · Political Stability (WGI) — ${selected.region}`}>
           {!regionalRows.length ? (
             <div className="text-sm text-slate-600">No regional data available.</div>
           ) : (
-            <ul className="space-y-1.5">
-              {(() => {
-                const max = Math.max(...regionalRows.map(x => Number(x.value ?? 0)))
-                // don’t resort here; we already sorted when building rows
-                return regionalRows.map((r: any, i: number) => {
-                  const isFocus = r.iso3 === selected.cca3
-                  const hasData = typeof r.value === 'number'
-                  const pct = hasData && max > 0 ? (Number(r.value)/max)*100 : 0
-                  return (
-                    <li key={i} className="grid grid-cols-[1fr_auto] items-center gap-3">
-                      <div className="h-2 rounded bg-slate-100">
-                        <div
-                          className={`h-2 rounded ${isFocus ? 'bg-slate-900' : 'bg-slate-600/80'} ${!hasData ? 'opacity-40' : ''}`}
-                          style={{ width: `${pct}%` }}
-                          title={`${r.name}: ${hasData ? Number(r.value).toFixed(2) : 'No recent WGI value'}`}
-                        />
-                      </div>
-                      <div className={`text-xs w-40 text-right truncate ${isFocus ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>
-                        {r.name}{!hasData ? ' (no data)' : ''}
-                      </div>
-                    </li>
-                  )
-                })
-              })()}
-            </ul>
+            <div className="h-[360px] w-full">
+              <ResponsiveContainer>
+                <ComposedChart
+                  layout="vertical"
+                  data={regionalRows.map(r => ({ name: r.name, value: r.value, isFocus: r.iso3 === selected.cca3 }))}
+                  margin={{ top: 8, right: 24, bottom: 8, left: 140 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" domain={['auto','auto']} tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11 }} />
+
+                  {/* Quartile shading */}
+                  <ReferenceArea x1={comparatorStats.min} x2={comparatorStats.q1} y1="dataMin" y2="dataMax" />
+                  <ReferenceArea x1={comparatorStats.q1} x2={comparatorStats.q3} y1="dataMin" y2="dataMax" />
+                  <ReferenceArea x1={comparatorStats.q3} x2={comparatorStats.max} y1="dataMin" y2="dataMax" />
+
+                  {/* Median */}
+                  <ReferenceLine x={comparatorStats.med} strokeDasharray="4 2" />
+
+                  {/* Dots */}
+                  <Scatter
+                    dataKey="value"
+                    shape={(p: any) => {
+                      const r = p.payload
+                      const size = r.isFocus ? 6 : 4
+                      return <circle cx={p.cx} cy={p.cy} r={size} />
+                    }}
+                  />
+
+                  <Tooltip
+                    formatter={(v: any) => (typeof v === 'number' ? v.toFixed(2) : '—')}
+                    labelFormatter={(n: any) => n}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           )}
           <div className="mt-2 text-[11px] text-slate-500">
-            Hint: The darker bar is the selected country. This frames a local situation inside its territorial cohort.
+            Bands show regional quartiles (min–Q1, Q1–Q3, Q3–max). The vertical line is the regional median. The larger dot is the selected country.
           </div>
         </Card>
       )}
