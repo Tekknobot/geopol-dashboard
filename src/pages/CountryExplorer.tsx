@@ -48,6 +48,16 @@ async function fetchWbCountryMeta(): Promise<WbCountryMeta[]> {
   }))
 }
 
+// find the most recent non-null indicator value, scanning up to `years` back
+async function latestNonNull(iso3: string, indicator: string, years = 20): Promise<number | null> {
+  const s = toSeries(await wbGetCountryIndicator(iso3, indicator, years))
+  for (let i = s.length - 1; i >= 0; i--) {
+    const v = s[i].value
+    if (typeof v === 'number') return v
+  }
+  return null
+}
+
 export default function CountryExplorer() {
   // UI state
   const [input, setInput] = useState('Canada')
@@ -139,7 +149,7 @@ export default function CountryExplorer() {
         if (myLoadId === loadIdRef.current) setNeighbors([])
       }
 
-      // regional comparator using WB region of the selected country (bar list with median ticks)
+      // regional comparator using WB region of the selected country (ranked bars + median tick)
       if (c.region) {
         try {
           const wbCountries = await fetchWbCountryMeta()
@@ -159,9 +169,7 @@ export default function CountryExplorer() {
 
           const rows = await Promise.all(
             candidates.map(async cand => {
-              const s = toSeries(await wbGetCountryIndicator(cand.iso3, 'PV.EST', 6))
-              const nonNull = s.filter(p => p.value !== null)
-              const v = nonNull.length ? (nonNull[nonNull.length - 1].value as number) : null
+              const v = await latestNonNull(cand.iso3, 'PV.EST', 20) // <= look back farther
               return { name: cand.name, iso3: cand.iso3, value: v, isFocus: cand.iso3 === selISO3 } as RegionalRow
             })
           )
@@ -257,11 +265,7 @@ export default function CountryExplorer() {
       const rest = pos - base
       return vals[base] + (vals[base + 1] !== undefined ? rest * (vals[base + 1] - vals[base]) : 0)
     }
-    return {
-      min: vals[0],
-      med: q(0.5),
-      max: vals[vals.length - 1]
-    }
+    return { min: vals[0], med: q(0.5), max: vals[vals.length - 1] }
   }, [regionalRows])
 
   // helper for bar percentage (safe for equal min/max)
@@ -381,7 +385,9 @@ export default function CountryExplorer() {
               {regionalRows.map((r, i) => {
                 const isFocus = r.iso3 === selected.cca3
                 const hasData = typeof r.value === 'number'
-                const widthPct = hasData ? Math.max(0, Math.min(100, pct(r.value!))) : 0
+                // if no data at all, show a faint placeholder so the selection isn't visually "empty"
+                const placeholderPct = 30 // change to medPct to pin at median if you prefer
+                const widthPct = hasData ? Math.max(0, Math.min(100, pct(r.value!))) : placeholderPct
                 return (
                   <li key={i} className="grid grid-cols-[160px_1fr_56px] items-center gap-3">
                     {/* Name */}
