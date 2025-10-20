@@ -480,6 +480,20 @@ export default function Dashboard() {
 
   const hasMapNews = mapNews.length > 0
 
+  // 🔹 Global Volatility (events/day for the past ~30 days)
+  const volatilitySeries = useMemo(() => {
+    if (!events) return []
+    const byDay = new Map<string, number>()
+    events.forEach(e => {
+      const d = new Date((e as any).geometry?.[0]?.date ?? (e as any).closed ?? Date.now())
+      const key = d.toISOString().slice(0, 10) // YYYY-MM-DD
+      byDay.set(key, (byDay.get(key) || 0) + 1)
+    })
+    return Array.from(byDay.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, count]) => ({ date, count }))
+  }, [events])
+
   // Build carousel items (randomized), fallback to ReliefWeb if map has none
   const carouselItems: HeadlineItem[] = useMemo(() => {
     const base: HeadlineItem[] = hasMapNews
@@ -516,7 +530,7 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Intro */}
+      {/* About */}
       <CollapsibleSection
         title="About this dashboard"
         storageKey="intro:open"
@@ -569,6 +583,26 @@ export default function Dashboard() {
           />
         )}
       </Card>
+
+      {/* Global Volatility Tracker */}
+      {events && (
+        <Card title="Global Volatility Tracker (Past 30 Days)">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={volatilitySeries}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} width={35} />
+                <Tooltip />
+                <Line type="monotone" dataKey="count" name="Events" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="mt-2 text-xs text-slate-600">
+            Daily count of open EONET incidents globally. Spikes can signal rising instability or disaster activity.
+          </p>
+        </Card>
+      )}
 
       {/* KPI charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
