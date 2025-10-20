@@ -1,22 +1,18 @@
-
-import React, { Suspense, useEffect, useState } from 'react'
+import React, { Suspense } from 'react'
 import type { EonetEvent } from '../services/eonet'
+import type { MapNewsItem } from './MapCore'
 const MapCore = React.lazy(() => import('./MapCore'))
 
-export default function LazyEventMap({ events }: { events: EonetEvent[] }) {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    // Defer map mount to the next tick to ensure first paint occurs quickly
-    const id = requestAnimationFrame(() => setMounted(true))
-    return () => cancelAnimationFrame(id)
-  }, [])
-
-  if (!mounted) return <div className="h-[560px] bg-slate-100 animate-pulse rounded-xl" />
-
+export default function LazyEventMap({
+  events,
+  onNews,
+}: {
+  events: EonetEvent[]
+  onNews?: (items: MapNewsItem[]) => void
+}) {
   return (
-    <Suspense fallback={<div className="h-[560px] bg-slate-100 animate-pulse rounded-xl" />}>
-      <MapCore events={events} />
+    <Suspense fallback={<div className="h-64 flex items-center justify-center text-slate-500">Loading map…</div>}>
+      <MapCore events={events} onNews={onNews} />
     </Suspense>
   )
 }

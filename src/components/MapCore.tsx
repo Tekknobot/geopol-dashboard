@@ -13,8 +13,8 @@ function svgMarker(color: string, emoji: string) {
         </filter>
       </defs>
       <g filter="url(#shadow)">
-        <circle cx="24" cy="24" r="16" fill="${color}" />
-        <text x="24" y="28" text-anchor="middle" font-size="18" font-family="system-ui, -apple-system, Segoe UI, Emoji">${emoji}</text>
+        <circle cx="24" cy="24" r="16" fill="\${color}" />
+        <text x="24" y="28" text-anchor="middle" font-size="18" font-family="system-ui, -apple-system, Segoe UI, Emoji">\${emoji}</text>
       </g>
     </svg>
   `.trim()
@@ -55,6 +55,15 @@ type SocioPoint = {
   headline?: string
   source?: string
   url?: string
+}
+export type MapNewsItem = {
+  id: string
+  headline: string
+  url: string
+  source?: string
+  category: string
+  lat: number
+  lon: number
 }
 
 /** Helpers */
@@ -103,10 +112,7 @@ const BLOCKED_PARTS = [
 ]
 const STRIP_PARAMS = ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','fbclid','gclid','mc_cid','mc_eid']
 
-function cleanUrl(u: URL) {
-  STRIP_PARAMS.forEach(k => u.searchParams.delete(k))
-  return u.toString()
-}
+function cleanUrl(u: URL) { STRIP_PARAMS.forEach(k => u.searchParams.delete(k)); return u.toString() }
 function domainFrom(u: URL) { return u.hostname.toLowerCase().replace(/^www\./,'') }
 function headlineFrom(html: string, fallback?: string) {
   const titleAttr = html.match(/title="([^"]+)"/i)?.[1]
@@ -219,7 +225,7 @@ async function fetchSocio24h(): Promise<SocioPoint[]> {
   for (const q of [Q1, Q2, Q3]) {
     const feats = await fetchGeo(q, '24h', 900)
     if (feats.length) {
-      const pts = feats.map((f: any) => {
+      const pts = feats.map((f: any, i: number) => {
         const coords = f?.geometry?.coordinates
         const props = f?.properties || {}
         const lat = parseCoord(coords?.[1]); const lon = parseCoord(coords?.[0])
@@ -244,7 +250,13 @@ async function fetchSocio24h(): Promise<SocioPoint[]> {
 }
 
 /** ---------- Component (socio only, 24h) ---------- */
-export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
+export default function MapCore({
+  events: _unused,
+  onNews,
+}: {
+  events: EonetEvent[]
+  onNews?: (items: MapNewsItem[]) => void
+}) {
   const [points, setPoints] = useState<SocioPoint[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [activeCats, setActiveCats] = useState<Set<string>>(new Set()) // legend filters
@@ -265,6 +277,25 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
     })
     return () => { alive = false; cancelAnimationFrame(id) }
   }, [])
+
+  // Publish visible items to the host (Dashboard) whenever filters or points change
+  useEffect(() => {
+    if (!onNews) return
+    if (!points || activeCats.size === 0) { onNews([]); return }
+    const items: MapNewsItem[] = points
+      .filter(p => activeCats.has(p.category) && !!p.headline && !!p.url)
+      .slice(0, 200) // guard
+      .map((p, i) => ({
+        id: `${p.category}:${p.url}:${i}`,
+        headline: p.headline!,
+        url: p.url!,
+        source: p.source,
+        category: p.category,
+        lat: p.lat,
+        lon: p.lon,
+      }))
+    onNews(items)
+  }, [points, activeCats, onNews])
 
   const counts = useMemo(() => {
     const acc: Record<string, number> = {}
@@ -301,43 +332,28 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
 
   return (
     <div className="space-y-3">
-      {/* Map: give it as much viewport as possible across devices */}
-      <div
-        className="
-          min-h-[360px]
-          h-[70svh] sm:h-[74svh] md:h-[80svh] lg:h-[84svh] xl:h-[88svh]
-          [height:70dvh] sm:[height:74dvh] md:[height:80dvh] lg:[height:84dvh] xl:[height:88dvh]
-          rounded-xl overflow-hidden border
-        "
-      >
+      {/* Map: roomy across devices */}
+      <div className="min-h-[360px] h-[70svh] sm:h-[74svh] md:h-[80svh] lg:h-[84svh] xl:h-[88svh] [height:70dvh] sm:[height:74dvh] md:[height:80dvh] lg:[height:84dvh] xl:[height:88dvh] rounded-xl overflow-hidden border">
         <MapContainer
-          center={[39, -98]}   // North America default
+          center={[39, -98]}
           zoom={4}
           scrollWheelZoom={true}
           worldCopyJump={true}
           style={{ height: '100%', width: '100%' }}
         >
           <TileLayer
-            attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+            attribution='&copy; OpenStreetMap contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-
           {visible.map((p, idx) => (
             <Marker key={'soc-'+idx} position={[p.lat, p.lon]} icon={iconForCategory(p.category)}>
               <Popup>
                 <div className="space-y-1">
                   <div className="font-semibold text-sm">{p.label}</div>
                   <div className="text-xs text-slate-600">{p.category}</div>
-
                   {p.headline && p.url ? (
                     <div className="text-[11px]">
-                      <a
-                        href={p.url}
-                        target="_blank"
-                        rel="noopener noreferrer nofollow ugc"
-                        className="text-blue-600 underline"
-                        title={p.headline}
-                      >
+                      <a href={p.url} target="_blank" rel="noopener noreferrer nofollow ugc" className="text-blue-600 underline" title={p.headline}>
                         {p.headline}
                       </a>
                       {p.source ? <span className="text-slate-500"> — {p.source}</span> : null}
@@ -345,7 +361,6 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
                   ) : (
                     <div className="text-[11px] text-amber-600">Unverified source</div>
                   )}
-
                   <div className="text-[11px] text-slate-500">Lat/Lon: {round2(p.lat)}, {round2(p.lon)}</div>
                 </div>
               </Popup>
@@ -354,13 +369,11 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
         </MapContainer>
       </div>
 
-      {/* Legend: collapses on small screens, always open on md+ to save clicks */}
-      <details
-        className="bg-white rounded-xl border shadow-sm px-3 py-3 text-[12px] md:open"
-      >
+      {/* Legend (collapsible on small screens) */}
+      <details className="bg-white rounded-xl border shadow-sm px-3 py-3 text-[12px] md:open">
         <summary className="cursor-pointer list-none select-none">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-semibold">Legend (Last 24h)</span>
+            <span className="font-semibold">Socio (24h)</span>
             <span className="text-slate-600">Shown: {shown}/{total}</span>
           </div>
         </summary>
@@ -397,9 +410,7 @@ export default function MapCore({ events: _unused }: { events: EonetEvent[] }) {
         </div>
       </details>
 
-      {!hasPins && !err && (
-        <div className="text-xs text-slate-500">No pins visible — toggle categories above.</div>
-      )}
+      {!hasPins && !err && <div className="text-xs text-slate-500">No pins visible — toggle categories above.</div>}
       {err && <div className="text-xs text-red-600">{err}</div>}
     </div>
   )

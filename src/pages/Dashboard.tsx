@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from 'react'
 import Card from '../components/Card'
 import Loading from '../components/Loading'
@@ -9,6 +8,8 @@ import { wbGetGlobalIndicator, toSeries, WbPoint } from '../services/worldBank'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import LazyEventMap from '../components/LazyEventMap'
 import { getCache, setCache } from '../services/cache'
+import { Newspaper, ExternalLink, Tag as TagIcon } from 'lucide-react'
+import type { MapNewsItem } from '../components/MapCore'
 
 // Polyfill requestIdleCallback for Safari
 const ric = (cb: () => void) => {
@@ -23,6 +24,9 @@ export default function Dashboard() {
   const [gdpSeries, setGdpSeries] = useState<WbPoint[] | null>(null)
   const [cpiSeries, setCpiSeries] = useState<WbPoint[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // 📡 News flowing from the map
+  const [mapNews, setMapNews] = useState<MapNewsItem[]>([])
 
   // 6-hour cache
   const TTL = 6 * 60 * 60 * 1000
@@ -49,7 +53,7 @@ export default function Dashboard() {
         setGdpSeries(gdpS); setCache('wld:gdp', gdpS)
         setCpiSeries(cpiS); setCache('wld:cpi', cpiS)
 
-        // ReliefWeb feed
+        // ReliefWeb feed (fallback content if map has nothing yet)
         if (!crw) {
           const rw = await getLatestReports(10)
           setReports(rw); setCache('rw:latest', rw)
@@ -75,12 +79,14 @@ export default function Dashboard() {
   const lastGDP = useMemo(() => gdpSeries?.filter(p => p.value !== null).slice(-1)[0], [gdpSeries])
   const lastCPI = useMemo(() => cpiSeries?.filter(p => p.value !== null).slice(-1)[0], [cpiSeries])
 
+  const hasMapNews = mapNews.length > 0
+
   return (
     <div className="space-y-6">
-      {/* Dedicated, larger map section */}
+      {/* Map section */}
       <Card title="Global Socio-Political Events (Last 24h)">
-        {!events ? <Loading label="Preparing map..." /> : <LazyEventMap events={events} />}
-        {/* The map now sources GDELT internally; removing the EONET count below */}
+        {!events ? <Loading label="Preparing map..." /> : <LazyEventMap events={events} onNews={setMapNews} />}
+        {/* The map sources GDELT internally. */}
       </Card>
 
       {/* KPI charts row */}
@@ -118,25 +124,53 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* ReliefWeb feed and notes */}
+      {/* News list driven by the map; falls back to ReliefWeb if needed */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <Card title="Latest Humanitarian Updates (ReliefWeb)">
-            {!reports ? <Loading/> :
-            <ul className="divide-y">
-              {reports.map(item => (
-                <li key={item.id} className="py-3">
-                  <a href={item.fields.url} target="_blank" rel="noreferrer" className="font-medium hover:underline">
-                    {item.fields.title}
-                  </a>
-                  <div className="text-xs text-slate-500">
-                    {new Date(item.fields.date.created).toLocaleString()} — {item.fields.country?.map(c=>c.name).join(', ') || 'Global'}
-                  </div>
-                </li>
-              ))}
-            </ul>}
+          <Card title={hasMapNews ? 'Latest Headlines (from Map, 24h)' : 'Latest Humanitarian Updates (ReliefWeb)'}>
+            {!hasMapNews ? (
+              !reports ? <Loading/> : (
+                <ul className="divide-y">
+                  {reports.map(item => (
+                    <li key={item.id} className="py-3">
+                      <a href={item.fields.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 font-medium hover:underline" title={item.fields.title}>
+                        <Newspaper className="h-4 w-4 opacity-70" />
+                        <span className="truncate">{item.fields.title}</span>
+                        <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+                      </a>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {new Date(item.fields.date.created).toLocaleString()} — {item.fields.country?.map(c=>c.name).join(', ') || 'Global'}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : (
+              <ul className="divide-y">
+                {mapNews.slice(0, 40).map(item => (
+                  <li key={item.id} className="py-3">
+                    <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 font-medium hover:underline" title={item.headline}>
+                      <Newspaper className="h-4 w-4 opacity-70" />
+                      <span className="truncate">{item.headline}</span>
+                      <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+                    </a>
+                    <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                      {item.source && <span>{item.source}</span>}
+                      <span className="opacity-60">·</span>
+                      <span className="inline-flex items-center gap-1">
+                        <TagIcon className="h-3 w-3 opacity-60" />
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200">{item.category}</span>
+                      </span>
+                      <span className="opacity-60">·</span>
+                      <span>Lat/Lon: {item.lat.toFixed(2)}, {item.lon.toFixed(2)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </div>
+
         <div className="lg:col-span-1">
           {/* What this app tracks */}
           <Card title="What this app tracks">
