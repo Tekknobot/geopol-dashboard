@@ -83,6 +83,46 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Intro / What this site does (appears ABOVE the map) */}
+      <Card title="About this dashboard">
+        <div className="space-y-3 text-sm text-slate-700">
+          <p>
+            This dashboard tracks <span className="font-medium">real-time socio-political signals</span> around the world and pairs them with a quick macro backdrop.
+            Use it to scan what’s happening now, then drill into countries for context.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="rounded-lg border p-3">
+              <div className="text-[13px] font-semibold mb-1">Who it’s for</div>
+              <ul className="list-disc list-inside text-[13px] space-y-1">
+                <li>Analysts & researchers</li>
+                <li>Security & risk teams</li>
+                <li>NGOs / humanitarian ops</li>
+                <li>Journalists / editors</li>
+              </ul>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-[13px] font-semibold mb-1">What it shows</div>
+              <ul className="list-disc list-inside text-[13px] space-y-1">
+                <li>Live map of incidents (last 24h)</li>
+                <li>Latest headlines tied to pins</li>
+                <li>GDP growth & CPI (World Bank)</li>
+                <li>ReliefWeb updates (fallback)</li>
+              </ul>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-[13px] font-semibold mb-1">How to use it</div>
+              <ul className="list-disc list-inside text-[13px] space-y-1">
+                <li>Toggle categories in the legend</li>
+                <li>Click pins to open sources</li>
+                <li>Browse country drilldowns</li>
+                <li>Compare with macro trends</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       {/* Map section */}
       <Card title="Global Socio-Political Events (Last 24h)">
         {!events ? <Loading label="Preparing map..." /> : <LazyEventMap events={events} onNews={setMapNews} />}
