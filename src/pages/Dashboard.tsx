@@ -138,14 +138,20 @@ export default function Dashboard() {
           </Card>
         </div>
         <div className="lg:col-span-1">
-          <Card title="What this dashboard tracks">
+          {/* What this app tracks */}
+          <Card title="What this app tracks">
             <ul className="list-disc list-inside text-sm text-slate-700 space-y-1">
-              <li>Macro backdrop (World Bank GDP growth, CPI)</li>
-              <li>Humanitarian situation snapshots (ReliefWeb)</li>
-              <li>Geophysical risks that can impact geopolitics (NASA EONET)</li>
-              <li>Drill down by country for governance indicators</li>
+              <li>Real-time global incidents & unrest mapped from news signals (GDELT)</li>
+              <li>Macro backdrop: World Bank GDP growth (WLD)</li>
+              <li>Global inflation: World Bank CPI (YOY, WLD)</li>
+              <li>Humanitarian situation updates (ReliefWeb latest reports)</li>
+              <li>Country drilldowns for governance & development indicators</li>
             </ul>
-            {error && <div className="mt-3"><ErrorState message={error}/></div>}
+            {error && (
+              <div className="mt-3">
+                <ErrorState message={error} />
+              </div>
+            )}
           </Card>
         </div>
       </div>
