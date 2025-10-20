@@ -18,6 +18,32 @@ type SeriesBundle = {
   world: WbPoint[]
 }
 
+type WbCountryMeta = { id: string; name: string; region: { id: string; value: string } }
+
+function mapRestRegionToWb(region: string): string[] {
+  // REST Countries -> World Bank regions
+  switch (region) {
+    case 'Africa': return ['SSF']                         // Sub-Saharan Africa
+    case 'Americas': return ['LCN','NAC']                // LatAm & Caribbean + North America
+    case 'Asia': return ['EAS','SAS','MEA']              // East Asia & Pacific, South Asia, Middle East & North Africa
+    case 'Europe': return ['ECS']                        // Europe & Central Asia
+    case 'Oceania': return ['EAS']                       // WB folds most of Oceania into EAS
+    default: return []
+  }
+}
+
+async function fetchWbCountryMeta(): Promise<WbCountryMeta[]> {
+  // WB v2 returns [meta, data]; we want 'data'
+  const res = await fetch('https://api.worldbank.org/v2/country?format=json&per_page=1000')
+  const json = await res.json()
+  const data = (json?.[1] || []) as any[]
+  return data.map(d => ({
+    id: d.id as string,
+    name: d.name as string,
+    region: { id: d.region?.id, value: d.region?.value }
+  }))
+}
+
 export default function CountryExplorer() {
   const [query, setQuery] = useState('Canada')
   const [country, setCountry] = useState<Country | null>(null)
@@ -70,21 +96,35 @@ export default function CountryExplorer() {
           // regional comparator rows (Political Stability as default lens)
           if (pick.region) {
             try {
-              const mates = await fetch(`https://restcountries.com/v3.1/region/${encodeURIComponent(pick.region)}?fields=name,cca3`)
-                .then(r => r.json()) as { name:{common:string}, cca3:string }[]
-              const latest = async (iso3: string) => {
-                const s = toSeries(await wbGetCountryIndicator(iso3, 'PV.EST', 5))
-                const len = s.length
-                const v = len ? s[len - 1].value ?? null : null
-                return v
-              }
-              const limited = mates.slice(0, 12)
-              const rows = await Promise.all(limited.map(async m => ({ name: m.name.common, value: await latest(m.cca3) })))
-              setRegionalRows(rows.filter(r => r.value !== null))
-            } catch { setRegionalRows([]) }
+              const wbRegions = mapRestRegionToWb(pick.region)
+              const wbCountries = await fetchWbCountryMeta()
+
+              // candidates: countries in mapped WB regions, excluding aggregates like "World"
+              const candidates = wbCountries
+                .filter(c => wbRegions.includes(c.region.id))
+                .map(c => ({ name: c.name, iso3: c.id }))
+
+              // get latest PV.EST for each, filter to ones with values
+              const batches = await Promise.all(
+                candidates.map(async c => {
+                  const s = toSeries(await wbGetCountryIndicator(c.iso3, 'PV.EST', 6))
+                  const lastNonNull = s.filter(p => p.value !== null)
+                  const v = lastNonNull.length ? lastNonNull[lastNonNull.length - 1].value : null
+                  return { name: c.name, value: v as number | null }
+                })
+              )
+
+              const withData = batches.filter(b => b.value !== null) as {name:string; value:number}[]
+              // keep a tidy set (top 20 by value) so the UI stays readable
+              withData.sort((a,b) => b.value - a.value)
+              setRegionalRows(withData.slice(0, 20))
+            } catch {
+              setRegionalRows([])
+            }
           } else {
             setRegionalRows([])
           }
+
         } else {
           setSeries({})
         }
