@@ -9,7 +9,7 @@ import { searchCountryByName, type Country } from '../services/restCountries'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import LazyEventMap from '../components/LazyEventMap'
 import { getCache, setCache } from '../services/cache'
-import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pause, Play, Info, Image as ImageIcon } from 'lucide-react'
+import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pause, Play, Info } from 'lucide-react'
 import type { MapNewsItem } from '../components/MapCore'
 
 // ---------- Tiny helpers for collapsible sections (with localStorage memory)
@@ -103,7 +103,7 @@ type HeadlineItem = {
   category?: string
   lat?: number
   lon?: number
-  countryName?: string // NEW: when known (ReliefWeb often provides)
+  countryName?: string // when known (ReliefWeb often provides)
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -115,30 +115,45 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-function NewsCarousel({ items, onOpenContext }: { items: HeadlineItem[], onOpenContext: (country: string) => void }) {
-  const [index, setIndex] = useState(0)
+function NewsCarousel({
+  items,
+  onOpenContext,
+  index,
+  onIndexChange,
+}: {
+  items: HeadlineItem[]
+  onOpenContext: (country: string) => void
+  index: number
+  onIndexChange: (i: number) => void
+}) {
   const [paused, setPaused] = useState(false)
   const total = items.length
   const timerRef = useRef<number | null>(null)
+
+  // keep index in range if items change
+  useEffect(() => {
+    if (!total) return
+    if (index >= total) onIndexChange(0)
+  }, [total, index, onIndexChange])
 
   // auto-advance
   useEffect(() => {
     if (paused || total <= 1) return
     timerRef.current = window.setInterval(() => {
-      setIndex(i => (i + 1) % total)
+      onIndexChange((index + 1) % total)
     }, 6500)
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [paused, total])
+  }, [paused, total, index, onIndexChange])
 
   // keyboard
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') setIndex(i => (i + 1) % total)
-      if (e.key === 'ArrowLeft')  setIndex(i => (i - 1 + total) % total)
+      if (e.key === 'ArrowRight') onIndexChange((index + 1) % total)
+      if (e.key === 'ArrowLeft')  onIndexChange((index - 1 + total) % total)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [total])
+  }, [total, index, onIndexChange])
 
   if (!total) return null
   const it = items[index]
@@ -151,10 +166,7 @@ function NewsCarousel({ items, onOpenContext }: { items: HeadlineItem[], onOpenC
       aria-roledescription="carousel"
       aria-label="Top headlines"
     >
-      {/* Background vignette */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100" />
-
-      {/* Content */}
       <div className="relative grid h-[55svh] min-h-[360px] md:h-[65svh] place-items-center px-4 sm:px-6 md:px-10">
         <div className="max-w-5xl">
           <div className="mb-3 inline-flex items-center gap-2">
@@ -171,14 +183,7 @@ function NewsCarousel({ items, onOpenContext }: { items: HeadlineItem[], onOpenC
             )}
           </div>
 
-          <a
-            href={it.url}
-            target="_blank"
-            rel="noreferrer"
-            className="block"
-            title={it.headline}
-          >
-            {/* MASSIVE headline, wraps elegantly */}
+          <a href={it.url} target="_blank" rel="noreferrer" className="block" title={it.headline}>
             <h2 className="font-extrabold leading-tight tracking-tight text-3xl sm:text-5xl md:text-6xl xl:text-7xl whitespace-normal break-words">
               {it.headline}
             </h2>
@@ -190,12 +195,7 @@ function NewsCarousel({ items, onOpenContext }: { items: HeadlineItem[], onOpenC
               {it.source || new URL(it.url).hostname.replace(/^www\./,'')}
             </span>
             <span className="opacity-50">•</span>
-            <a
-              href={it.url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500"
-            >
+            <a href={it.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500">
               Read article <ExternalLink className="h-4 w-4 opacity-70" />
             </a>
             {it.countryName && (
@@ -215,12 +215,11 @@ function NewsCarousel({ items, onOpenContext }: { items: HeadlineItem[], onOpenC
         </div>
       </div>
 
-      {/* Controls */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between p-2 sm:p-4">
         <button
           type="button"
           aria-label="Previous headline"
-          onClick={() => setIndex(i => (i - 1 + total) % total)}
+          onClick={() => onIndexChange((index - 1 + total) % total)}
           className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/90 shadow ring-1 ring-black/10 hover:bg-white"
         >
           <ChevronLeft className="h-5 w-5" />
@@ -238,23 +237,20 @@ function NewsCarousel({ items, onOpenContext }: { items: HeadlineItem[], onOpenC
         <button
           type="button"
           aria-label="Next headline"
-          onClick={() => setIndex(i => (i + 1) % total)}
+          onClick={() => onIndexChange((index + 1) % total)}
           className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/90 shadow ring-1 ring-black/10 hover:bg-white"
         >
           <ChevronRight className="h-5 w-5" />
         </button>
       </div>
 
-      {/* Dots */}
       <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-1.5">
         {items.slice(0, 12).map((_, i) => (
           <button
             key={i}
             aria-label={`Go to slide ${i + 1}`}
-            onClick={() => setIndex(i % total)}
-            className={`h-2.5 w-2.5 rounded-full transition ${
-              i % total === index ? 'bg-slate-900' : 'bg-slate-300 hover:bg-slate-400'
-            }`}
+            onClick={() => onIndexChange(i % total)}
+            className={`h-2.5 w-2.5 rounded-full transition ${i % total === index ? 'bg-slate-900' : 'bg-slate-300 hover:bg-slate-400'}`}
           />
         ))}
       </div>
@@ -262,169 +258,8 @@ function NewsCarousel({ items, onOpenContext }: { items: HeadlineItem[], onOpenC
   )
 }
 
-// ---------- “Context Image” block (royalty-free Unsplash Source)
-function pickImageQuery(item?: HeadlineItem) {
-  const base = 'geopolitics'
-  const parts = [
-    item?.countryName?.toLowerCase(),
-    item?.category?.toLowerCase(),
-    'protest',
-    'parliament',
-    'border',
-    'city'
-  ].filter(Boolean)
-
-  // keep commas plain, encode only the terms
-  return [base, ...parts]
-    .slice(0, 3)
-    .map(s => encodeURIComponent(s))
-    .join(',')
-}
-
-// --- helpers (place above the component or in a utils file) ---
-const _imgCache = new Map<string, string | null>()
-
-async function _wikiSummaryImage(q: string): Promise<string | null> {
-  try {
-    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}`, { mode: 'cors' })
-    if (!r.ok) return null
-    const data = await r.json()
-    return data?.originalimage?.source || data?.thumbnail?.source || null
-  } catch { return null }
-}
-
-async function _commonsImage(q: string): Promise<string | null> {
-  try {
-    const u =
-      `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(q)}`
-      + `&gsrlimit=1&prop=imageinfo&iiprop=url&format=json&origin=*`
-    const r = await fetch(u, { mode: 'cors' })
-    if (!r.ok) return null
-    const data = await r.json()
-    const page = data?.query?.pages ? Object.values(data.query.pages)[0] as any : null
-    return page?.imageinfo?.[0]?.url || null
-  } catch { return null }
-}
-
-async function _bestContextImage(queries: string[]): Promise<string | null> {
-  for (const q of queries) {
-    const a = await _wikiSummaryImage(q)
-    if (a) return a
-    const b = await _commonsImage(q)
-    if (b) return b
-  }
-  return null
-}
-
-// --- replacement component ---
-function ContextImageCard({ item }: { item: HeadlineItem }) {
-  const [src, setSrc] = useState<string | null>(null)
-  const [flagSrc, setFlagSrc] = useState<string | null>(null)
-  const triedFallback = useRef(false)
-
-  const cacheKey = useMemo(() => {
-    return [item.id, item.countryName || '', (item.category || '').toLowerCase()].join('|')
-  }, [item.id, item.countryName, item.category])
-
-  const neutralSvg = useMemo(() => {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-label="Context placeholder">
-      <defs><linearGradient id="g" x1="0" x2="1"><stop stop-color="#e5e7eb"/><stop offset="1" stop-color="#f8fafc"/></linearGradient></defs>
-      <rect width="1600" height="900" fill="url(#g)"/>
-      <g font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial" fill="#475569">
-        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="28">Context image unavailable</text>
-      </g>
-    </svg>`
-    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
-  }, [])
-
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      // cache hit?
-      if (_imgCache.has(cacheKey)) {
-        const c = _imgCache.get(cacheKey) ?? null
-        if (!alive) return
-        setSrc(c)
-        return
-      }
-
-      const country = item.countryName?.trim() || ''
-      const topic = (item.category || '').toLowerCase()
-      const queries: string[] = []
-
-      if (country) {
-        if (topic.includes('polit') || topic.includes('gov')) queries.push(`Parliament of ${country}`)
-        if (topic.includes('protest') || topic.includes('unrest')) queries.push(`Protests in ${country}`)
-        if (topic.includes('border')) queries.push(`Border of ${country}`)
-        if (topic.includes('city')) queries.push(`${country} skyline`)
-
-        // capital & country queries + set up flag fallback
-        try {
-          const [c] = await searchCountryByName(country)
-          const capital = c?.capital?.[0]
-          if (capital) { queries.push(`${capital} city`, capital) }
-          queries.push(country)
-          const iso2 = (c?.cca2 || '').toLowerCase()
-          if (iso2) setFlagSrc(`https://flagcdn.com/w1600/${iso2}.png`)
-        } catch {
-          queries.push(country)
-        }
-      } else {
-        // generic but reliable geopolitics venue
-        queries.push('United Nations General Assembly Hall')
-      }
-
-      const best = await _bestContextImage(queries)
-      if (!alive) return
-      _imgCache.set(cacheKey, best)
-      setSrc(best)
-    })()
-    return () => { alive = false }
-  }, [cacheKey, item])
-
-  const handleError: React.ReactEventHandler<HTMLImageElement> = (e) => {
-    const img = e.currentTarget
-    if (!triedFallback.current && flagSrc) {
-      triedFallback.current = true
-      img.src = flagSrc
-    } else {
-      img.src = neutralSvg
-    }
-  }
-
-  const displaySrc = src || flagSrc || neutralSvg
-
-  return (
-    <figure className="overflow-hidden rounded-2xl border shadow-sm bg-white">
-      <div className="relative aspect-[16/9] w-full bg-slate-100">
-        <img
-          src={displaySrc}
-          alt={`${item.countryName || 'Global'} context illustration`}
-          className="h-full w-full object-cover"
-          loading="lazy"
-          onError={handleError}
-        />
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4 sm:p-6">
-          <a href={item.url} target="_blank" rel="noreferrer" className="group inline-flex items-start gap-2 text-left">
-            <ImageIcon className="mt-0.5 h-4 w-4 shrink-0 text-white/90" />
-            <figcaption className="text-white">
-              <div className="line-clamp-2 text-base sm:text-lg font-semibold leading-snug group-hover:underline">
-                {item.headline}
-              </div>
-              <div className="mt-1 text-xs text-white/80">
-                {item.countryName ? `Context: ${item.countryName}` : 'Global context'}
-              </div>
-            </figcaption>
-          </a>
-        </div>
-      </div>
-    </figure>
-  )
-}
-
 // ---------- Lightweight geopolitics helpers
 
-// Small chips showing country vs world signal
 function EventContextChips({ countryName }: { countryName: string }) {
   const [textA, setTextA] = useState<string | null>(null)
   const [textB, setTextB] = useState<string | null>(null)
@@ -472,7 +307,6 @@ function EventContextChips({ countryName }: { countryName: string }) {
   )
 }
 
-// Right-side country context panel
 function SeriesChart({ country, world, label }: { country: WbPoint[]; world: WbPoint[]; label: string }) {
   const data = useMemo(() => {
     const map = new Map<string, any>()
@@ -585,6 +419,7 @@ export default function Dashboard() {
   const [gdpSeries, setGdpSeries] = useState<WbPoint[] | null>(null)
   const [cpiSeries, setCpiSeries] = useState<WbPoint[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [carouselIndex, setCarouselIndex] = useState(0)
 
   // 📡 News flowing from the map
   const [mapNews, setMapNews] = useState<MapNewsItem[]>([])
@@ -656,7 +491,6 @@ export default function Dashboard() {
           category: n.category,
           lat: n.lat,
           lon: n.lon
-          // no countryName in map items (unknown reliably without reverse-geo)
         }))
       : (reports || []).map(r => ({
           id: String(r.id),
@@ -664,27 +498,25 @@ export default function Dashboard() {
           url: r.fields.url,
           source: new URL(r.fields.url).hostname.replace(/^www\./,''),
           category: 'Update',
-          countryName: r.fields.country?.[0]?.name // use first if multiple
+          countryName: r.fields.country?.[0]?.name
         }))
 
-    // Remove empties, shuffle, and cap
     return shuffle(base.filter(b => b.headline && b.url)).slice(0, 12)
   }, [hasMapNews, mapNews, reports])
 
-  // pick hero item (first headline) to illustrate under the carousel
-  const heroItem = carouselItems[0]
-
   return (
     <div className="space-y-6">
-      {/* VERY LARGE front-page carousel (random map headlines) */}
+      {/* VERY LARGE front-page carousel */}
       {carouselItems.length > 0 && (
-        <NewsCarousel items={carouselItems} onOpenContext={(c) => setContextCountry(c)} />
+        <NewsCarousel
+          items={carouselItems}
+          onOpenContext={(c) => setContextCountry(c)}
+          index={carouselIndex}
+          onIndexChange={setCarouselIndex}
+        />
       )}
 
-      {/* NEW: illustrative image card just below the carousel */}
-      {heroItem && <ContextImageCard item={heroItem} />}
-
-      {/* Intro (collapsible; collapsed by default; with collapsible subpanels) */}
+      {/* Intro */}
       <CollapsibleSection
         title="About this dashboard"
         storageKey="intro:open"
@@ -734,8 +566,6 @@ export default function Dashboard() {
           <LazyEventMap
             events={events}
             onNews={setMapNews}
-            // If your MapCore/LazyEventMap supports selection, you can pass:
-            // onSelectCountry={(name: string) => setContextCountry(name)}
           />
         )}
       </Card>
@@ -783,7 +613,7 @@ export default function Dashboard() {
         </CollapsibleSection>
       </div>
 
-      {/* Headlines list (collapsible & persisted) */}
+      {/* Headlines list */}
       <CollapsibleSection
         title={mapNews.length ? 'Latest Headlines (from Map, 24h)' : 'Latest Humanitarian Updates (ReliefWeb)'}
         storageKey="news:list"
@@ -877,7 +707,7 @@ export default function Dashboard() {
         )}
       </CollapsibleSection>
 
-      {/* Side note card. */}
+      {/* Side note card */}
       <Card title="What this app tracks">
         <div className="space-y-3 text-sm text-slate-700">
           <p>
@@ -886,21 +716,11 @@ export default function Dashboard() {
           </p>
 
           <ul className="list-disc list-inside pl-2 space-y-1.5">
-            <li>
-              <span className="font-medium">Live incident map:</span> Global unrest, political, and security events.
-            </li>
-            <li>
-              <span className="font-medium">Macro backdrop:</span> GDP growth trends (World Bank, WLD series).
-            </li>
-            <li>
-              <span className="font-medium">Inflation data:</span> Year-over-year CPI (World Bank, WLD series).
-            </li>
-            <li>
-              <span className="font-medium">Humanitarian feed:</span> Latest situation reports (ReliefWeb API).
-            </li>
-            <li>
-              <span className="font-medium">Country context:</span> Governance & macro vs. world, on demand.
-            </li>
+            <li><span className="font-medium">Live incident map:</span> Global unrest, political, and security events.</li>
+            <li><span className="font-medium">Macro backdrop:</span> GDP growth trends (World Bank, WLD series).</li>
+            <li><span className="font-medium">Inflation data:</span> Year-over-year CPI (World Bank, WLD series).</li>
+            <li><span className="font-medium">Humanitarian feed:</span> Latest situation reports (ReliefWeb API).</li>
+            <li><span className="font-medium">Country context:</span> Governance & macro vs. world, on demand.</li>
           </ul>
 
           {error && (
@@ -911,7 +731,7 @@ export default function Dashboard() {
         </div>
       </Card>
 
-      {/* Context Sidebar (renders when a country is selected) */}
+      {/* Context Sidebar */}
       {contextCountry && (
         <ContextSidebar
           countryName={contextCountry}
