@@ -427,6 +427,9 @@ export default function Dashboard() {
   // NEW: selected country for the context sidebar
   const [contextCountry, setContextCountry] = useState<string | null>(null)
 
+  // 🗺️ Country -> Region cache for ReliefWeb items  ⬇️ (keep ONE copy only)
+  const [countryRegionMap, setCountryRegionMap] = useState<Record<string, string>>({})
+
   // 6-hour cache
   const TTL = 6 * 60 * 60 * 1000
 
@@ -480,9 +483,6 @@ export default function Dashboard() {
 
   const hasMapNews = mapNews.length > 0
 
-  // 🗺️ Country -> Region cache for ReliefWeb items
-  const [countryRegionMap, setCountryRegionMap] = useState<Record<string, string>>({})
-
   useEffect(() => {
     if (!reports?.length) return
     let alive = true
@@ -516,40 +516,40 @@ export default function Dashboard() {
     return () => { alive = false }
   }, [reports, countryRegionMap])
 
-  // 🗺️ Country -> Region cache for ReliefWeb items
-  const [countryRegionMap, setCountryRegionMap] = useState<Record<string, string>>({})
+  const regionalLeaderboard = useMemo(() => {
+    if (!reports?.length) return []
 
-  useEffect(() => {
-    if (!reports?.length) return
-    let alive = true
+    const now = Date.now()
+    const day = 24 * 60 * 60 * 1000
+    const T0 = now
+    const T_7 = now - 7 * day
+    const T_14 = now - 14 * day
 
-    ;(async () => {
-      const names = new Set<string>()
-      for (const r of reports) {
-        const c = r.fields.country?.[0]?.name
-        if (c) names.add(c)
-      }
+    const agg: Record<string, { cur: number; prev: number }> = {}
 
-      const missing = Array.from(names).filter(n => !(n in countryRegionMap))
-      if (!missing.length) return
+    for (const r of reports) {
+      const created = new Date(r.fields.date.created).getTime()
+      if (!isFinite(created)) continue
 
-      const updates: Record<string, string> = {}
-      for (const name of missing) {
-        try {
-          const [c] = await searchCountryByName(name)
-          updates[name] = c?.region || 'Other'
-        } catch {
-          updates[name] = 'Other'
-        }
-        if (!alive) return
-      }
+      const name = r.fields.country?.[0]?.name
+      if (!name) continue
 
-      if (alive && Object.keys(updates).length) {
-        setCountryRegionMap(prev => ({ ...prev, ...updates }))
-      }
-    })()
+      const region = countryRegionMap[name] || 'Other'
+      if (!agg[region]) agg[region] = { cur: 0, prev: 0 }
 
-    return () => { alive = false }
+      if (created >= T_7 && created <= T0) agg[region].cur += 1
+      else if (created >= T_14 && created < T_7) agg[region].prev += 1
+    }
+
+    return Object.entries(agg)
+      .map(([region, v]) => {
+        const delta = v.cur - v.prev
+        const pct = v.prev > 0 ? (delta / v.prev) * 100 : (v.cur > 0 ? 100 : 0)
+        return { region, count: v.cur, delta, pct: +pct.toFixed(1) }
+      })
+      .filter(row => row.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8)
   }, [reports, countryRegionMap])
 
   // 🔹 Global Volatility (events/day for the past ~30 days)
