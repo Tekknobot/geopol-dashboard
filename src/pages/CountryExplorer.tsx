@@ -138,24 +138,27 @@ export default function CountryExplorer() {
         if (myLoadId === loadIdRef.current) setNeighbors([])
       }
 
-      // regional comparator using WB regions (ensure selected is present)
+      // regional comparator using WB region of the *selected* country
       if (c.region) {
         try {
-          const wbRegions = mapRestRegionToWb(c.region)
           const wbCountries = await fetchWbCountryMeta()
+          const selISO3 = c.cca3
+          const selMeta = wbCountries.find(x => x.id === selISO3)
+          const regionId = selMeta?.region?.id // e.g., 'NAC', 'LCN', etc.
 
-          // WB cohort by region
+          // Fallback: if unknown, use the coarse mapping you already had
+          const regionIds = regionId ? [regionId] : mapRestRegionToWb(c.region)
+
           const candidates = wbCountries
-            .filter(cc => wbRegions.includes(cc.region.id))
+            .filter(cc => regionIds.includes(cc.region.id))
             .map(cc => ({ name: cc.name, iso3: cc.id }))
 
-          // ensure the selected ISO3 is in the cohort (name differences/common edge cases)
-          const selISO3 = c.cca3
+          // Ensure the selected is present even if WB metadata was odd
           if (!candidates.some(x => x.iso3 === selISO3)) {
             candidates.push({ name: c.name?.common || selISO3, iso3: selISO3 })
           }
 
-          // fetch latest PV.EST for each
+          // Fetch PV.EST latest for each candidate
           const rows = await Promise.all(
             candidates.map(async cand => {
               const s = toSeries(await wbGetCountryIndicator(cand.iso3, 'PV.EST', 6))
@@ -165,20 +168,19 @@ export default function CountryExplorer() {
             })
           )
 
-          // keep those with data (but hang onto the selected even if it has null)
-          const withData = rows.filter(r => r.value !== null) as { name: string; iso3: string; value: number }[]
-          withData.sort((a, b) => b.value - a.value)
+          // Sort by value desc, keep a tidy set
+          const withData = rows.filter(r => r.value !== null) as {name:string; iso3:string; value:number}[]
+          withData.sort((a,b)=> b.value - a.value)
 
-          // create top N, then re-insert selected if missing
+          // Top N, but re-insert selected if missing
           const TOP = 20
           let top = withData.slice(0, TOP)
           if (!top.some(r => r.iso3 === selISO3)) {
-            const me = rows.find(r => r.iso3 === selISO3) // may have null value
-            top = me ? [...top, me] : top
+            const me = rows.find(r => r.iso3 === selISO3)
+            if (me) top = [...top, me]
           }
 
           if (myLoadId === loadIdRef.current) {
-            // store with iso3 so render can highlight reliably
             setRegionalRows(top.map(r => ({ name: r.name, value: r.value as number | null, /* @ts-ignore */ iso3: (r as any).iso3 })))
           }
         } catch {
