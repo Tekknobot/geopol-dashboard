@@ -6,7 +6,7 @@ import { getLatestReports, ReliefWebItem } from '../services/reliefweb'
 import { getOpenEvents, EonetEvent } from '../services/eonet'
 import { wbGetGlobalIndicator, toSeries, WbPoint, wbGetCountryIndicator, wbGetGlobalIndicator as wbGlobal } from '../services/worldBank'
 import { searchCountryByName, type Country } from '../services/restCountries'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, LabelList } from 'recharts'
 import LazyEventMap from '../components/LazyEventMap'
 import { getCache, setCache } from '../services/cache'
 import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pause, Play, Info } from 'lucide-react'
@@ -480,6 +480,78 @@ export default function Dashboard() {
 
   const hasMapNews = mapNews.length > 0
 
+  // 🗺️ Country -> Region cache for ReliefWeb items
+  const [countryRegionMap, setCountryRegionMap] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (!reports?.length) return
+    let alive = true
+
+    ;(async () => {
+      const names = new Set<string>()
+      for (const r of reports) {
+        const c = r.fields.country?.[0]?.name
+        if (c) names.add(c)
+      }
+
+      const missing = Array.from(names).filter(n => !(n in countryRegionMap))
+      if (!missing.length) return
+
+      const updates: Record<string, string> = {}
+      for (const name of missing) {
+        try {
+          const [c] = await searchCountryByName(name)
+          updates[name] = c?.region || 'Other'
+        } catch {
+          updates[name] = 'Other'
+        }
+        if (!alive) return
+      }
+
+      if (alive && Object.keys(updates).length) {
+        setCountryRegionMap(prev => ({ ...prev, ...updates }))
+      }
+    })()
+
+    return () => { alive = false }
+  }, [reports, countryRegionMap])
+
+  // 🗺️ Country -> Region cache for ReliefWeb items
+  const [countryRegionMap, setCountryRegionMap] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (!reports?.length) return
+    let alive = true
+
+    ;(async () => {
+      const names = new Set<string>()
+      for (const r of reports) {
+        const c = r.fields.country?.[0]?.name
+        if (c) names.add(c)
+      }
+
+      const missing = Array.from(names).filter(n => !(n in countryRegionMap))
+      if (!missing.length) return
+
+      const updates: Record<string, string> = {}
+      for (const name of missing) {
+        try {
+          const [c] = await searchCountryByName(name)
+          updates[name] = c?.region || 'Other'
+        } catch {
+          updates[name] = 'Other'
+        }
+        if (!alive) return
+      }
+
+      if (alive && Object.keys(updates).length) {
+        setCountryRegionMap(prev => ({ ...prev, ...updates }))
+      }
+    })()
+
+    return () => { alive = false }
+  }, [reports, countryRegionMap])
+
   // 🔹 Global Volatility (events/day for the past ~30 days)
   const volatilitySeries = useMemo(() => {
     if (!events) return []
@@ -583,6 +655,67 @@ export default function Dashboard() {
           />
         )}
       </Card>
+
+      {/* Regional Volatility Leaderboard (Counts, Last 7 Days) */}
+      {regionalLeaderboard.length > 0 && (
+        <Card title="Regional Volatility Leaderboard (Last 7 Days)">
+          <div className="text-xs text-slate-600 mb-2">
+            Based on ReliefWeb updates. Sorted by current week count. Δ shows week-over-week change vs the prior 7 days.
+          </div>
+
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={regionalLeaderboard}
+                layout="vertical"
+                margin={{ top: 8, right: 16, bottom: 0, left: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" tick={{ fontSize: 11 }} />
+                <YAxis dataKey="region" type="category" width={120} tick={{ fontSize: 11 }} />
+                <Tooltip
+                  formatter={(value: any, name: any) => {
+                    if (name === 'count') return [value, 'Reports (7d)']
+                    if (name === 'delta') return [value, 'Δ WoW (count)']
+                    if (name === 'pct') return [`${value}%`, 'Δ WoW (%)']
+                    return [value, name]
+                  }}
+                  labelFormatter={(label) => `Region: ${label}`}
+                />
+                <Bar dataKey="count" name="Reports (7d)">
+                  <LabelList
+                    dataKey="count"
+                    position="right"
+                    formatter={(v: any) => `${v}`}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Delta badges */}
+          <ul className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+            {regionalLeaderboard.map(row => (
+              <li key={row.region} className="flex items-center justify-between rounded border px-2 py-1">
+                <span className="font-medium text-slate-700">{row.region}</span>
+                <span className="tabular-nums text-slate-700">
+                  {row.count}
+                  <span className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 ring-1 ${
+                    row.delta > 0
+                      ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                      : row.delta < 0
+                        ? 'bg-rose-50 text-rose-700 ring-rose-200'
+                        : 'bg-slate-50 text-slate-700 ring-slate-200'
+                  }`}>
+                    {row.delta > 0 ? '▲' : row.delta < 0 ? '▼' : '•'} {row.delta >= 0 ? '+' : ''}{row.delta}
+                    <span className="ml-1 opacity-70">({row.pct}%)</span>
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* Global Volatility Tracker */}
       {events && (
