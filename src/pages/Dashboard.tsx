@@ -508,7 +508,7 @@ export default function Dashboard() {
         )}
       </CollapsibleSection>
 
-      {/* Side note card */}
+      {/* Side note card. */}
       <Card title="What this app tracks">
         <div className="space-y-3 text-sm text-slate-700">
           <p>
