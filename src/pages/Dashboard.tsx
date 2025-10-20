@@ -516,6 +516,56 @@ export default function Dashboard() {
     return () => { alive = false }
   }, [reports, countryRegionMap])
 
+  // 👇 Countries that landed in "Other" (7d window)
+  const otherCountries = useMemo(() => {
+    if (!reports?.length) return []
+    const now = Date.now()
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000
+    const set = new Set<string>()
+
+    for (const r of reports) {
+      const created = new Date(r.fields.date.created).getTime()
+      if (!isFinite(created) || created < sevenDaysAgo) continue
+      const name = r.fields.country?.[0]?.name
+      if (!name) continue
+      const region = countryRegionMap[name] || 'Other'
+      if (region === 'Other') set.add(name)
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [reports, countryRegionMap])
+
+  // 👇 Type breakdown (7d) — best-effort from ReliefWeb fields
+  const typeBreakdown = useMemo(() => {
+    if (!reports?.length) return []
+    const now = Date.now()
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000
+    const counts = new Map<string, number>()
+
+    const getType = (r: ReliefWebItem) => {
+      const f = (r as any)?.fields
+      // Try common ReliefWeb categorical fields; fall back to "Update"
+      return (
+        f?.disaster_type?.[0]?.name ||
+        f?.theme?.[0]?.name ||
+        f?.primary_type?.name || // if present
+        'Update'
+      )
+    }
+
+    for (const r of reports) {
+      const created = new Date(r.fields.date.created).getTime()
+      if (!isFinite(created) || created < sevenDaysAgo) continue
+      const t = getType(r)
+      counts.set(t, (counts.get(t) || 0) + 1)
+    }
+
+    return Array.from(counts.entries())
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 12)
+  }, [reports])
+
+
   const regionalLeaderboard = useMemo(() => {
     if (!reports?.length) return []
 
@@ -714,6 +764,35 @@ export default function Dashboard() {
               </li>
             ))}
           </ul>
+
+          {/* Transparency: which countries are in "Other" & Type mix */}
+          {(otherCountries.length > 0 || typeBreakdown.length > 0) && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {otherCountries.length > 0 && (
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs font-semibold text-slate-700 mb-1">“Other” includes</div>
+                  <div className="text-xs text-slate-700">
+                    {otherCountries.join(', ')}
+                  </div>
+                </div>
+              )}
+
+              {typeBreakdown.length > 0 && (
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs font-semibold text-slate-700 mb-1">Event types (last 7 days)</div>
+                  <ul className="text-xs text-slate-700 space-y-1">
+                    {typeBreakdown.map(t => (
+                      <li key={t.type} className="flex items-center justify-between">
+                        <span className="truncate">{t.type}</span>
+                        <span className="tabular-nums">{t.count}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
         </Card>
       )}
 
