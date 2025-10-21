@@ -11,6 +11,8 @@ import LazyEventMap from '../components/LazyEventMap'
 import { getCache, setCache } from '../services/cache'
 import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pause, Play, Info } from 'lucide-react'
 import type { MapNewsItem } from '../components/MapCore'
+import { eventsToMapNews } from '../utils/mapNews'
+
 
 // ---------- Tiny helpers for collapsible sections (with localStorage memory)
 function usePersistedToggle(key: string, defaultOpen = false) {
@@ -454,12 +456,12 @@ export default function Dashboard() {
         const cgdp = getCache<WbPoint[]>('wld:gdp', TTL)
         const ccpi = getCache<WbPoint[]>('wld:cpi', TTL)
         const crw  = getCache<ReliefWebItem[]>('rw:latest', TTL)
+        const cev  = getCache<EonetEvent[]>('eonet:open', TTL)
 
         if (cgdp) setGdpSeries(cgdp)
         if (ccpi) setCpiSeries(ccpi)
         if (crw) {
           setReports(crw)
-          // If no visible headlines yet, seed carousel from cached RW
           if (carouselItems.length === 0) {
             const seed = crw.slice(0, 12).map(r => ({
               id: String(r.id),
@@ -472,15 +474,26 @@ export default function Dashboard() {
             setCarouselItems(seed)
           }
         }
+        // If we have cached EONET, surface those headlines immediately, too
+        if (cev) {
+          setEvents(cev)
+          const cachedNews = eventsToMapNews(cev)
+          if (cachedNews.length) {
+            setMapNews(cachedNews)
+            // Prefer map headlines in the carousel
+            const items = cachedNews.slice(0, 12)
+            setCarouselItems(items)
+            try { localStorage.setItem('carousel:last', JSON.stringify(items)) } catch {}
+          }
+        }
 
-        // Start ReliefWeb immediately (don't block on KPIs)
+        // ReliefWeb now (fast path)
         const rwPromise = (async () => {
           try {
             const rw = await getLatestReports(12)
             setReports(rw)
             setCache('rw:latest', rw)
-
-            // Only set carousel from RW if map headlines aren’t up yet
+            // If we still don't have map headlines, use RW for carousel
             if (mapNews.length === 0) {
               const items = rw.slice(0, 12).map(r => ({
                 id: String(r.id),
@@ -491,7 +504,7 @@ export default function Dashboard() {
                 countryName: r.fields.country?.[0]?.name,
               }))
               setCarouselItems(items)
-              try { localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(items)) } catch {}
+              try { localStorage.setItem('carousel:last', JSON.stringify(items)) } catch {}
             }
           } catch {}
         })()
@@ -512,22 +525,28 @@ export default function Dashboard() {
           }
         })()
 
-        // Fire both; don’t await fully (UI can render)
-        void Promise.race([rwPromise, kpiPromise])
+        // ⭐ EONET immediately (no idle), to get map-style headlines without the map
+        const newsPromise = (async () => {
+          try {
+            const ev = await getOpenEvents()
+            setEvents(ev); setCache('eonet:open', ev)
+            const news = eventsToMapNews(ev)
+            if (news.length) {
+              setMapNews(news)
+              // Prefer map headlines for carousel if/when present
+              const items = news.slice(0, 12)
+              setCarouselItems(items)
+              try { localStorage.setItem('carousel:last', JSON.stringify(items)) } catch {}
+            }
+          } catch {}
+        })()
+
+        // Fire all; UI renders as things resolve
+        void Promise.race([rwPromise, kpiPromise, newsPromise])
       } catch (e:any) {
         setError(e?.message || 'Failed to load data')
       }
     })()
-
-    // EONET/map fetch deferred to idle for faster first paint
-    ric(async () => {
-      try {
-        const cev = getCache<EonetEvent[]>('eonet:open', TTL)
-        if (cev) setEvents(cev)
-        const ev = await getOpenEvents()
-        setEvents(ev); setCache('eonet:open', ev)
-      } catch {}
-    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
