@@ -427,6 +427,24 @@ export default function Dashboard() {
   // 📡 News flowing from the map
   const [mapNews, setMapNews] = useState<MapNewsItem[]>([])
 
+  // De-dupe & cap map headlines so count matches what's rendered
+  const NEWS_VISIBLE = 40;            // how many you render in the list
+  const NEWS_POOL_MAX = 300;          // safety cap for the pool
+
+  const uniqueMapNews = useMemo(() => {
+    const seen = new Set<string>();
+    const out: MapNewsItem[] = [];
+    for (const n of mapNews) {
+      const k = n.url || n.id;        // prefer URL; fall back to id
+      if (k && !seen.has(k)) {
+        seen.add(k);
+        out.push(n);
+        if (out.length >= NEWS_POOL_MAX) break;
+      }
+    }
+    return out;
+  }, [mapNews]);
+
   // Cached "front page" carousel so we can show headlines immediately
   const CAROUSEL_CACHE_KEY = 'carousel:last'
   const [carouselItems, setCarouselItems] = useState<HeadlineItem[]>(() => {
@@ -594,8 +612,8 @@ export default function Dashboard() {
 
   // When map-driven headlines arrive, promote them once and cache
   useEffect(() => {
-    if (mapNews.length === 0) return
-    const items = mapNews.slice(0, 12).map(n => ({
+    if (uniqueMapNews.length === 0) return;
+    const items = uniqueMapNews.slice(0, 12).map(n => ({
       id: n.id,
       headline: n.headline,
       url: n.url,
@@ -603,10 +621,11 @@ export default function Dashboard() {
       category: n.category,
       lat: n.lat,
       lon: n.lon,
-    }))
-    setCarouselItems(items)
+    }));
+    setCarouselItems(items);
     try { localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(items)) } catch {}
-  }, [mapNews])
+  }, [uniqueMapNews]);
+
 
   // 👇 Countries that landed in "Other" (7d window)
   const otherCountries = useMemo(() => {
@@ -1025,10 +1044,14 @@ export default function Dashboard() {
 
       {/* Headlines list */}
       <CollapsibleSection
-        title={mapNews.length ? 'Latest Headlines (from Map, 24h)' : 'Latest Humanitarian Updates (ReliefWeb)'}
+        title={uniqueMapNews.length ? 'Latest Headlines (from Map, 24h)' : 'Latest Humanitarian Updates (ReliefWeb)'}
         storageKey="news:list"
         defaultOpen={false}
-        rightHint={mapNews.length ? `${mapNews.length} items` : (reports ? `${reports.length} items` : undefined)}
+        rightHint={
+          uniqueMapNews.length
+            ? `${Math.min(uniqueMapNews.length, NEWS_VISIBLE)} of ${uniqueMapNews.length}`
+            : (reports ? `${reports.length} items` : undefined)
+        }
       >
         {!mapNews.length ? (
           !reports ? <Loading/> : (
@@ -1080,7 +1103,7 @@ export default function Dashboard() {
           )
         ) : (
           <ul className="divide-y">
-            {mapNews.slice(0, 40).map(item => (
+            {uniqueMapNews.slice(0, NEWS_VISIBLE).map(item => (
               <li key={item.id} className="py-3">
                 <div className="flex items-start gap-2">
                   <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
