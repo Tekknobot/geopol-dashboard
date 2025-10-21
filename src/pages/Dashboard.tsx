@@ -417,7 +417,7 @@ function ContextSidebar({ countryName, onClose }: { countryName: string | null; 
 // ---------- Main Dashboard
 export default function Dashboard() {
   const [reports, setReports] = useState<ReliefWebItem[] | null>(null)
-  const [events, setEvents] = useState<EonetEvent[] | null>(null)
+  const [events, setEvents] = useState<EonetEvent[]>([]) // empty = render map immediately
   const [gdpSeries, setGdpSeries] = useState<WbPoint[] | null>(null)
   const [cpiSeries, setCpiSeries] = useState<WbPoint[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -801,12 +801,7 @@ export default function Dashboard() {
 
       {/* Map */}
       <Card title="Global Socio-Political Events (Last 24h)">
-        {!events ? <Loading label="Preparing map..." /> : (
-          <LazyEventMap
-            events={events}
-            onNews={setMapNews}
-          />
-        )}
+        <LazyEventMap events={events} onNews={setMapNews} />
       </Card>
 
       {/* Regional Volatility Leaderboard (Counts, Last 7 Days) */}
