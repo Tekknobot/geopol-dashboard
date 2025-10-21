@@ -1,6 +1,7 @@
+// src/components/MapCore.tsx
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EonetEvent } from '../services/eonet' // prop compatibility
 
 /** ---------- Inline SVG marker (no external assets) ---------- */
@@ -184,72 +185,52 @@ function inferCategory(name: string, html: string) {
   return 'Other'
 }
 
-/** ---------- Robust fetch (direct to GDELT) ---------- */
-async function fetchGeo(query: string, timespan = '24h', maxpoints = 700) {
+/** ---------- Progressive fetch & batch-yield from GDELT ---------- */
+async function fetchGeo(controller: AbortController, query: string, timespan = '24h', maxpoints = 900) {
   const base = "https://api.gdeltproject.org"
   const url = `${base}/api/v2/geo/geo?query=${encodeURIComponent(query)}&mode=PointData&format=GeoJSON&timespan=${encodeURIComponent(timespan)}&maxpoints=${maxpoints}`
-  const controller = new AbortController()
-  const to = setTimeout(() => controller.abort(), 15000)
+  const res = await fetch(url, {
+    signal: controller.signal,
+    headers: { 'Accept': 'application/json, text/plain;q=0.9,*/*;q=0.8' }
+  })
+  const text = await res.text()
+  if (!res.ok) return []
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: { 'Accept': 'application/json, text/plain;q=0.9,*/*;q=0.8' }
-    })
-    const text = await res.text()
-    if (!res.ok) return []
-    try {
-      const gj = JSON.parse(text)
-      return Array.isArray(gj?.features) ? gj.features : []
-    } catch {
-      const start = text.indexOf('{'); const end = text.lastIndexOf('}')
-      if (start !== -1 && end !== -1 && end > start) {
-        try {
-          const gj = JSON.parse(text.slice(start, end + 1))
-          return Array.isArray(gj?.features) ? gj.features : []
-        } catch {}
-      }
-      return []
-    }
+    const gj = JSON.parse(text)
+    return Array.isArray(gj?.features) ? gj.features : []
   } catch {
-    return []
-  } finally {
-    clearTimeout(to)
-  }
-}
-
-/** ---------- Progressive queries (24h) ---------- */
-async function fetchSocio24h(): Promise<SocioPoint[]> {
-  const Q1 = '(protest OR strike OR coup OR sanctions OR election OR energy OR oil OR gas OR shipping OR blockade OR "supply chain" OR tariff OR "export control" OR ransomware OR cyber OR refugee OR migration OR summit OR treaty OR alliance OR corruption OR impeachment)'
-  const Q2 = '(protest OR strike OR coup OR sanctions OR election OR energy OR shipping OR tariff OR cyber OR refugee OR summit OR corruption)'
-  const Q3 = '(politics OR government OR protest OR security)'
-  for (const q of [Q1, Q2, Q3]) {
-    const feats = await fetchGeo(q, '24h', 900)
-    if (feats.length) {
-      const pts = feats.map((f: any, i: number) => {
-        const coords = f?.geometry?.coordinates
-        const props = f?.properties || {}
-        const lat = parseCoord(coords?.[1]); const lon = parseCoord(coords?.[0])
-        if (!validCoord(lat, lon)) return null
-        const name = (props.name || '').toString(); const html = (props.html || '').toString()
-        const category = inferCategory(name, html)
-        const label = name || category
-        const best = extractBestLink(html, name)
-        const isOther = category === 'Other'
-        const trustworthy = (best.score >= 10) || (best.source ? TRUSTED_DOMAINS.has(best.source) : false)
-        if (isOther && !trustworthy) return null
-        const showLink = best.score >= 0
-        const headline = showLink ? best.headline : undefined
-        const source = showLink ? best.source : undefined
-        const url     = showLink ? best.url     : undefined
-        return { lat: lat!, lon: lon!, label, category, headline, source, url }
-      }).filter(Boolean) as SocioPoint[]
-      if (pts.length) return pts
+    const start = text.indexOf('{'); const end = text.lastIndexOf('}')
+    if (start !== -1 && end !== -1 && end > start) {
+      try {
+        const gj = JSON.parse(text.slice(start, end + 1))
+        return Array.isArray(gj?.features) ? gj.features : []
+      } catch {}
     }
+    return []
   }
-  return []
 }
 
-/** ---------- Component (socio only, 24h) ---------- */
+/** Map a raw feature to a SocioPoint (or null) */
+function featureToPoint(f: any): SocioPoint | null {
+  const coords = f?.geometry?.coordinates
+  const props = f?.properties || {}
+  const lat = parseCoord(coords?.[1]); const lon = parseCoord(coords?.[0])
+  if (!validCoord(lat, lon)) return null
+  const name = (props.name || '').toString(); const html = (props.html || '').toString()
+  const category = inferCategory(name, html)
+  const label = name || category
+  const best = extractBestLink(html, name)
+  const isOther = category === 'Other'
+  const trustworthy = (best.score >= 10) || (best.source ? TRUSTED_DOMAINS.has(best.source) : false)
+  if (isOther && !trustworthy) return null
+  const showLink = best.score >= 0
+  const headline = showLink ? best.headline : undefined
+  const source = showLink ? best.source : undefined
+  const url     = showLink ? best.url     : undefined
+  return { lat: lat!, lon: lon!, label, category, headline, source, url }
+}
+
+/** ---------- Component (incremental, batched) ---------- */
 export default function MapCore({
   events: _unused,
   onNews,
@@ -257,45 +238,113 @@ export default function MapCore({
   events: EonetEvent[]
   onNews?: (items: MapNewsItem[]) => void
 }) {
-  const [points, setPoints] = useState<SocioPoint[] | null>(null)
+  const [points, setPoints] = useState<SocioPoint[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [activeCats, setActiveCats] = useState<Set<string>>(new Set()) // legend filters
+  const addedKeys = useRef<Set<string>>(new Set()) // dedupe across batches
+  const rafId = useRef<number | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
+    const controller = new AbortController()
+    abortRef.current = controller
     let alive = true
-    const id = requestAnimationFrame(async () => {
-      try {
-        const pts = await fetchSocio24h()
-        if (!alive) return
-        setPoints(pts)
-        const all = new Set(pts.map(p => p.category))
-        setActiveCats(all)
-      } catch (e: any) {
-        if (!alive) return
-        setErr(e?.message || 'Failed to load socio-political layer')
-      }
-    })
-    return () => { alive = false; cancelAnimationFrame(id) }
-  }, [])
 
-  // Publish visible items to the host (Dashboard) whenever filters or points change
+    const BATCH_SIZE = 80
+
+    // parallel queries (broad→narrow – any order is fine since we batch)
+    const Q1 = '(protest OR strike OR coup OR sanctions OR election OR energy OR oil OR gas OR shipping OR blockade OR "supply chain" OR tariff OR "export control" OR ransomware OR cyber OR refugee OR migration OR summit OR treaty OR alliance OR corruption OR impeachment)'
+    const Q2 = '(protest OR strike OR coup OR sanctions OR election OR energy OR shipping OR tariff OR cyber OR refugee OR summit OR corruption)'
+    const Q3 = '(politics OR government OR protest OR security)'
+
+    async function runQuery(q: string) {
+      try {
+        const feats = await fetchGeo(controller, q, '24h', 900)
+        if (!alive || controller.signal.aborted) return
+        // Map features to candidate points
+        const candidates: SocioPoint[] = []
+        for (const f of feats) {
+          const pt = featureToPoint(f)
+          if (!pt) continue
+          // dedupe key: url if present, else coord+label
+          const key = pt.url || `${pt.lat.toFixed(3)},${pt.lon.toFixed(3)}:${pt.label}`
+          if (addedKeys.current.has(key)) continue
+          addedKeys.current.add(key)
+          candidates.push(pt)
+        }
+        if (!candidates.length) return
+
+        // Push in batches using rAF to keep UI reactive
+        let i = 0
+        const pump = () => {
+          if (!alive || controller.signal.aborted) return
+          const slice = candidates.slice(i, i + BATCH_SIZE)
+          if (slice.length) {
+            setPoints(prev => {
+              const next = [...prev, ...slice]
+              // initialize legend categories on first influx
+              if (prev.length === 0) {
+                const cats = new Set(next.map(p => p.category))
+                setActiveCats(cats)
+              }
+              return next
+            })
+            // publish news incrementally
+            if (onNews) {
+              const items: MapNewsItem[] = slice
+                .filter(p => !!p.headline && !!p.url)
+                .map((p, idx) => ({
+                  id: `${p.category}:${p.url}:${Date.now()}:${idx}`,
+                  headline: p.headline!,
+                  url: p.url!,
+                  source: p.source,
+                  category: p.category,
+                  lat: p.lat,
+                  lon: p.lon,
+                }))
+              if (items.length) onNews(items) // send just the new batch
+            }
+            i += BATCH_SIZE
+          }
+          if (i < candidates.length) {
+            rafId.current = requestAnimationFrame(pump)
+          }
+        }
+        rafId.current = requestAnimationFrame(pump)
+      } catch (e: any) {
+        if (!alive || controller.signal.aborted) return
+        // swallow per-query errors; only set global error if everything fails
+      }
+    }
+
+    // fire all three concurrently
+    runQuery(Q1); runQuery(Q2); runQuery(Q3)
+
+    return () => {
+      alive = false
+      if (rafId.current) cancelAnimationFrame(rafId.current)
+      controller.abort()
+    }
+  }, [onNews])
+
+  // If filters change, republish full visible set (to keep Dashboard list in sync)
   useEffect(() => {
     if (!onNews) return
-    if (!points || activeCats.size === 0) { onNews([]); return }
-    const items: MapNewsItem[] = points
-      .filter(p => activeCats.has(p.category) && !!p.headline && !!p.url)
-      .slice(0, 200) // guard
-      .map((p, i) => ({
-        id: `${p.category}:${p.url}:${i}`,
-        headline: p.headline!,
-        url: p.url!,
-        source: p.source,
-        category: p.category,
-        lat: p.lat,
-        lon: p.lon,
-      }))
+    if (activeCats.size === 0) { onNews([]); return }
+    // Only send a capped snapshot to avoid flooding the parent
+    const visible = points.filter(p => activeCats.has(p.category) && p.headline && p.url).slice(0, 200)
+    const items: MapNewsItem[] = visible.map((p, i) => ({
+      id: `${p.category}:${p.url}:${i}`,
+      headline: p.headline!,
+      url: p.url!,
+      source: p.source,
+      category: p.category,
+      lat: p.lat,
+      lon: p.lon,
+    }))
     onNews(items)
-  }, [points, activeCats, onNews])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCats, points])
 
   const counts = useMemo(() => {
     const acc: Record<string, number> = {}
@@ -410,7 +459,7 @@ export default function MapCore({
         </div>
       </details>
 
-      {!hasPins && !err && <div className="text-xs text-slate-500">No pins visible — toggle categories above.</div>}
+      {!hasPins && !err && <div className="text-xs text-slate-500">Loading pins… they’ll appear in batches shortly.</div>}
       {err && <div className="text-xs text-red-600">{err}</div>}
     </div>
   )
