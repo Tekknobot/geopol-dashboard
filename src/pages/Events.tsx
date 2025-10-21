@@ -1,5 +1,5 @@
 // src/pages/Events.tsx
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Card from "../components/Card"
 import Loading from "../components/Loading"
 import ErrorState from "../components/ErrorState"
@@ -15,58 +15,11 @@ function truncate(s: string, n = 110) {
   return s.length > n ? s.slice(0, n - 1) + "…" : s
 }
 
-/** ---------------- Fetch <title> for a URL (best-effort) ----------------
- * - 3s timeout
- * - If CORS blocks or parsing fails, return null and we'll use existing headline
- */
-async function fetchPageTitle(url: string, timeoutMs = 3000): Promise<string | null> {
-  const controller = new AbortController()
-  const to = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const res = await fetch(url, { signal: controller.signal })
-    if (!res.ok) return null
-    const html = await res.text()
-    // Basic <title> parse
-    const m = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-    if (!m) return null
-    const raw = m[1].trim().replace(/\s+/g, " ")
-    return raw || null
-  } catch {
-    // CORS/abort/network => ignore
-    return null
-  } finally {
-    clearTimeout(to)
-  }
-}
-
-/** Concurrency limiter (naive) */
-async function pMap<T, R>(
-  items: T[],
-  worker: (item: T) => Promise<R>,
-  concurrency = 4
-): Promise<R[]> {
-  const out: R[] = new Array(items.length) as any
-  let i = 0
-  async function run() {
-    while (i < items.length) {
-      const idx = i++
-      out[idx] = await worker(items[idx])
-    }
-  }
-  const runners = Array.from({ length: Math.min(concurrency, items.length) }, run)
-  await Promise.all(runners)
-  return out
-}
-
 export default function EventsPage() {
   const [rows, setRows] = useState<PinRow[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [q, setQ] = useState("")
   const [cats, setCats] = useState<Set<string>>(new Set(ALL_CATS))
-
-  // Map<url, enrichedTitle>
-  const [titleMap, setTitleMap] = useState<Record<string, string>>({})
-  const enrichStarted = useRef(false)
 
   useEffect(() => {
     let alive = true
@@ -83,43 +36,20 @@ export default function EventsPage() {
     return () => { alive = false }
   }, [])
 
-  // Progressive enrichment: fetch <title> for each pin url (best-effort)
-  useEffect(() => {
-    if (!rows || enrichStarted.current) return
-    enrichStarted.current = true
-
-    let alive = true
-    ;(async () => {
-      // De-dupe by URL, skip ones we already have
-      const urls = Array.from(new Set(rows.map(r => r.url).filter(Boolean)))
-      // Fetch in small parallel batches
-      await pMap(urls, async (u) => {
-        const title = await fetchPageTitle(u!)
-        if (alive && title) {
-          setTitleMap(prev => (prev[u!] ? prev : { ...prev, [u!]: title }))
-        }
-        return null
-      }, 4)
-    })()
-
-    return () => { alive = false }
-  }, [rows])
-
   const filtered = useMemo(() => {
     if (!rows) return []
     const qq = q.trim().toLowerCase()
     return rows.filter(r => {
       if (!cats.has(r.category)) return false
       if (!qq) return true
-      const headline = (titleMap[r.url] || r.headline).toLowerCase()
       return (
-        headline.includes(qq) ||
+        r.headline.toLowerCase().includes(qq) ||
         (r.source || "").toLowerCase().includes(qq) ||
         r.countryGuess.toLowerCase().includes(qq) ||
         r.label.toLowerCase().includes(qq)
       )
     })
-  }, [rows, q, cats, titleMap])
+  }, [rows, q, cats])
 
   const byCountry = useMemo(() => {
     const m = new Map<string, PinRow[]>()
@@ -145,8 +75,6 @@ export default function EventsPage() {
   }
   function selectAll() { setCats(new Set(ALL_CATS)) }
   function clearAll() { setCats(new Set()) }
-
-  const getHeadline = (r: PinRow) => titleMap[r.url] || r.headline
 
   return (
     <div className="space-y-6">
@@ -195,12 +123,12 @@ export default function EventsPage() {
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-2 py-1 text-[12px] ring-1 ring-slate-200 hover:bg-white hover:shadow-sm"
-                    title={getHeadline(h)}
+                    title={h.headline}
                   >
                     <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-700">
                       {h.countryGuess}
                     </span>
-                    <span className="truncate">{truncate(getHeadline(h), 80)}</span>
+                    <span className="truncate">{truncate(h.headline, 80)}</span>
                   </a>
                 </li>
               ))}
@@ -212,7 +140,7 @@ export default function EventsPage() {
         {byCountry.length > 0 && (
           <div className="mt-6 space-y-6">
             {byCountry.map(([country, items]) => {
-              const top = items[0]
+              const top = items[0] // first is fine (already sorted globally); could sort per-country differently if you want
               return (
                 <section key={country} className="rounded-lg border">
                   <header className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between px-3 py-2">
@@ -220,16 +148,16 @@ export default function EventsPage() {
                       <h3 className="text-sm font-semibold shrink-0">{country}</h3>
                       <span className="text-xs text-slate-500 shrink-0">· {items.length} pin{items.length !== 1 ? "s" : ""}</span>
                     </div>
-                    {/* Top headline inline (clickable, truncated, larger text) */}
+                    {/* Top headline inline (clickable, truncated) */}
                     {top && (
                       <a
                         href={top.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-sm md:text-base text-slate-800 hover:underline truncate font-semibold"
-                        title={getHeadline(top)}
+                        className="text-xs text-slate-700 hover:underline truncate"
+                        title={top.headline}
                       >
-                        {truncate(getHeadline(top), 120)}
+                        {truncate(top.headline, 120)}
                       </a>
                     )}
                   </header>
@@ -242,17 +170,15 @@ export default function EventsPage() {
                             {item.category}
                           </span>
                           <div className="min-w-0 flex-1">
-                            {/* Headline (larger) */}
                             <a
                               href={item.url}
                               target="_blank"
                               rel="noreferrer"
-                              className="block text-[15px] md:text-[17px] font-semibold leading-snug hover:underline whitespace-normal break-words"
-                              title={getHeadline(item)}
+                              className="block font-medium leading-snug hover:underline whitespace-normal break-words"
+                              title={item.headline}
                             >
-                              {getHeadline(item)}
+                              {item.headline}
                             </a>
-                            {/* Meta (smaller) */}
                             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-600">
                               {item.source && <span className="shrink-0">{item.source}</span>}
                               <span className="opacity-50">·</span>
