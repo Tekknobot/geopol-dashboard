@@ -418,6 +418,7 @@ function ContextSidebar({ countryName, onClose }: { countryName: string | null; 
 export default function Dashboard() {
   const [reports, setReports] = useState<ReliefWebItem[] | null>(null)
   const [events, setEvents] = useState<EonetEvent[]>([]) // empty = render map immediately
+  const [eventsLoading, setEventsLoading] = useState(true) // controls volatility tracker loading state
   const [gdpSeries, setGdpSeries] = useState<WbPoint[] | null>(null)
   const [cpiSeries, setCpiSeries] = useState<WbPoint[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -477,10 +478,10 @@ export default function Dashboard() {
         // If we have cached EONET, surface those headlines immediately, too
         if (cev) {
           setEvents(cev)
+          setEventsLoading(false)
           const cachedNews = eventsToMapNews(cev)
           if (cachedNews.length) {
             setMapNews(cachedNews)
-            // Prefer map headlines in the carousel
             const items = cachedNews.slice(0, 12)
             setCarouselItems(items)
             try { localStorage.setItem('carousel:last', JSON.stringify(items)) } catch {}
@@ -530,15 +531,18 @@ export default function Dashboard() {
           try {
             const ev = await getOpenEvents()
             setEvents(ev); setCache('eonet:open', ev)
+            setEventsLoading(false)
             const news = eventsToMapNews(ev)
             if (news.length) {
               setMapNews(news)
-              // Prefer map headlines for carousel if/when present
               const items = news.slice(0, 12)
               setCarouselItems(items)
               try { localStorage.setItem('carousel:last', JSON.stringify(items)) } catch {}
             }
-          } catch {}
+          } catch {
+            // even on failure, stop "loading…" so the card can show a friendly empty state
+            setEventsLoading(false)
+          }
         })()
 
         // Fire all; UI renders as things resolve
@@ -947,20 +951,32 @@ export default function Dashboard() {
       {/* Global Volatility Tracker */}
       {events && (
         <Card title="Global Volatility Tracker (Past 30 Days)">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={volatilitySeries}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} width={35} />
-                <Tooltip />
-                <Line type="monotone" dataKey="count" name="Events" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="mt-2 text-xs text-slate-600">
-            Daily count of open EONET incidents globally. Spikes can signal rising instability or disaster activity.
-          </p>
+          {eventsLoading ? (
+            <div className="h-64 grid place-items-center">
+              <Loading label="Calculating volatility…" />
+            </div>
+          ) : volatilitySeries.length === 0 ? (
+            <div className="h-32 grid place-items-center text-xs text-slate-500">
+              No open events available right now.
+            </div>
+          ) : (
+            <>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={volatilitySeries}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} width={35} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="count" name="Events" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="mt-2 text-xs text-slate-600">
+                Daily count of open EONET incidents globally. Spikes can signal rising instability or disaster activity.
+              </p>
+            </>
+          )}
         </Card>
       )}
 
