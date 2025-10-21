@@ -192,7 +192,7 @@ function NewsCarousel({
           <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-600">
             <span className="inline-flex items-center gap-2">
               <Newspaper className="h-4 w-4 opacity-70" />
-              {it.source || new URL(it.url).hostname.replace(/^www\./,'')}
+              {it.source || (() => { try { return new URL(it.url).hostname.replace(/^www\./,'') } catch { return 'source' } })()}
             </span>
             <span className="opacity-50">•</span>
             <a href={it.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500">
@@ -424,6 +424,17 @@ export default function Dashboard() {
   // 📡 News flowing from the map
   const [mapNews, setMapNews] = useState<MapNewsItem[]>([])
 
+  // Cached "front page" carousel so we can show headlines immediately
+  const CAROUSEL_CACHE_KEY = 'carousel:last'
+  const [carouselItems, setCarouselItems] = useState<HeadlineItem[]>(() => {
+    try {
+      const raw = localStorage.getItem(CAROUSEL_CACHE_KEY)
+      return raw ? (JSON.parse(raw) as HeadlineItem[]) : []
+    } catch {
+      return []
+    }
+  })
+
   // NEW: selected country for the context sidebar
   const [contextCountry, setContextCountry] = useState<string | null>(null)
 
@@ -439,46 +450,85 @@ export default function Dashboard() {
   useEffect(() => {
     (async () => {
       try {
-        // Try cache first
+        // Warm from cache immediately
         const cgdp = getCache<WbPoint[]>('wld:gdp', TTL)
         const ccpi = getCache<WbPoint[]>('wld:cpi', TTL)
-        const crw = getCache<ReliefWebItem[]>('rw:latest', TTL)
+        const crw  = getCache<ReliefWebItem[]>('rw:latest', TTL)
 
         if (cgdp) setGdpSeries(cgdp)
         if (ccpi) setCpiSeries(ccpi)
-        if (crw) setReports(crw)
-
-        // Load charts quickly (20y window is enough for trend)
-        const [gdp, cpi] = await Promise.all([
-          wbGetGlobalIndicator('NY.GDP.MKTP.KD.ZG', 20),
-          wbGetGlobalIndicator('FP.CPI.TOTL.ZG', 20),
-        ])
-        const gdpS = toSeries(gdp)
-        const cpiS = toSeries(cpi)
-        setGdpSeries(gdpS); setCache('wld:gdp', gdpS)
-        setCpiSeries(cpiS); setCache('wld:cpi', cpiS)
-
-        // ReliefWeb feed (fallback content if map has nothing yet)
-        if (!crw) {
-          const rw = await getLatestReports(10)
-          setReports(rw); setCache('rw:latest', rw)
+        if (crw) {
+          setReports(crw)
+          // If no visible headlines yet, seed carousel from cached RW
+          if (carouselItems.length === 0) {
+            const seed = crw.slice(0, 12).map(r => ({
+              id: String(r.id),
+              headline: r.fields.title,
+              url: r.fields.url,
+              source: (() => { try { return new URL(r.fields.url).hostname.replace(/^www\./,'') } catch { return 'source' } })(),
+              category: 'Update',
+              countryName: r.fields.country?.[0]?.name,
+            }))
+            setCarouselItems(seed)
+          }
         }
+
+        // Start ReliefWeb immediately (don't block on KPIs)
+        const rwPromise = (async () => {
+          try {
+            const rw = await getLatestReports(12)
+            setReports(rw)
+            setCache('rw:latest', rw)
+
+            // Only set carousel from RW if map headlines aren’t up yet
+            if (mapNews.length === 0) {
+              const items = rw.slice(0, 12).map(r => ({
+                id: String(r.id),
+                headline: r.fields.title,
+                url: r.fields.url,
+                source: (() => { try { return new URL(r.fields.url).hostname.replace(/^www\./,'') } catch { return 'source' } })(),
+                category: 'Update',
+                countryName: r.fields.country?.[0]?.name,
+              }))
+              setCarouselItems(items)
+              try { localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(items)) } catch {}
+            }
+          } catch {}
+        })()
+
+        // KPIs in parallel (non-blocking)
+        const kpiPromise = (async () => {
+          try {
+            const [gdp, cpi] = await Promise.all([
+              wbGetGlobalIndicator('NY.GDP.MKTP.KD.ZG', 20),
+              wbGetGlobalIndicator('FP.CPI.TOTL.ZG', 20),
+            ])
+            const gdpS = toSeries(gdp)
+            const cpiS = toSeries(cpi)
+            setGdpSeries(gdpS); setCache('wld:gdp', gdpS)
+            setCpiSeries(cpiS); setCache('wld:cpi', cpiS)
+          } catch (e:any) {
+            setError(e?.message || 'Failed to load data')
+          }
+        })()
+
+        // Fire both; don’t await fully (UI can render)
+        void Promise.race([rwPromise, kpiPromise])
       } catch (e:any) {
         setError(e?.message || 'Failed to load data')
       }
     })()
 
-    // Defer heavier EONET fetch to idle time for faster first paint
+    // EONET/map fetch deferred to idle for faster first paint
     ric(async () => {
       try {
         const cev = getCache<EonetEvent[]>('eonet:open', TTL)
         if (cev) setEvents(cev)
         const ev = await getOpenEvents()
         setEvents(ev); setCache('eonet:open', ev)
-      } catch (e:any) {
-        // ignore map errors in initial load
-      }
+      } catch {}
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const lastGDP = useMemo(() => gdpSeries?.filter(p => p.value !== null).slice(-1)[0], [gdpSeries])
@@ -518,6 +568,22 @@ export default function Dashboard() {
 
     return () => { alive = false }
   }, [reports, countryRegionMap])
+
+  // When map-driven headlines arrive, promote them once and cache
+  useEffect(() => {
+    if (mapNews.length === 0) return
+    const items = mapNews.slice(0, 12).map(n => ({
+      id: n.id,
+      headline: n.headline,
+      url: n.url,
+      source: n.source,
+      category: n.category,
+      lat: n.lat,
+      lon: n.lon,
+    }))
+    setCarouselItems(items)
+    try { localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(items)) } catch {}
+  }, [mapNews])
 
   // 👇 Countries that landed in "Other" (7d window)
   const otherCountries = useMemo(() => {
@@ -657,30 +723,6 @@ export default function Dashboard() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, count]) => ({ date, count }))
   }, [events])
-
-  // Build carousel items (randomized), fallback to ReliefWeb if map has none
-  const carouselItems: HeadlineItem[] = useMemo(() => {
-    const base: HeadlineItem[] = hasMapNews
-      ? mapNews.map(n => ({
-          id: n.id,
-          headline: n.headline,
-          url: n.url,
-          source: n.source,
-          category: n.category,
-          lat: n.lat,
-          lon: n.lon
-        }))
-      : (reports || []).map(r => ({
-          id: String(r.id),
-          headline: r.fields.title,
-          url: r.fields.url,
-          source: new URL(r.fields.url).hostname.replace(/^www\./,''),
-          category: 'Update',
-          countryName: r.fields.country?.[0]?.name
-        }))
-
-    return shuffle(base.filter(b => b.headline && b.url)).slice(0, 12)
-  }, [hasMapNews, mapNews, reports])
 
   return (
     <div className="space-y-6">
