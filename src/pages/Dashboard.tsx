@@ -414,6 +414,40 @@ function ContextSidebar({ countryName, onClose }: { countryName: string | null; 
   )
 }
 
+function MapLoading() {
+  const [p, setP] = useState(12);
+
+  // Simple indeterminate loop (keeps moving 12 → 90%, then resets)
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setP((prev) => (prev >= 90 ? 12 : prev + Math.floor(5 + Math.random() * 10)));
+    }, 120);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div className="min-h-[360px] h-[70svh] sm:h-[74svh] md:h-[80svh] lg:h-[84svh] xl:h-[88svh] rounded-xl border grid place-items-center px-4">
+      <div className="w-full max-w-xl">
+        <div className="mb-2 flex items-center justify-between text-xs text-slate-600">
+          <span>Preparing map…</span>
+          <span>{p}%</span>
+        </div>
+        <div className="h-2 w-full rounded bg-slate-200 overflow-hidden">
+          <div
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={p}
+            className="h-full bg-slate-900 transition-[width] duration-100 ease-linear"
+            style={{ width: `${p}%` }}
+          />
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">Fetching events and loading tiles…</p>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Main Dashboard
 export default function Dashboard() {
   const [reports, setReports] = useState<ReliefWebItem[] | null>(null)
@@ -801,11 +835,10 @@ export default function Dashboard() {
 
       {/* Map */}
       <Card title="Global Socio-Political Events (Last 24h)">
-        {!events ? <Loading label="Preparing map..." /> : (
-          <LazyEventMap
-            events={events}
-            onNews={setMapNews}
-          />
+        {!events ? (
+          <MapLoading />
+        ) : (
+          <LazyEventMap events={events} onNews={setMapNews} />
         )}
       </Card>
 
