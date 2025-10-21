@@ -65,7 +65,8 @@ function extractBestLink(html: string, fallbackName: string) {
   const best = ranked[0]
   if (!best) return { score: -999 as number }
   if (best.score < 0) return { score: best.score }
-  return { url: best.url, source: best.domain, headline: fallbackName, score: best.score }
+  // ✅ Use the real headline (anchor text or title attr) with a fallback to the location name
+  return { url: best.url, source: best.domain, headline: headlineFrom(html, fallbackName), score: best.score }
 }
 
 const rgx = /-?\d+(\.\d+)?/g
