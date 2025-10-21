@@ -1,16 +1,25 @@
+// src/services/eonet.ts
+// NASA EONET v3
+
+import { fetchJson } from "./http";
 
 export type EonetEvent = {
-  id: string
-  title: string
-  link: string
-  geometry: { coordinates: [number, number] }[]
-  categories: { id: number, title: string }[]
-}
+  id: string;
+  title: string;
+  link: string;
+  geometry: { coordinates: [number, number] }[];
+  categories: { id: number; title: string }[];
+};
 
-export async function getOpenEvents(): Promise<EonetEvent[]> {
-  const url = 'https://eonet.gsfc.nasa.gov/api/v3/events?status=open'
-  const res = await fetch(url)
-  if (!res.ok) throw new Error('EONET error')
-  const data = await res.json()
-  return data?.events || []
+const EONET = "https://eonet.gsfc.nasa.gov/api/v3";
+
+export async function getOpenEvents(cacheMs = 1000 * 60 * 5): Promise<EonetEvent[]> {
+  const url = `${EONET}/events?status=open`;
+  const data = await fetchJson<{ events: EonetEvent[] }>(url, {
+    maxAgeMs: cacheMs,
+    cacheKey: `eonet:open`,
+    retries: 2,
+    timeoutMs: 12000,
+  });
+  return data?.events || [];
 }
