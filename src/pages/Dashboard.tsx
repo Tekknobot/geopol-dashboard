@@ -852,9 +852,12 @@ export default function Dashboard() {
 
             <MiniSection title="How to use it" storageKey="intro:how" defaultOpen={false}>
               <ul className="list-disc list-inside space-y-1">
-                <li>Toggle categories in the legend</li>
-                <li>Click “Open context” to compare country vs world</li>
-                <li>Browse country drilldowns for peers/region</li>
+                <li>Toggle categories in the map legend to filter pins.</li>
+                <li>Click a pin’s headline to read the source article (opens in a new tab).</li>
+                <li>Use the <span className="font-medium">Events</span> page to see all pins as a country-grouped list with search & category filters.</li>
+                <li>Skim the “Latest Headlines” panel below the map; click any item to open it.</li>
+                <li>Cycle the top carousel with ◀ ▶ or your keyboard arrow keys.</li>
+                <li>For historical indicators, try the <span className="font-medium">Explorer</span> page (/countries).</li>
               </ul>
             </MiniSection>
           </div>
