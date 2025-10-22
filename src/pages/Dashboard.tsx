@@ -1061,7 +1061,7 @@ export default function Dashboard() {
 
       {/* Global Volatility Tracker */}
       {events && (
-        <Card title="Global Volatility Tracker (Past 30 Days)">
+        <Card title="Global Volatility Tracker">
           {eventsLoading ? (
             <div className="h-64 grid place-items-center">
               <Loading label="Calculating volatility…" />
