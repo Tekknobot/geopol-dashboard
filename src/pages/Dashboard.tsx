@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Card from '../components/Card'
 import Loading from '../components/Loading'
 import ErrorState from '../components/ErrorState'
@@ -427,6 +427,40 @@ export default function Dashboard() {
   // 📡 News flowing from the map
   const [mapNews, setMapNews] = useState<MapNewsItem[]>([])
 
+  // Merge incoming news batches without clobbering earlier (often better) headlines
+  const handleNews = useCallback((incoming: MapNewsItem[]) => {
+    if (!incoming?.length) return;
+    setMapNews(prev => {
+      const byKey = new Map<string, MapNewsItem>();
+      const keyOf = (n: MapNewsItem) => n.url || n.id;
+
+      // seed with existing items
+      for (const n of prev) {
+        const k = keyOf(n);
+        if (k) byKey.set(k, n);
+      }
+
+      // merge incoming (keep existing headline/source if already present)
+      for (const n of incoming) {
+        const k = keyOf(n);
+        if (!k) continue;
+        const existing = byKey.get(k);
+        if (existing) {
+          byKey.set(k, {
+            ...existing,
+            ...n,
+            headline: existing.headline || n.headline,
+            source: existing.source || n.source,
+          });
+        } else {
+          byKey.set(k, n);
+        }
+      }
+
+      return Array.from(byKey.values());
+    });
+  }, []);
+
   // De-dupe & cap map headlines so count matches what's rendered
   const NEWS_VISIBLE = 40;            // how many you render in the list
   const NEWS_POOL_MAX = 300;          // safety cap for the pool
@@ -499,7 +533,7 @@ export default function Dashboard() {
           setEventsLoading(false)
           const cachedNews = eventsToMapNews(cev)
           if (cachedNews.length) {
-            setMapNews(cachedNews)
+            handleNews(cachedNews)
             const items = cachedNews.slice(0, 12)
             setCarouselItems(items)
             try { localStorage.setItem('carousel:last', JSON.stringify(items)) } catch {}
@@ -552,7 +586,7 @@ export default function Dashboard() {
             setEventsLoading(false)
             const news = eventsToMapNews(ev)
             if (news.length) {
-              setMapNews(news)
+              handleNews(news)
               const items = news.slice(0, 12)
               setCarouselItems(items)
               try { localStorage.setItem('carousel:last', JSON.stringify(items)) } catch {}
@@ -824,7 +858,7 @@ export default function Dashboard() {
 
       {/* Map */}
       <Card title="Global Socio-Political Events (Last 24h)">
-        <LazyEventMap events={events} onNews={setMapNews} />
+        <LazyEventMap events={events} onNews={handleNews} />
       </Card>
 
       {/* Regional Volatility Leaderboard (Counts, Last 7 Days) */}
