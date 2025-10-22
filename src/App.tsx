@@ -8,7 +8,14 @@ export default function App() {
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 bg-white/70 backdrop-blur border-b">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <h1 className="text-xl md:text-2xl font-semibold">Geopol</h1>
+          <NavLink
+            to="/"
+            end
+            className="text-xl md:text-2xl font-semibold rounded-lg px-2 py-1 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            aria-label="Go to Overview"
+          >
+            Geopol
+          </NavLink>
           <nav className="flex gap-4 text-sm md:text-base">
             <NavLink
               to="/"
