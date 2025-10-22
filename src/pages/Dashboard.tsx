@@ -117,6 +117,39 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
+// ---------- Reputation ranking (prefer reputable sources)
+const TRUSTED_DOMAINS = new Set([
+  'reuters.com','apnews.com','bbc.com','theguardian.com','nytimes.com','washingtonpost.com',
+  'ft.com','bloomberg.com','aljazeera.com','axios.com','npr.org','cnn.com','cnbc.com',
+  'france24.com','dw.com','scmp.com','straitstimes.com','abc.net.au'
+])
+const TLD_STRONG = new Set(['gov','edu','int'])
+const TLD_OK = new Set(['org','com'])
+
+function domainFromUrl(u: string): string {
+  try { return new URL(u).hostname.replace(/^www\./,'').toLowerCase() } catch { return '' }
+}
+function reputationFor(domain: string): number {
+  let s = 0
+  if (!domain) return s
+  if (TRUSTED_DOMAINS.has(domain)) s += 100
+  const tld = domain.split('.').pop() || ''
+  if (TLD_STRONG.has(tld)) s += 20
+  else if (TLD_OK.has(tld)) s += 5
+  if (domain.length > 25) s -= 2
+  if ((domain.match(/-/g)||[]).length > 2) s -= 2
+  if (/\d/.test(domain)) s -= 2
+  if (/blogspot|pressrelease|prnews|newsbreak|wordpress|substack/i.test(domain)) s -= 40
+  return s
+}
+function scoreItem(n: { url: string; source?: string }): number {
+  const d = (n.source || domainFromUrl(n.url) || '').toLowerCase()
+  return reputationFor(d)
+}
+function sortByReputation<T extends { url: string; source?: string }>(arr: T[]): T[] {
+  return [...arr].sort((a,b) => scoreItem(b) - scoreItem(a))
+}
+
 function NewsCarousel({
   items,
   onOpenContext,
@@ -528,7 +561,7 @@ export default function Dashboard() {
               category: 'Update',
               countryName: r.fields.country?.[0]?.name,
             }))
-            setCarouselItems(shuffle(seed).slice(0, CAROUSEL_MAX))
+            setCarouselItems(sortByReputation(seed).slice(0, CAROUSEL_MAX))
           }
         }
         // If we have cached EONET, surface those headlines immediately, too
@@ -538,9 +571,9 @@ export default function Dashboard() {
           const cachedNews = eventsToMapNews(cev)
           if (cachedNews.length) {
             handleNews(cachedNews)
-            const shuffled = shuffle(cachedNews).slice(0, CAROUSEL_MAX)
-            setCarouselItems(shuffled)
-            try { localStorage.setItem('carousel:last', JSON.stringify(shuffled)) } catch {}
+            const ranked = sortByReputation(cachedNews).slice(0, CAROUSEL_MAX)
+            setCarouselItems(ranked)
+            try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
           }
         }
 
@@ -560,9 +593,9 @@ export default function Dashboard() {
                 category: 'Update',
                 countryName: r.fields.country?.[0]?.name,
               }))
-              const shuffled = shuffle(itemsAll).slice(0, CAROUSEL_MAX)
-              setCarouselItems(shuffled)
-              try { localStorage.setItem('carousel:last', JSON.stringify(shuffled)) } catch {}
+              const ranked = sortByReputation(itemsAll).slice(0, CAROUSEL_MAX)
+              setCarouselItems(ranked)
+              try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
             }
           } catch {}
         })()
@@ -592,9 +625,9 @@ export default function Dashboard() {
             const news = eventsToMapNews(ev)
             if (news.length) {
               handleNews(news)
-              const shuffled = shuffle(news).slice(0, CAROUSEL_MAX)
-              setCarouselItems(shuffled)
-              try { localStorage.setItem('carousel:last', JSON.stringify(shuffled)) } catch {}
+              const ranked = sortByReputation(news).slice(0, CAROUSEL_MAX)
+              setCarouselItems(ranked)
+              try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
             }
           } catch {
             // even on failure, stop "loading…" so the card can show a friendly empty state
@@ -652,18 +685,18 @@ export default function Dashboard() {
   // When map-driven headlines arrive, promote them once and cache
   useEffect(() => {
     if (uniqueMapNews.length === 0) return;
-    const itemsAll = uniqueMapNews.map(n => ({
-      id: n.id,
-      headline: n.headline,
-      url: n.url,
-      source: n.source,
-      category: n.category,
-      lat: n.lat,
-      lon: n.lon,
-    }));
-    const shuffled = shuffle(itemsAll).slice(0, CAROUSEL_MAX);
-    setCarouselItems(shuffled);
-    try { localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(shuffled)) } catch {}
+      const itemsAll = uniqueMapNews.map(n => ({
+        id: n.id,
+        headline: n.headline,
+        url: n.url,
+        source: n.source,
+        category: n.category,
+        lat: n.lat,
+        lon: n.lon,
+      }));
+      const ranked = sortByReputation(itemsAll).slice(0, CAROUSEL_MAX);
+      setCarouselItems(ranked);
+      try { localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(ranked)) } catch {}
   }, [uniqueMapNews]);
 
   // 👇 Countries that landed in "Other" (7d window)
@@ -1162,7 +1195,7 @@ export default function Dashboard() {
           )
         ) : (
           <ul className="divide-y">
-            {uniqueMapNews.slice(0, NEWS_VISIBLE).map(item => (
+            {sortByReputation(uniqueMapNews).slice(0, NEWS_VISIBLE).map(item => (
               <li key={item.id} className="py-3">
                 <div className="flex items-start gap-2">
                   <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
