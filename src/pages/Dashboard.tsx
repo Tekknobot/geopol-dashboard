@@ -14,7 +14,7 @@ import type { MapNewsItem } from '../components/MapCore'
 import { eventsToMapNews } from '../utils/mapNews'
 
 
-// ---------- Tiny helpers for collapsible sections (with localStorage memory)
+// --------- Tiny helpers for collapsible sections (with localStorage memory)
 function usePersistedToggle(key: string, defaultOpen = false) {
   const [open, setOpen] = useState<boolean>(defaultOpen)
   useEffect(() => {
