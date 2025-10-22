@@ -130,7 +130,14 @@ function NewsCarousel({
 }) {
   const [paused, setPaused] = useState(false)
   const total = items.length
-  const timerRef = useRef<number | null>(null)
+
+  // Refs to avoid stale closures in the interval without changing prop types
+  const indexRef = useRef(index)
+  const totalRef = useRef(total)
+
+  // Keep refs in sync with latest values
+  useEffect(() => { indexRef.current = index }, [index])
+  useEffect(() => { totalRef.current = total }, [total])
 
   // keep index in range if items change
   useEffect(() => {
@@ -138,11 +145,12 @@ function NewsCarousel({
     if (index >= total) onIndexChange(0)
   }, [total, index, onIndexChange])
 
-  // auto-advance
+  // auto-advance (interval reads latest index/total via refs)
   useEffect(() => {
     if (paused || total <= 1) return
     const id = window.setInterval(() => {
-      onIndexChange(i => (i + 1) % total) // functional update = timer never resets
+      const next = (indexRef.current + 1) % totalRef.current
+      onIndexChange(next) // <- number, so TS is happy
     }, 6500)
     return () => clearInterval(id)
   }, [paused, total, onIndexChange])
