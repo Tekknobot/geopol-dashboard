@@ -876,6 +876,7 @@ export default function Dashboard() {
                 </li>
               </ul>
             </MiniSection>
+
           </div>
         </div>
       </CollapsibleSection>
