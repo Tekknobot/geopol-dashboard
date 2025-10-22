@@ -141,11 +141,11 @@ function NewsCarousel({
   // auto-advance
   useEffect(() => {
     if (paused || total <= 1) return
-    timerRef.current = window.setInterval(() => {
-      onIndexChange((index + 1) % total)
+    const id = window.setInterval(() => {
+      onIndexChange(i => (i + 1) % total) // functional update = timer never resets
     }, 6500)
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [paused, total, index, onIndexChange])
+    return () => clearInterval(id)
+  }, [paused, total, onIndexChange])
 
   // keyboard
   useEffect(() => {
@@ -246,15 +246,10 @@ function NewsCarousel({
         </button>
       </div>
 
-      <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-1.5">
-        {items.slice(0, 12).map((_, i) => (
-          <button
-            key={i}
-            aria-label={`Go to slide ${i + 1}`}
-            onClick={() => onIndexChange(i % total)}
-            className={`h-2.5 w-2.5 rounded-full transition ${i % total === index ? 'bg-slate-900' : 'bg-slate-300 hover:bg-slate-400'}`}
-          />
-        ))}
+      <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center">
+        <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs ring-1 ring-slate-200 shadow-sm">
+          {index + 1} / {total}
+        </span>
       </div>
     </section>
   )
@@ -481,6 +476,7 @@ export default function Dashboard() {
 
   // Cached "front page" carousel so we can show headlines immediately
   const CAROUSEL_CACHE_KEY = 'carousel:last'
+  const CAROUSEL_MAX = 100; // show up to 100 items in the carousel
   const [carouselItems, setCarouselItems] = useState<HeadlineItem[]>(() => {
     try {
       const raw = localStorage.getItem(CAROUSEL_CACHE_KEY)
@@ -516,7 +512,7 @@ export default function Dashboard() {
         if (crw) {
           setReports(crw)
           if (carouselItems.length === 0) {
-            const seed = crw.slice(0, 12).map(r => ({
+            const seed = crw.map(r => ({
               id: String(r.id),
               headline: r.fields.title,
               url: r.fields.url,
@@ -524,7 +520,7 @@ export default function Dashboard() {
               category: 'Update',
               countryName: r.fields.country?.[0]?.name,
             }))
-            setCarouselItems(seed)
+            setCarouselItems(shuffle(seed).slice(0, CAROUSEL_MAX))
           }
         }
         // If we have cached EONET, surface those headlines immediately, too
@@ -534,9 +530,9 @@ export default function Dashboard() {
           const cachedNews = eventsToMapNews(cev)
           if (cachedNews.length) {
             handleNews(cachedNews)
-            const items = cachedNews.slice(0, 12)
-            setCarouselItems(items)
-            try { localStorage.setItem('carousel:last', JSON.stringify(items)) } catch {}
+            const shuffled = shuffle(cachedNews).slice(0, CAROUSEL_MAX)
+            setCarouselItems(shuffled)
+            try { localStorage.setItem('carousel:last', JSON.stringify(shuffled)) } catch {}
           }
         }
 
@@ -548,7 +544,7 @@ export default function Dashboard() {
             setCache('rw:latest', rw)
             // If we still don't have map headlines, use RW for carousel
             if (mapNews.length === 0) {
-              const items = rw.slice(0, 12).map(r => ({
+              const itemsAll = rw.map(r => ({
                 id: String(r.id),
                 headline: r.fields.title,
                 url: r.fields.url,
@@ -556,8 +552,9 @@ export default function Dashboard() {
                 category: 'Update',
                 countryName: r.fields.country?.[0]?.name,
               }))
-              setCarouselItems(items)
-              try { localStorage.setItem('carousel:last', JSON.stringify(items)) } catch {}
+              const shuffled = shuffle(itemsAll).slice(0, CAROUSEL_MAX)
+              setCarouselItems(shuffled)
+              try { localStorage.setItem('carousel:last', JSON.stringify(shuffled)) } catch {}
             }
           } catch {}
         })()
@@ -587,9 +584,9 @@ export default function Dashboard() {
             const news = eventsToMapNews(ev)
             if (news.length) {
               handleNews(news)
-              const items = news.slice(0, 12)
-              setCarouselItems(items)
-              try { localStorage.setItem('carousel:last', JSON.stringify(items)) } catch {}
+              const shuffled = shuffle(news).slice(0, CAROUSEL_MAX)
+              setCarouselItems(shuffled)
+              try { localStorage.setItem('carousel:last', JSON.stringify(shuffled)) } catch {}
             }
           } catch {
             // even on failure, stop "loading…" so the card can show a friendly empty state
@@ -647,7 +644,7 @@ export default function Dashboard() {
   // When map-driven headlines arrive, promote them once and cache
   useEffect(() => {
     if (uniqueMapNews.length === 0) return;
-    const items = uniqueMapNews.slice(0, 12).map(n => ({
+    const itemsAll = uniqueMapNews.map(n => ({
       id: n.id,
       headline: n.headline,
       url: n.url,
@@ -656,10 +653,10 @@ export default function Dashboard() {
       lat: n.lat,
       lon: n.lon,
     }));
-    setCarouselItems(items);
-    try { localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(items)) } catch {}
+    const shuffled = shuffle(itemsAll).slice(0, CAROUSEL_MAX);
+    setCarouselItems(shuffled);
+    try { localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(shuffled)) } catch {}
   }, [uniqueMapNews]);
-
 
   // 👇 Countries that landed in "Other" (7d window)
   const otherCountries = useMemo(() => {
