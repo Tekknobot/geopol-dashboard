@@ -55,8 +55,18 @@ export default function EventsPage() {
       arr.push(r)
       m.set(key, arr)
     }
-    // sort countries by number of pins desc
-    return Array.from(m.entries()).sort((a,b) => b[1].length - a[1].length)
+
+    const isOther = (name: string) => /\b(other|unknown)\b/i.test(name)
+
+    // Sort: non-Other first by pin count desc, then alpha; Other/Unknown groups last
+    return Array.from(m.entries()).sort((a, b) => {
+      const aOther = isOther(a[0])
+      const bOther = isOther(b[0])
+      if (aOther !== bOther) return aOther ? 1 : -1
+      const byCount = b[1].length - a[1].length
+      if (byCount !== 0) return byCount
+      return a[0].localeCompare(b[0])
+    })
   }, [filtered])
 
   function toggleCat(cat: string) {
@@ -110,33 +120,39 @@ export default function EventsPage() {
                   <h3 className="text-sm font-semibold">{country}</h3>
                   <span className="text-xs text-slate-600">{items.length} pin{items.length !== 1 ? "s" : ""}</span>
                 </header>
-                <ul className="divide-y">
-                  {items.map((item, i) => (
-                    <li key={`${item.id}:${i}`} className="px-3 py-2">
+                  <ul className="divide-y">
+                    {([...items].sort((a, b) => {
+                      const isOtherCat = (s: string) => /\b(other|unknown)\b/i.test(s)
+                      const ao = isOtherCat(a.category)
+                      const bo = isOtherCat(b.category)
+                      if (ao !== bo) return ao ? 1 : -1
+                      return 0
+                    })).map((item, i) => (
+                      <li key={`${item.id}:${i}`} className="px-3 py-2">
                         <div className="min-w-0">
-                        <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200 mb-1">
+                          <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200 mb-1">
                             {item.category}
-                        </span>
-                        <a
+                          </span>
+                          <a
                             href={item.url}
                             target="_blank"
                             rel="noreferrer"
                             className="block text-[15px] md:text-[17px] font-semibold leading-snug hover:underline whitespace-normal break-words"
                             title={item.headline}
-                        >
+                          >
                             {item.headline}
-                        </a>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-600">
+                          </a>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-600">
                             {item.source && <span className="shrink-0">{item.source}</span>}
                             <span className="opacity-50">·</span>
                             <span className="shrink-0">Lat/Lon: {item.lat.toFixed(2)}, {item.lon.toFixed(2)}</span>
                             <span className="opacity-50">·</span>
                             <span className="truncate">Loc: {item.label}</span>
+                          </div>
                         </div>
-                    </div>
-                    </li>
-                  ))}
-                </ul>
+                      </li>
+                    ))}
+                  </ul>
               </section>
             ))}
           </div>
