@@ -205,31 +205,51 @@ function inferCategory(name: string, html: string) {
 }
 
 /** ---------- Progressive fetch & batch-yield from GDELT ---------- */
-async function fetchGeo(controller: AbortController, query: string, timespan = '24h', maxpoints = 900) {
-  const base = "https://api.gdeltproject.org"
-  const url = `${base}/api/v2/geo/geo?query=${encodeURIComponent(query)}&mode=PointData&format=GeoJSON&timespan=${encodeURIComponent(timespan)}&maxpoints=${maxpoints}`
+async function fetchGeo(
+  controller: AbortController,
+  query: string,
+  timespan = "24h",
+  maxpoints = 900
+) {
+  // Use the Vite dev proxy in dev, hit GDELT directly in prod
+  const base =
+    import.meta.env.DEV ? "/gdelt" : "https://api.gdeltproject.org";
+
+  // Correct URL: include query + format=GeoJSON + timespan + maxpoints
+  const url =
+    `${base}/api/v2/geo/geo` +
+    `?query=${encodeURIComponent(query)}` +
+    `&format=GeoJSON` +
+    `&timespan=${encodeURIComponent(timespan)}` +
+    `&maxpoints=${maxpoints}`;
+
   const res = await fetch(url, {
     signal: controller.signal,
-    headers: { 'Accept': 'application/json, text/plain;q=0.9,*/*;q=0.8' }
-  })
-  const text = await res.text()
-  if (!res.ok) {
-    throw new Error(`GDELT ${res.status}: ${text.slice(0, 200)}`)
+    headers: { Accept: "application/json, text/plain;q=0.9,*/*;q=0.8" },
+  });
+
+  // Handle GDELT rate limiting and transient errors
+  if (res.status === 429 || res.status === 503) {
+    throw new Error("GDELT is rate-limiting or temporarily unavailable");
   }
+
+  const text = await res.text();
+  if (!res.ok) throw new Error(`GDELT ${res.status}: ${text.slice(0, 200)}`);
+
+  // Robust parse: some GDELT responses contain leading HTML noise on errors
   try {
-    const gj = JSON.parse(text)
-    return Array.isArray(gj?.features) ? gj.features : []
+    const gj = JSON.parse(text);
+    return Array.isArray(gj?.features) ? gj.features : [];
   } catch {
-    const start = text.indexOf('{'); const end = text.lastIndexOf('}')
-    if (start !== -1 && end !== -1 && end > start) {
-      try {
-        const gj = JSON.parse(text.slice(start, end + 1))
-        return Array.isArray(gj?.features) ? gj.features : []
-      } catch {}
+    const start = text.indexOf("{"), end = text.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      const gj = JSON.parse(text.slice(start, end + 1));
+      return Array.isArray(gj?.features) ? gj.features : [];
     }
-    throw new Error('Failed to parse GDELT GeoJSON payload')
+    throw new Error("Failed to parse GDELT GeoJSON payload");
   }
 }
+
 
 /** Map a raw feature to a SocioPoint (or null) */
 function featureToPoint(f: any): SocioPoint | null {
