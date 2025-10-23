@@ -4,6 +4,24 @@ import L from 'leaflet'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EonetEvent } from '../services/eonet' // prop compatibility
 
+// Safe "are we in dev?" check for browser builds (Vite/CRA)
+// Put this just below your imports.
+const IS_DEV = (() => {
+  try {
+    // Vite: import.meta.env.DEV
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env && typeof (import.meta as any).env.DEV === 'boolean') {
+      // @ts-ignore
+      return (import.meta as any).env.DEV as boolean
+    }
+  } catch {}
+  try {
+    // Fallback: localhost heuristic
+    return !!(typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname))
+  } catch {}
+  return false
+})();
+
 /** ---------- Inline SVG marker (no external assets) ---------- */
 function svgMarker(color: string, emoji: string) {
   const svg = `
@@ -134,11 +152,12 @@ function scoreDomain(domain: string) {
 }
 function extractAllLinks(html: string): URL[] {
   const urls: URL[] = []
-  const rx = /href="([^"]+)"/ig
+  // Support both href="..." and href='...'
+  const rx = /href=(["'])(.*?)\1/ig
   let m: RegExpExecArray | null
   while ((m = rx.exec(html))) {
     try {
-      const u = new URL(m[1])
+      const u = new URL(m[2])
       if (u.protocol === 'http:' || u.protocol === 'https:') urls.push(u)
     } catch {}
   }
@@ -194,7 +213,9 @@ async function fetchGeo(controller: AbortController, query: string, timespan = '
     headers: { 'Accept': 'application/json, text/plain;q=0.9,*/*;q=0.8' }
   })
   const text = await res.text()
-  if (!res.ok) return []
+  if (!res.ok) {
+    throw new Error(`GDELT ${res.status}: ${text.slice(0, 200)}`)
+  }
   try {
     const gj = JSON.parse(text)
     return Array.isArray(gj?.features) ? gj.features : []
@@ -206,7 +227,7 @@ async function fetchGeo(controller: AbortController, query: string, timespan = '
         return Array.isArray(gj?.features) ? gj.features : []
       } catch {}
     }
-    return []
+    throw new Error('Failed to parse GDELT GeoJSON payload')
   }
 }
 
@@ -222,7 +243,8 @@ function featureToPoint(f: any): SocioPoint | null {
   const best = extractBestLink(html, name)
   const isOther = category === 'Other'
   const trustworthy = (best.score >= 10) || (best.source ? TRUSTED_DOMAINS.has(best.source) : false)
-  if (isOther && !trustworthy) return null
+  // Keep some "Other" pins if they at least have a link or a decent label
+  if (isOther && !trustworthy && !best.url && label.length < 6) return null
   const showLink = best.score >= 0
   const headline = showLink ? best.headline : undefined
   const source = showLink ? best.source : undefined
@@ -252,29 +274,40 @@ export default function MapCore({
 
     const BATCH_SIZE = 80
 
-    // parallel queries (broad→narrow – any order is fine since we batch)
+    // parallel queries (broad→narrow – order doesn't matter)
     const Q1 = '(protest OR strike OR coup OR sanctions OR election OR energy OR oil OR gas OR shipping OR blockade OR "supply chain" OR tariff OR "export control" OR ransomware OR cyber OR refugee OR migration OR summit OR treaty OR alliance OR corruption OR impeachment)'
     const Q2 = '(protest OR strike OR coup OR sanctions OR election OR energy OR shipping OR tariff OR cyber OR refugee OR summit OR corruption)'
     const Q3 = '(politics OR government OR protest OR security)'
+
+    let totalFetched = 0
+    let totalCandidates = 0
+    let totalErrors = 0
 
     async function runQuery(q: string) {
       try {
         const feats = await fetchGeo(controller, q, '24h', 900)
         if (!alive || controller.signal.aborted) return
-        // Map features to candidate points
+        if (!feats || feats.length === 0) {
+          // treat empty as a soft failure (often means upstream trouble)
+          totalErrors += 1
+          return
+        }
+
+        totalFetched += feats.length
+
         const candidates: SocioPoint[] = []
         for (const f of feats) {
           const pt = featureToPoint(f)
           if (!pt) continue
-          // dedupe key: url if present, else coord+label
           const key = pt.url || `${pt.lat.toFixed(3)},${pt.lon.toFixed(3)}:${pt.label}`
           if (addedKeys.current.has(key)) continue
           addedKeys.current.add(key)
           candidates.push(pt)
         }
-        if (!candidates.length) return
 
-        // Push in batches using rAF to keep UI reactive
+        if (!candidates.length) return
+        totalCandidates += candidates.length
+
         let i = 0
         const pump = () => {
           if (!alive || controller.signal.aborted) return
@@ -282,14 +315,13 @@ export default function MapCore({
           if (slice.length) {
             setPoints(prev => {
               const next = [...prev, ...slice]
-              // initialize legend categories on first influx
               if (prev.length === 0) {
                 const cats = new Set(next.map(p => p.category))
                 setActiveCats(cats)
               }
               return next
             })
-            // publish news incrementally
+
             if (onNews) {
               const items: MapNewsItem[] = slice
                 .filter(p => !!p.headline && !!p.url)
@@ -302,7 +334,7 @@ export default function MapCore({
                   lat: p.lat,
                   lon: p.lon,
                 }))
-              if (items.length) onNews(items) // send just the new batch
+              if (items.length) onNews(items)
             }
             i += BATCH_SIZE
           }
@@ -311,14 +343,23 @@ export default function MapCore({
           }
         }
         rafId.current = requestAnimationFrame(pump)
-      } catch (e: any) {
-        if (!alive || controller.signal.aborted) return
-        // swallow per-query errors; only set global error if everything fails
+      } catch (e) {
+        totalErrors += 1
+        if (IS_DEV) {
+          // eslint-disable-next-line no-console
+          console.error('GDELT query failed:', e)
+        }
       }
     }
 
-    // fire all three concurrently
-    runQuery(Q1); runQuery(Q2); runQuery(Q3)
+    // fire all three concurrently and then decide if we should show an error
+    Promise.allSettled([runQuery(Q1), runQuery(Q2), runQuery(Q3)]).then(() => {
+      if (!alive || controller.signal.aborted) return
+      const nothingLoaded = totalFetched === 0 || (totalFetched > 0 && totalCandidates === 0)
+      if (nothingLoaded) {
+        setErr('No map data loaded. GDELT may be unreachable, blocked by the browser/network, or rate-limited.')
+      }
+    })
 
     return () => {
       alive = false
