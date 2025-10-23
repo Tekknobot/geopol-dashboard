@@ -1,5 +1,5 @@
 // src/services/reliefweb.ts
-// UNOCHA ReliefWeb reports
+// UNOCHA ReliefWeb reports.
 
 import { fetchJson } from "./http";
 
