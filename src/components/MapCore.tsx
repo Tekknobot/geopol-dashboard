@@ -709,6 +709,14 @@ function featureToPoint(f: any): SocioPoint | null {
   return { lat: lat!, lon: lon!, label, category, headline, source, url }
 }
 
+// Put this near your other top-level consts (above the component)
+const ALL_CATEGORIES = [
+  'Protest/Strike', 'Coup', 'Sanctions', 'Elections/Politics',
+  'Energy', 'Supply Chain', 'Macro/Finance', 'Security/Conflict',
+  'Migration', 'Cyber', 'Trade/Export Controls',
+  'Diplomacy/Alliances', 'Governance/Corruption', 'Other'
+]
+
 /** ---------- Component (incremental, batched) ---------- */
 export default function MapCore({
   events: _unused,
@@ -719,12 +727,12 @@ export default function MapCore({
 }) {
   const [points, setPoints] = useState<SocioPoint[]>([])
   const [err, setErr] = useState<string | null>(null)
-  const [activeCats, setActiveCats] = useState<Set<string>>(new Set()) // legend filters
+  const [activeCats, setActiveCats] = useState<Set<string>>(new Set(ALL_CATEGORIES))
   const addedKeys = useRef<Set<string>>(new Set()) // dedupe across batches
   const rafId = useRef<number | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const userTouchedFilters = useRef(false)
-  
+
   useEffect(() => {
     const controller = new AbortController()
     abortRef.current = controller
@@ -856,12 +864,7 @@ export default function MapCore({
     return acc
   }, [points])
 
-  const LEGEND_ORDER = [
-    'Protest/Strike', 'Coup', 'Sanctions', 'Elections/Politics',
-    'Energy', 'Supply Chain', 'Macro/Finance', 'Security/Conflict',
-    'Migration', 'Cyber', 'Trade/Export Controls',
-    'Diplomacy/Alliances', 'Governance/Corruption', 'Other'
-  ]
+  const LEGEND_ORDER = ALL_CATEGORIES
 
   const visible = useMemo(() => {
     if (!points) return []
