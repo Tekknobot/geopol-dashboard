@@ -105,7 +105,8 @@ type HeadlineItem = {
   category?: string
   lat?: number
   lon?: number
-  countryName?: string // when known (ReliefWeb often provides)
+  countryName?: string
+  created?: number // when known (ReliefWeb often provides)
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -115,6 +116,67 @@ function shuffle<T>(arr: T[]): T[] {
     ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a
+}
+
+// --- Relevance scoring for the CAROUSEL (reputation + category + headline + freshness + geo) ---
+
+const CATEGORY_WEIGHTS: Record<string, number> = {
+  'Security/Conflict': 18,
+  'Sanctions': 16,
+  'Macro/Finance': 15,
+  'Supply Chain': 15,
+  'Elections/Politics': 12,
+  'Energy': 12,
+  'Cyber': 12,
+  'Migration': 10,
+  'Trade/Export Controls': 12,
+  'Diplomacy/Alliances': 9,
+  'Governance/Corruption': 9,
+  'Update': 6,     // ReliefWeb generic bucket
+  'Other': 4,
+}
+
+const URGENCY_RX = /(coup|cease\s*fire|sanction|strike|port\s*closure|blockade|tariff|default|devalu|inflation|attack|air\s*strike|missile|ransomware|data breach|pipeline|refinery|export control)/i
+
+function headlineSignal(h: string): number {
+  if (!h) return 0
+  let s = 0
+  if (URGENCY_RX.test(h)) s += 10
+  // penalize shouty clickbait
+  if (/[A-Z]{6,}/.test(h)) s -= 2
+  // slightly reward concise, informative titles
+  const len = h.length
+  if (len >= 40 && len <= 140) s += 2
+  return s
+}
+
+function freshnessBoost(created?: number): number {
+  if (!created) return 0
+  const hours = (Date.now() - created) / 36e5
+  // 0–24h: up to +12, 24–72h: linearly down to +2, 72h+: 0
+  if (hours <= 24) return 12 - (hours / 24) * 2 // ~10–12 in first day
+  if (hours <= 72) return 2 - ((hours - 24) / 48) * 2 // down to 0
+  return 0
+}
+
+function geoSignal(lat?: number, lon?: number): number {
+  // If we have coordinates, nudge up (geolocated headlines are usually stronger)
+  return (typeof lat === 'number' && typeof lon === 'number') ? 2 : 0
+}
+
+// you already have reputationFor(domain)
+function relevanceScore(item: HeadlineItem): number {
+  const dom = (item.source || domainFromUrl(item.url)).toLowerCase()
+  const rep = reputationFor(dom) * 0.15; // normalize (your rep numbers are big)
+  const cat = CATEGORY_WEIGHTS[item.category || 'Update'] ?? 6
+  const txt = headlineSignal(item.headline)
+  const fresh = freshnessBoost(item.created)
+  const geo = geoSignal(item.lat, item.lon)
+  return rep + cat + txt + fresh + geo
+}
+
+function sortByRelevance<T extends HeadlineItem>(arr: T[]): T[] {
+  return [...arr].sort((a, b) => relevanceScore(b) - relevanceScore(a))
 }
 
 // ---------- Reputation ranking (prefer reputable sources)
@@ -560,8 +622,9 @@ export default function Dashboard() {
               source: (() => { try { return new URL(r.fields.url).hostname.replace(/^www\./,'') } catch { return 'source' } })(),
               category: 'Update',
               countryName: r.fields.country?.[0]?.name,
+              created: new Date(r.fields.date.created).getTime(), // NEW
             }))
-            setCarouselItems(sortByReputation(seed).slice(0, CAROUSEL_MAX))
+            setCarouselItems(sortByRelevance(seed).slice(0, CAROUSEL_MAX))
           }
         }
         // If we have cached EONET, surface those headlines immediately, too
@@ -571,7 +634,7 @@ export default function Dashboard() {
           const cachedNews = eventsToMapNews(cev)
           if (cachedNews.length) {
             handleNews(cachedNews)
-            const ranked = sortByReputation(cachedNews).slice(0, CAROUSEL_MAX)
+            const ranked = sortByRelevance(cachedNews).slice(0, CAROUSEL_MAX)
             setCarouselItems(ranked)
             try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
           }
@@ -592,8 +655,9 @@ export default function Dashboard() {
                 source: (() => { try { return new URL(r.fields.url).hostname.replace(/^www\./,'') } catch { return 'source' } })(),
                 category: 'Update',
                 countryName: r.fields.country?.[0]?.name,
+                created: new Date(r.fields.date.created).getTime(), // NEW
               }))
-              const ranked = sortByReputation(itemsAll).slice(0, CAROUSEL_MAX)
+              const ranked = sortByRelevance(itemsAll).slice(0, CAROUSEL_MAX)
               setCarouselItems(ranked)
               try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
             }
@@ -625,7 +689,7 @@ export default function Dashboard() {
             const news = eventsToMapNews(ev)
             if (news.length) {
               handleNews(news)
-              const ranked = sortByReputation(news).slice(0, CAROUSEL_MAX)
+              const ranked = sortByRelevance(news).slice(0, CAROUSEL_MAX)
               setCarouselItems(ranked)
               try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
             }
@@ -694,7 +758,7 @@ export default function Dashboard() {
         lat: n.lat,
         lon: n.lon,
       }));
-      const ranked = sortByReputation(itemsAll).slice(0, CAROUSEL_MAX);
+      const ranked = sortByRelevance(itemsAll).slice(0, CAROUSEL_MAX);
       setCarouselItems(ranked);
       try { localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(ranked)) } catch {}
   }, [uniqueMapNews]);
