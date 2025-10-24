@@ -4,8 +4,6 @@ import L from 'leaflet'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EonetEvent } from '../services/eonet' // prop compatibility
 
-const userTouchedFilters = useRef(false)
-
 // Safe "are we in dev?" check for browser builds (Vite/CRA)
 // Put this just below your imports.
 const IS_DEV = (() => {
@@ -725,7 +723,8 @@ export default function MapCore({
   const addedKeys = useRef<Set<string>>(new Set()) // dedupe across batches
   const rafId = useRef<number | null>(null)
   const abortRef = useRef<AbortController | null>(null)
-
+  const userTouchedFilters = useRef(false)
+  
   useEffect(() => {
     const controller = new AbortController()
     abortRef.current = controller
