@@ -4,6 +4,8 @@ import L from 'leaflet'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EonetEvent } from '../services/eonet' // prop compatibility
 
+const userTouchedFilters = useRef(false)
+
 // Safe "are we in dev?" check for browser builds (Vite/CRA)
 // Put this just below your imports.
 const IS_DEV = (() => {
@@ -771,12 +773,17 @@ export default function MapCore({
           const slice = candidates.slice(i, i + BATCH_SIZE)
           if (slice.length) {
             setPoints(prev => {
-              const next = [...prev, ...slice]
-              if (prev.length === 0) {
-                const cats = new Set(next.map(p => p.category))
-                setActiveCats(cats)
+              const nextPts = [...prev, ...slice]
+
+              // Auto-enable any newly seen categories if the user hasn't touched filters yet
+              if (!userTouchedFilters.current) {
+                const merged = new Set(activeCats)
+                for (const p of slice) merged.add(p.category)
+                // Only call setActiveCats if it actually changes to avoid extra renders
+                if (merged.size !== activeCats.size) setActiveCats(merged)
               }
-              return next
+
+              return nextPts
             })
 
             if (onNews) {
@@ -868,14 +875,21 @@ export default function MapCore({
   const hasPins = shown > 0
 
   function toggleCat(cat: string) {
+    userTouchedFilters.current = true
     setActiveCats(prev => {
       const next = new Set(prev)
       if (next.has(cat)) next.delete(cat); else next.add(cat)
       return next
     })
   }
-  function selectAll() { setActiveCats(new Set(Object.keys(counts))) }
-  function clearAll() { setActiveCats(new Set()) }
+  function selectAll() {
+    userTouchedFilters.current = true
+    setActiveCats(new Set(Object.keys(counts)))
+  }
+  function clearAll() {
+    userTouchedFilters.current = true
+    setActiveCats(new Set())
+  }
 
   return (
     <div className="space-y-3">
