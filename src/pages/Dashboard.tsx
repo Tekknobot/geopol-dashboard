@@ -915,16 +915,12 @@ export default function Dashboard() {
       )}
 
       {/* NEW: compact ReliefWeb carousel (smaller) */}
-      {reports && reports.length > 0 && (
-        <Card title="Humanitarian Headlines (ReliefWeb)">
-          <div className="mt-4">
-            <ReliefWebCarousel
-              reports={reports}
-              onOpenContext={(c) => setContextCountry(c)}
-            />
-          </div>
-        </Card>
-      )}
+      <Card title="Humanitarian Headlines (ReliefWeb)">
+        <ReliefWebCarousel
+          reports={reports || []} // always pass an array; component hides itself if empty
+          onOpenContext={(c) => setContextCountry(c)}
+        />
+      </Card>
 
       {/* About */}
       <CollapsibleSection
