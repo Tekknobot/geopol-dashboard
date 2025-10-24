@@ -12,7 +12,7 @@ import { getCache, setCache } from '../services/cache'
 import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pause, Play, Info } from 'lucide-react'
 import type { MapNewsItem } from '../components/MapCore'
 import { eventsToMapNews } from '../utils/mapNews'
-
+import ReliefWebCarousel from '../components/ReliefWebCarousel'
 
 // --------- Tiny helpers for collapsible sections (with localStorage memory)
 function usePersistedToggle(key: string, defaultOpen = false) {
@@ -914,6 +914,16 @@ export default function Dashboard() {
         />
       )}
 
+      {/* NEW: compact ReliefWeb carousel (smaller) */}
+      {reports && reports.length > 0 && (
+        <div className="mt-4">
+          <ReliefWebCarousel
+            reports={reports}
+            onOpenContext={(c) => setContextCountry(c)}
+          />
+        </div>
+      )}
+      
       {/* About */}
       <CollapsibleSection
         title="About this dashboard"
