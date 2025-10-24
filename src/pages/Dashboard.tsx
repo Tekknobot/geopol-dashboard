@@ -272,7 +272,7 @@ function NewsCarousel({
       aria-label="Top headlines"
     >
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100" />
-      <div className="relative grid h-[55svh] min-h-[360px] md:h-[65svh] place-items-center px-4 sm:px-6 md:px-10">
+      <div className="relative grid h-[55svh] min-h-[360px] md:h-[65svh] place-items-center px-4 sm:px-6 md:px-10 pt-14 md:pt-16 pb-14 md:pb-16">
         <div className="max-w-5xl">
           <div className="mb-3 inline-flex items-center gap-2">
             <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">Front Page</span>
@@ -349,7 +349,7 @@ function NewsCarousel({
         </button>
       </div>
 
-      <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center">
+      <div className="pointer-events-none absolute bottom-3 md:bottom-4 left-0 right-0 flex items-center justify-center">
         <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs ring-1 ring-slate-200 shadow-sm">
           {index + 1} / {total}
         </span>

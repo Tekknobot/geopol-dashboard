@@ -39,18 +39,6 @@ function freshnessBoost(created?: number): number {
   if (hours <= 72) return 2 - ((hours - 24) / 48) * 2
   return 0
 }
-function relevanceScore(item: HeadlineItem): number {
-  const dom = (item.source || domainFromUrl(item.url)).toLowerCase()
-  const rep = reputationFor(dom) * 0.15
-  const cat = 10 // fixed small boost for humanitarian
-  const txt = headlineSignal(item.headline)
-  const fresh = freshnessBoost(item.created)
-  const geo = (typeof item.lat === 'number' && typeof item.lon === 'number') ? 2 : 0
-  return rep + cat + txt + fresh + geo
-}
-function sortByRelevance<T extends HeadlineItem>(arr: T[]): T[] { return [...arr].sort((a,b) => relevanceScore(b) - relevanceScore(a)) }
-
-// ---------- Types
 export type HeadlineItem = {
   id: string
   headline: string
@@ -62,6 +50,16 @@ export type HeadlineItem = {
   countryName?: string
   created?: number
 }
+function relevanceScore(item: HeadlineItem): number {
+  const dom = (item.source || domainFromUrl(item.url)).toLowerCase()
+  const rep = reputationFor(dom) * 0.15
+  const cat = 10
+  const txt = headlineSignal(item.headline)
+  const fresh = freshnessBoost(item.created)
+  const geo = (typeof item.lat === 'number' && typeof item.lon === 'number') ? 2 : 0
+  return rep + cat + txt + fresh + geo
+}
+function sortByRelevance<T extends HeadlineItem>(arr: T[]): T[] { return [...arr].sort((a,b) => relevanceScore(b) - relevanceScore(a)) }
 
 // ---------- Component
 export default function ReliefWebCarousel({
@@ -80,25 +78,19 @@ export default function ReliefWebCarousel({
 
   const items = useMemo<HeadlineItem[]>(() => {
     if (!reports?.length) return [];
-
     const mapped = (reports ?? [])
       .map(r => {
         const url = r?.fields?.url ?? "";
         const title = r?.fields?.title ?? "";
         const createdIso = r?.fields?.date?.created ?? "";
-
-        // safe source extraction
         const source = (() => {
           try { return new URL(url).hostname.replace(/^www\./, ""); }
           catch { return "reliefweb.int"; }
         })();
-
-        // safe created timestamp
         const createdMs = (() => {
           const t = Date.parse(createdIso);
           return Number.isFinite(t) ? t : Date.now();
         })();
-
         return {
           id: String(r?.id ?? ""),
           headline: title,
@@ -109,18 +101,14 @@ export default function ReliefWebCarousel({
           created: createdMs,
         } as HeadlineItem;
       })
-      // keep only well-formed rows
       .filter(it => it.headline && it.url);
-
     return sortByRelevance(mapped).slice(0, max);
-  }, [reports, max]);
+  }, [reports, max])
 
-  // cache items (for instant warm on reload)
   useEffect(() => {
     try { if (items.length) localStorage.setItem(storageKey, JSON.stringify(items)) } catch {}
   }, [items, storageKey])
 
-  // warm from cache on very first mount when no reports yet
   const [hydrated, setHydrated] = useState(false)
   const [cachedItems, setCachedItems] = useState<HeadlineItem[]>([])
   useEffect(() => {
@@ -135,16 +123,13 @@ export default function ReliefWebCarousel({
   const finalItems = items.length ? items : cachedItems
   const total = finalItems.length
 
-  // Refs to avoid stale closures in interval
   const indexRef = useRef(index)
   const totalRef = useRef(total)
   useEffect(() => { indexRef.current = index }, [index])
   useEffect(() => { totalRef.current = total }, [total])
 
-  // keep in range
   useEffect(() => { if (total && index >= total) setIndex(0) }, [total, index])
 
-  // auto-advance
   useEffect(() => {
     if (paused || total <= 1) return
     const id = window.setInterval(() => {
@@ -157,7 +142,7 @@ export default function ReliefWebCarousel({
   if (!total) return null
   const it = finalItems[index]
 
-  console.log('[RWC] reports:', reports?.length, 'items:', finalItems.length, 'index:', index) // <-- add this
+  console.log('[RWC] reports:', reports?.length, 'items:', finalItems.length, 'index:', index)
 
   return (
     <section
@@ -168,7 +153,9 @@ export default function ReliefWebCarousel({
       aria-label="Humanitarian headlines"
     >
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100" />
-      <div className="relative grid h-[32svh] min-h-[260px] md:h-[38svh] place-items-center px-3 sm:px-5 md:px-8">
+
+      {/* SAFE AREA added via pt/pb so overlays never cover the headline */}
+      <div className="relative grid h-[32svh] min-h-[260px] md:h-[38svh] place-items-center px-3 sm:px-5 md:px-8 pt-12 md:pt-14 pb-12 md:pb-14">
         <div className="max-w-4xl">
           <div className="mb-2 inline-flex items-center gap-2">
             <span className="rounded-full bg-rose-600 px-2.5 py-0.5 text-[11px] font-semibold text-white">Humanitarian</span>
@@ -181,12 +168,13 @@ export default function ReliefWebCarousel({
           </div>
 
           <a href={it.url} target="_blank" rel="noreferrer" className="block" title={it.headline}>
-            <h3 className="font-extrabold leading-tight tracking-tight text-xl sm:text-2xl md:text-3xl whitespace-normal break-words">
+            {/* Add horizontal padding so text can’t sit under side buttons */}
+            <h3 className="font-extrabold leading-tight tracking-tight text-xl sm:text-2xl md:text-3xl whitespace-normal break-words pl-12 pr-12 sm:pl-14 sm:pr-14">
               {it.headline}
             </h3>
           </a>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-slate-600">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-slate-600 pl-12 pr-12 sm:pl-14 sm:pr-14">
             <span className="inline-flex items-center gap-1">
               <Newspaper className="h-3.5 w-3.5 opacity-70" />
               {it.source || (() => { try { return new URL(it.url).hostname.replace(/^www\./,'') } catch { return 'source' } })()}
@@ -212,6 +200,7 @@ export default function ReliefWebCarousel({
         </div>
       </div>
 
+      {/* Top controls (unchanged) */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between p-2 sm:p-3">
         <button
           type="button"
@@ -241,7 +230,8 @@ export default function ReliefWebCarousel({
         </button>
       </div>
 
-      <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center">
+      {/* Bottom counter now ignores pointer events and sits in the reserved bottom padding */}
+      <div className="pointer-events-none absolute bottom-2 left-0 right-0 flex items-center justify-center">
         <span className="rounded-full bg-white/90 px-2 py-0.5 text-[11px] ring-1 ring-slate-200 shadow-sm">
           {index + 1} / {total}
         </span>
