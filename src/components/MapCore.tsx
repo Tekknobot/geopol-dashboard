@@ -263,26 +263,383 @@ function extractBestLink(html: string, fallbackName: string): PickedLink {
   }
 }
 
+/** ---------- Category inference (scoring, more precise) ---------- */
 
-/** ---------- Category inference (broadened) ---------- */
-function inferCategory(name: string, html: string) {
-  const s = (name + ' ' + html).toLowerCase()
-  if (/\b(protest|demonstration|rally|march|mobiliza|manifest|huelga|strike|picket|union|walkout)\b/.test(s)) return 'Protest/Strike'
-  if (/\b(coup|golpe|junta|seize power|overthrow|putsch)\b/.test(s)) return 'Coup'
-  if (/\b(sanction|embargo|blacklist|asset freeze|export control|entity list|trade restriction)\b/.test(s)) return 'Sanctions'
-  if (/\b(election|vote|polls|ballot|campaign|parliament|congress|senate|president|cabinet|assembly|council|budget)\b/.test(s)) return 'Elections/Politics'
-  if (/\b(energy|oil|gas|lng|pipeline|refinery|power grid|electricity|fuel|diesel)\b/.test(s)) return 'Energy'
-  if (/\b(supply chain|shipping|port|blockade|strait|canal|freight|container|logistics)\b/.test(s)) return 'Supply Chain'
-  if (/\b(currency|fx|devaluation|inflation|interest rate|bond|debt|default|imf|world bank|tariff|gdp|recession)\b/.test(s)) return 'Macro/Finance'
-  if (/\b(clash|unrest|riot|security|militia|insurg|airstrike|shelling|ceasefire|attack|terror|hostage|troop|shooting|stabbing|police|arrest|homicide|investigation)\b/.test(s)) return 'Security/Conflict'
-  if (/\b(migrant|refugee|asylum|displacement|idp)\b/.test(s)) return 'Migration'
-  if (/\b(cyber|hacker|ransomware|ddos|malware|data breach|phishing)\b/.test(s)) return 'Cyber'
-  if (/\b(tariff|quota|anti-dumping|export ban|import ban|trade deal|fta|wto)\b/.test(s)) return 'Trade/Export Controls'
-  if (/\b(summit|talks|negotiation|accord|treaty|alliance|normalization|dialogue|mediator)\b/.test(s)) return 'Diplomacy/Alliances'
-  if (/\b(corruption|bribery|graft|kickback|impeachment|resign|no-confidence|ombudsman)\b/.test(s)) return 'Governance/Corruption'
-  if (/\b(transit|subway|ttc|strike|bus|service disruption)\b/.test(s)) return 'Protest/Strike'
-  return 'Other'
+/** Normalize: lowercase + strip diacritics */
+function norm(text: string): string {
+  try {
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+  } catch {
+    // Fallback without Unicode property escapes
+    return text.toLowerCase()
+  }
 }
+
+type Cat =
+  | 'Protest/Strike'
+  | 'Coup'
+  | 'Sanctions'
+  | 'Elections/Politics'
+  | 'Energy'
+  | 'Supply Chain'
+  | 'Macro/Finance'
+  | 'Security/Conflict'
+  | 'Migration'
+  | 'Cyber'
+  | 'Trade/Export Controls'
+  | 'Diplomacy/Alliances'
+  | 'Governance/Corruption'
+  | 'Other'
+
+type Rule = {
+  cat: Cat
+  // phrases: exact word-boundary phrases (weighted)
+  phrases?: Array<{ p: RegExp; w: number }>
+  // keywords: single tokens (weighted, multiplicative by occurrences)
+  keywords?: Array<{ k: RegExp; w: number; cap?: number }>
+  // exclude patterns reduce score (or block)
+  excludes?: Array<{ rx: RegExp; w?: number }>
+  // global boost/cap
+  base?: number
+  cap?: number
+}
+
+let CATEGORY_RULES: Rule[] | null = null
+
+function buildRules(): Rule[] {
+  // Word-boundary helpers (safe for ASCII-latin; we already normalize and strip diacritics)
+  const wb = (s: string) => new RegExp(`\\b${s.replace(/\s+/g, '\\s+')}\\b`, 'i')
+
+  const kw = (s: string) => new RegExp(`\\b${s}\\b`, 'i')
+
+  // Shared token lists
+  const violence = /(clash|unrest|riot|insurg|airstrike|shell(?:ing)?|ceasefire|attack|terror|hostage|troop|shoot(?:ing)?|stab(?:bing)?|police|arrest|homicide|explosion|bomb|raid|militia|artillery|drone)/i
+  const energyInfra = /(pipeline|refinery|lng|rig|wellhead|terminal|grid|substation|power plant|refineri)/i
+  const shipping = /(shipping|port|blockade|strait|canal|freight|container|logistics|suez|panama)/i
+  const economy = /(currency|fx|devaluat|inflation|interest rate|bond|debt|default|imf|world bank|gdp|recession|budget|tariff|fiscal|monetary|central bank)/i
+  const cyberTerms = /(cyber|hacker|ransomware|ddos|malware|data breach|phishing|botnet|exfiltrat|encryption key)/i
+
+  return [
+    {
+      cat: 'Protest/Strike',
+      base: 0,
+      phrases: [
+        { p: wb('general strike'), w: 8 },
+        { p: wb('mass protest'), w: 7 },
+        { p: wb('walkout'), w: 6 },
+        { p: wb('picket line'), w: 5 },
+      ],
+      keywords: [
+        { k: kw('protest'), w: 5, cap: 3 },
+        { k: kw('demonstration'), w: 5, cap: 2 },
+        { k: kw('rally'), w: 3, cap: 2 },
+        { k: kw('march'), w: 3, cap: 2 },
+        { k: kw('strike'), w: 6, cap: 3 },
+        { k: kw('union'), w: 3, cap: 2 },
+        { k: kw('walkout'), w: 5, cap: 2 },
+        // transit-specific
+        { k: kw('transit'), w: 2, cap: 2 },
+        { k: kw('subway'), w: 2, cap: 2 },
+        { k: kw('ttc'), w: 2, cap: 1 },
+        { k: kw('bus'), w: 1, cap: 2 },
+        { k: wb('service disruption'), w: 3 },
+      ],
+      excludes: [
+        { rx: wb('election day'), w: -4 }, // avoid mislabeling election-day “rallies”
+      ],
+      cap: 24,
+    },
+    {
+      cat: 'Coup',
+      phrases: [{ p: wb('seize power'), w: 8 }, { p: wb('military junta'), w: 10 }],
+      keywords: [
+        { k: kw('coup'), w: 10, cap: 3 },
+        { k: kw('junta'), w: 6, cap: 2 },
+        { k: kw('overthrow'), w: 6, cap: 2 },
+        { k: kw('putsch'), w: 6, cap: 2 },
+      ],
+      cap: 22,
+    },
+    {
+      cat: 'Sanctions',
+      phrases: [
+        { p: wb('asset freeze'), w: 8 },
+        { p: wb('export control'), w: 8 },
+        { p: wb('entity list'), w: 7 },
+        { p: wb('trade restriction'), w: 6 },
+      ],
+      keywords: [
+        { k: kw('sanction'), w: 8, cap: 3 },
+        { k: kw('embargo'), w: 7, cap: 2 },
+        { k: kw('blacklist'), w: 6, cap: 2 },
+      ],
+      cap: 22,
+    },
+    {
+      cat: 'Elections/Politics',
+      phrases: [
+        { p: wb('no-confidence'), w: 7 },
+        { p: wb('cabinet reshuffle'), w: 6 },
+      ],
+      keywords: [
+        { k: kw('election'), w: 7, cap: 3 },
+        { k: kw('vote'), w: 4, cap: 3 },
+        { k: kw('polls'), w: 3, cap: 2 },
+        { k: kw('ballot'), w: 4, cap: 2 },
+        { k: kw('campaign'), w: 3, cap: 2 },
+        { k: kw('parliament'), w: 4, cap: 2 },
+        { k: kw('congress'), w: 4, cap: 2 },
+        { k: kw('senate'), w: 3, cap: 2 },
+        { k: kw('president'), w: 3, cap: 2 },
+        { k: kw('cabinet'), w: 3, cap: 2 },
+        { k: kw('assembly'), w: 3, cap: 2 },
+        { k: kw('council'), w: 2, cap: 2 },
+        { k: kw('budget'), w: 3, cap: 2 },
+      ],
+      cap: 22,
+    },
+    {
+      cat: 'Energy',
+      phrases: [
+        { p: wb('power grid'), w: 7 },
+        { p: wb('oil refinery'), w: 7 },
+      ],
+      keywords: [
+        { k: kw('energy'), w: 4, cap: 3 },
+        { k: kw('oil'), w: 3, cap: 3 },
+        { k: kw('gas'), w: 3, cap: 3 },
+        { k: kw('lng'), w: 5, cap: 2 },
+        { k: kw('pipeline'), w: 7, cap: 3 },
+        { k: kw('refinery'), w: 6, cap: 2 },
+        { k: kw('electricity'), w: 4, cap: 2 },
+        { k: kw('fuel'), w: 3, cap: 2 },
+        { k: kw('diesel'), w: 3, cap: 2 },
+        { k: kw('grid'), w: 3, cap: 2 },
+        { k: kw('substation'), w: 4, cap: 2 },
+      ],
+      cap: 22,
+    },
+    {
+      cat: 'Supply Chain',
+      phrases: [
+        { p: wb('supply chain'), w: 8 },
+        { p: wb('port closure'), w: 7 },
+      ],
+      keywords: [
+        { k: kw('shipping'), w: 5, cap: 3 },
+        { k: kw('port'), w: 4, cap: 3 },
+        { k: kw('blockade'), w: 6, cap: 2 },
+        { k: kw('strait'), w: 5, cap: 2 },
+        { k: kw('canal'), w: 4, cap: 2 },
+        { k: kw('freight'), w: 4, cap: 2 },
+        { k: kw('container'), w: 4, cap: 2 },
+        { k: kw('logistics'), w: 4, cap: 2 },
+      ],
+      cap: 22,
+    },
+    {
+      cat: 'Macro/Finance',
+      keywords: [
+        { k: kw('currency'), w: 5, cap: 3 },
+        { k: kw('fx'), w: 4, cap: 2 },
+        { k: kw('devaluation'), w: 6, cap: 2 },
+        { k: kw('inflation'), w: 6, cap: 3 },
+        { k: kw('interest rate'), w: 6, cap: 2 },
+        { k: kw('bond'), w: 4, cap: 2 },
+        { k: kw('debt'), w: 4, cap: 2 },
+        { k: kw('default'), w: 6, cap: 2 },
+        { k: wb('imf'), w: 5 },
+        { k: wb('world bank'), w: 4 },
+        { k: kw('gdp'), w: 5, cap: 2 },
+        { k: kw('recession'), w: 6, cap: 2 },
+        { k: kw('budget'), w: 4, cap: 2 },
+        { k: kw('tariff'), w: 4, cap: 2 }, // if no explicit trade/export cues, keep as macro
+      ],
+      excludes: [
+        { rx: energyInfra, w: -4 }, // steer energy infra to Energy
+        { rx: shipping, w: -3 },    // steer maritime to Supply Chain
+      ],
+      cap: 22,
+    },
+    {
+      cat: 'Security/Conflict',
+      base: 1,
+      keywords: [
+        { k: kw('security'), w: 2, cap: 2 },
+        { k: kw('police'), w: 3, cap: 3 },
+        { k: kw('arrest'), w: 3, cap: 3 },
+        { k: kw('ceasefire'), w: 4, cap: 2 },
+        // violence bucket (multi-match)
+        { k: violence, w: 4, cap: 4 },
+      ],
+      phrases: [
+        { p: wb('air strike'), w: 7 },
+        { p: wb('armed group'), w: 6 },
+      ],
+      cap: 26,
+    },
+    {
+      cat: 'Migration',
+      keywords: [
+        { k: kw('migrant'), w: 6, cap: 3 },
+        { k: kw('refugee'), w: 6, cap: 3 },
+        { k: kw('asylum'), w: 5, cap: 2 },
+        { k: kw('displacement'), w: 5, cap: 2 },
+        { k: kw('idp'), w: 5, cap: 2 },
+      ],
+      cap: 20,
+    },
+    {
+      cat: 'Cyber',
+      keywords: [
+        { k: cyberTerms, w: 7, cap: 4 },
+        { k: wb('data breach'), w: 8, cap: 2 },
+        { k: wb('ransom note'), w: 6, cap: 1 },
+      ],
+      excludes: [
+        { rx: wb('cyber monday'), w: -20 }, // avoid retail noise
+      ],
+      cap: 24,
+    },
+    {
+      cat: 'Trade/Export Controls',
+      phrases: [
+        { p: wb('export ban'), w: 8 },
+        { p: wb('import ban'), w: 7 },
+        { p: wb('anti-dumping'), w: 8 },
+        { p: wb('trade deal'), w: 6 },
+        { p: wb('free trade agreement'), w: 7 },
+      ],
+      keywords: [
+        { k: kw('tariff'), w: 6, cap: 3 },
+        { k: kw('quota'), w: 5, cap: 2 },
+        { k: kw('wto'), w: 5, cap: 2 },
+        { k: kw('fta'), w: 5, cap: 2 },
+      ],
+      cap: 24,
+    },
+    {
+      cat: 'Diplomacy/Alliances',
+      phrases: [
+        { p: wb('normalization of ties'), w: 8 },
+        { p: wb('peace talks'), w: 7 },
+      ],
+      keywords: [
+        { k: kw('summit'), w: 6, cap: 2 },
+        { k: kw('talks'), w: 5, cap: 3 },
+        { k: kw('negotiation'), w: 5, cap: 2 },
+        { k: kw('accord'), w: 5, cap: 2 },
+        { k: kw('treaty'), w: 6, cap: 2 },
+        { k: kw('alliance'), w: 6, cap: 2 },
+        { k: kw('dialogue'), w: 4, cap: 2 },
+        { k: kw('mediator'), w: 4, cap: 2 },
+      ],
+      cap: 22,
+    },
+    {
+      cat: 'Governance/Corruption',
+      phrases: [{ p: wb('no-confidence'), w: 7 }],
+      keywords: [
+        { k: kw('corruption'), w: 7, cap: 3 },
+        { k: kw('bribery'), w: 7, cap: 2 },
+        { k: kw('graft'), w: 6, cap: 2 },
+        { k: kw('kickback'), w: 6, cap: 2 },
+        { k: kw('impeachment'), w: 7, cap: 2 },
+        { k: kw('resign'), w: 5, cap: 2 },
+        { k: kw('ombudsman'), w: 5, cap: 2 },
+      ],
+      cap: 22,
+    },
+  ]
+}
+
+function countMatches(text: string, rx: RegExp): number {
+  let c = 0
+  const g = new RegExp(rx.source, rx.flags.includes('g') ? rx.flags : rx.flags + 'g')
+  let m: RegExpExecArray | null
+  while ((m = g.exec(text))) c++
+  return c
+}
+
+function scoreWith(rule: Rule, text: string): number {
+  let s = rule.base ?? 0
+
+  if (rule.phrases) {
+    for (const { p, w } of rule.phrases) {
+      const hits = countMatches(text, p)
+      if (hits) s += Math.min(hits * w, (rule.cap ?? 1e9))
+    }
+  }
+
+  if (rule.keywords) {
+    for (const { k, w, cap } of rule.keywords) {
+      const hits = countMatches(text, k)
+      if (hits) {
+        const add = cap ? Math.min(hits, cap) * w : hits * w
+        s += add
+      }
+    }
+  }
+
+  if (rule.excludes) {
+    for (const { rx, w = -3 } of rule.excludes) {
+      if (rx.test(text)) s += w
+    }
+  }
+
+  if (rule.cap !== undefined) s = Math.min(s, rule.cap)
+  return s
+}
+
+/** Main: compute per-category scores, then apply tie-breakers */
+function inferCategory(name: string, html: string): Cat {
+  const s = norm(`${name || ''} ${html || ''}`)
+
+  if (!CATEGORY_RULES) CATEGORY_RULES = buildRules()
+
+  // Score all categories
+  const scored = CATEGORY_RULES.map(r => ({ cat: r.cat, score: scoreWith(r, s) }))
+
+  // Primary pick
+  scored.sort((a, b) => b.score - a.score)
+  const top = scored[0]
+
+  // Threshold: require some minimal evidence
+  const MIN_ACCEPT = 6
+  if (!top || top.score < MIN_ACCEPT) return 'Other'
+
+  // Tie-breakers when scores are close (±2)
+  const near = scored.filter(x => x !== top && Math.abs(x.score - top.score) <= 2)
+  if (near.length) {
+    // If any strong violence signals, prefer Security/Conflict
+    const violent = /(air ?strike|shelling|artillery|drone|explosion|bomb|militia|ceasefire|hostage|crossfire)/i.test(s)
+    if (violent) {
+      const sec = scored.find(x => x.cat === 'Security/Conflict')
+      if (sec && sec.score >= top.score - 2) return 'Security/Conflict'
+    }
+    // Energy infra words → Energy
+    if (/(pipeline|refinery|lng|substation|grid)/i.test(s)) {
+      const en = scored.find(x => x.cat === 'Energy')
+      if (en && en.score >= top.score - 2) return 'Energy'
+    }
+    // Maritime chokepoints → Supply Chain
+    if (/(strait|canal|port|shipping|blockade)/i.test(s)) {
+      const sc = scored.find(x => x.cat === 'Supply Chain')
+      if (sc && sc.score >= top.score - 2) return 'Supply Chain'
+    }
+    // Explicit sanctions words → Sanctions over Trade/Macro
+    if (/(sanction|embargo|asset freeze|entity list|export control)/i.test(s)) {
+      const sanc = scored.find(x => x.cat === 'Sanctions')
+      if (sanc && sanc.score >= top.score - 2) return 'Sanctions'
+    }
+  }
+
+  return top.cat
+}
+
 
 /** ---------- Progressive fetch & batch-yield from GDELT ---------- */
 async function fetchGeo(
