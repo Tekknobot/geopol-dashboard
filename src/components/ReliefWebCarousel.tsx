@@ -169,12 +169,12 @@ export default function ReliefWebCarousel({
 
           <a href={it.url} target="_blank" rel="noreferrer" className="block" title={it.headline}>
             {/* Add horizontal padding so text can’t sit under side buttons */}
-            <h3 className="font-extrabold leading-tight tracking-tight text-xl sm:text-2xl md:text-3xl whitespace-normal break-words pl-12 pr-12 sm:pl-14 sm:pr-14">
+            <h3 className="font-extrabold leading-tight tracking-tight text-xl sm:text-2xl md:text-3xl whitespace-normal break-words">
               {it.headline}
             </h3>
           </a>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-slate-600 pl-12 pr-12 sm:pl-14 sm:pr-14">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-slate-600">
             <span className="inline-flex items-center gap-1">
               <Newspaper className="h-3.5 w-3.5 opacity-70" />
               {it.source || (() => { try { return new URL(it.url).hostname.replace(/^www\./,'') } catch { return 'source' } })()}
