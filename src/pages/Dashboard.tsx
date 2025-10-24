@@ -916,14 +916,16 @@ export default function Dashboard() {
 
       {/* NEW: compact ReliefWeb carousel (smaller) */}
       {reports && reports.length > 0 && (
-        <div className="mt-4">
-          <ReliefWebCarousel
-            reports={reports}
-            onOpenContext={(c) => setContextCountry(c)}
-          />
-        </div>
+        <Card title="Humanitarian Headlines (ReliefWeb)">
+          <div className="mt-4">
+            <ReliefWebCarousel
+              reports={reports}
+              onOpenContext={(c) => setContextCountry(c)}
+            />
+          </div>
+        </Card>
       )}
-      
+
       {/* About */}
       <CollapsibleSection
         title="About this dashboard"
