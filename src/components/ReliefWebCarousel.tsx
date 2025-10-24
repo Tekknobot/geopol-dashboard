@@ -79,18 +79,41 @@ export default function ReliefWebCarousel({
   const [index, setIndex] = useState(0)
 
   const items = useMemo<HeadlineItem[]>(() => {
-    if (!reports?.length) return []
-    const mapped = reports.map(r => ({
-      id: String(r.id),
-      headline: r.fields.title,
-      url: r.fields.url,
-      source: (() => { try { return new URL(r.fields.url).hostname.replace(/^www\./,'') } catch { return 'source' } })(),
-      category: CATEGORY,
-      countryName: r.fields.country?.[0]?.name,
-      created: new Date(r.fields.date.created).getTime(),
-    }))
-    return sortByRelevance(mapped).slice(0, max)
-  }, [reports, max])
+    if (!reports?.length) return [];
+
+    const mapped = (reports ?? [])
+      .map(r => {
+        const url = r?.fields?.url ?? "";
+        const title = r?.fields?.title ?? "";
+        const createdIso = r?.fields?.date?.created ?? "";
+
+        // safe source extraction
+        const source = (() => {
+          try { return new URL(url).hostname.replace(/^www\./, ""); }
+          catch { return "reliefweb.int"; }
+        })();
+
+        // safe created timestamp
+        const createdMs = (() => {
+          const t = Date.parse(createdIso);
+          return Number.isFinite(t) ? t : Date.now();
+        })();
+
+        return {
+          id: String(r?.id ?? ""),
+          headline: title,
+          url,
+          source,
+          category: CATEGORY,
+          countryName: r?.fields?.country?.[0]?.name,
+          created: createdMs,
+        } as HeadlineItem;
+      })
+      // keep only well-formed rows
+      .filter(it => it.headline && it.url);
+
+    return sortByRelevance(mapped).slice(0, max);
+  }, [reports, max]);
 
   // cache items (for instant warm on reload)
   useEffect(() => {

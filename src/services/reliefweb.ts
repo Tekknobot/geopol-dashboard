@@ -24,20 +24,16 @@ const RW_BASE = "https://api.reliefweb.int/v1";
  */
 export async function getLatestReports(limit = 12, cacheMs = 1000 * 60 * 10) {
   const body = {
-    appname: "geo-hum-ssr", // change to your app name if you want
     limit,
     sort: ["date:desc"],
-    preset: "latest",
     filter: {
       operator: "AND",
-      conditions: [
-        { field: "status", value: "published" },
-      ],
+      conditions: [{ field: "status", value: "published" }],
     },
     fields: {
       include: [
         "title",
-        "url",
+        "url",           // public article URL
         "date.created",
         "country.name",
         "theme.name",
@@ -47,18 +43,16 @@ export async function getLatestReports(limit = 12, cacheMs = 1000 * 60 * 10) {
     },
   };
 
-  const url = `${RW_BASE}/reports?${new URLSearchParams({ profile: "minimal" })}`;
-  // ReliefWeb API accepts POST for complex filters, but GET also works with query JSON.
-  // Use POST to avoid extra-long URLs.
+  // ✅ put appname on the querystring; keep profile=minimal
+  const url = `${RW_BASE}/reports?${new URLSearchParams({
+    profile: "minimal",
+    appname: "geo-hum-ssr",
+  }).toString()}`;
+
   const key = `rw:reports:${limit}`;
 
-  // We’ll call fetchJson on a synthetic endpoint by stringifying the POST request into the cache key.
-  // Since fetchJson only does GET, we’ll perform our own fetch here but still leverage cache via http.ts idea:
-  // For simplicity, do a small wrapper:
-
   const raw = await (async () => {
-    // Manual fetch with timeout leveraging http.ts patterns
-    const { timeoutMs = 12000, retries = 2 } = { timeoutMs: 12000, retries: 2 };
+    const timeoutMs = 12000, retries = 2;
     let lastErr: any;
     for (let i = 0; i <= retries; i++) {
       const controller = new AbortController();
@@ -67,22 +61,23 @@ export async function getLatestReports(limit = 12, cacheMs = 1000 * 60 * 10) {
         const res = await fetch(url, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify(body),      // ✅ no "preset" here
           signal: controller.signal,
         });
         if (!res.ok) {
-          if (res.status >= 500) throw new Error(`HTTP ${res.status}`);
-          throw new Error(`HTTP ${res.status}`);
+          // 4xx: don't retry; 5xx: retry
+          const err = new Error(`HTTP ${res.status}`);
+          if (res.status >= 500) throw err;
+          throw err;
         }
-        const json = (await res.json()) as unknown;
-        return json;
+        return await res.json();
       } catch (e: any) {
         lastErr = e;
         if (e?.name === "AbortError") break;
-        const msg = String(e?.message || "");
-        if (msg.includes("HTTP 4")) break;
-        // backoff + jitter
-        await new Promise((r) => setTimeout(r, 500 * Math.pow(2, i) * (0.7 + Math.random() * 0.6)));
+        if (String(e?.message || "").startsWith("HTTP 4")) break;
+        await new Promise(r =>
+          setTimeout(r, 500 * Math.pow(2, i) * (0.7 + Math.random() * 0.6))
+        );
       } finally {
         clearTimeout(to);
       }
@@ -90,12 +85,12 @@ export async function getLatestReports(limit = 12, cacheMs = 1000 * 60 * 10) {
     throw lastErr ?? new Error("ReliefWeb request failed");
   })();
 
-  // Minimal transform + cache via localStorage
   const data = (raw as any)?.data ?? [];
+
   try {
-    // localStorage cache (namespaced)
     const { setCache } = await import("./cache");
     setCache<ReliefWebItem[]>(key, data);
   } catch {}
+
   return data as ReliefWebItem[];
 }
