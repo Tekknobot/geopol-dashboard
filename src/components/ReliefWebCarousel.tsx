@@ -134,6 +134,8 @@ export default function ReliefWebCarousel({
   if (!total) return null
   const it = finalItems[index]
 
+  console.log('[RWC] reports:', reports?.length, 'items:', finalItems.length, 'index:', index) // <-- add this
+
   return (
     <section
       className="relative overflow-hidden rounded-xl border shadow-sm"

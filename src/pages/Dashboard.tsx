@@ -902,6 +902,8 @@ export default function Dashboard() {
       .map(([date, count]) => ({ date, count }))
   }, [events])
 
+  console.log('[Dashboard] reports length =', reports?.length)
+  
   return (
     <div className="space-y-6">
       {/* VERY LARGE front-page carousel */}
