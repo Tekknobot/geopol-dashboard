@@ -114,7 +114,7 @@ function decodeEntities(s: string) {
     .replace(/&gt;/g, '>')
 }
 
-/** ---------- Ranked & sanitized news link extraction ---------- */
+/** ---------- Ranked & sanitized news link extraction (English-biased) ---------- */
 type PickedLink = { headline?: string; source?: string; url?: string; score: number; reason?: string };
 
 const TRUSTED_DOMAINS = new Set([
@@ -123,7 +123,17 @@ const TRUSTED_DOMAINS = new Set([
   'cbc.ca','ctvnews.ca','globalnews.ca','thestar.com','theglobeandmail.com','nationalpost.com','cp24.com',
   'france24.com','dw.com','elpais.com','lemonde.fr','scmp.com','straitstimes.com','abc.net.au'
 ])
+
+// (Optional) give extra love to English-language outlets
+const EN_PREFERRED_DOMAINS = new Set([
+  'reuters.com','apnews.com','bbc.com','theguardian.com','nytimes.com','washingtonpost.com',
+  'ft.com','bloomberg.com','axios.com','npr.org','cnn.com','cnbc.com',
+  'cbc.ca','ctvnews.ca','globalnews.ca','thestar.com','theglobeandmail.com','nationalpost.com','cp24.com',
+  'abc.net.au'
+])
+
 const TLD_BONUS = new Set(['ca','com','org','net','gov','edu','int'])
+const EN_TLDS = new Set(['com','org','net','gov','edu','int','uk','us','ca','au','ie','nz'])
 const BLOCKED_PARTS = [
   /\.blogspot\./i, /medium\.com/i, /wordpress\.com/i, /substack\.com/i,
   /vk\.com/i, /\.ru$/i, /t\.me$/i, /telegraph\.co/i, /weebly\.com/i,
@@ -133,12 +143,42 @@ const STRIP_PARAMS = ['utm_source','utm_medium','utm_campaign','utm_term','utm_c
 
 function cleanUrl(u: URL) { STRIP_PARAMS.forEach(k => u.searchParams.delete(k)); return u.toString() }
 function domainFrom(u: URL) { return u.hostname.toLowerCase().replace(/^www\./,'') }
-function headlineFrom(html: string, fallback?: string) {
-  const titleAttr = html.match(/title="([^"]+)"/i)?.[1]
-  const aText = html.match(/<a [^>]*>(.*?)<\/a>/i)?.[1]
-  const raw = titleAttr || aText || fallback || ''
-  return decodeEntities(raw).trim().replace(/\s+/g,' ').slice(0, 160)
+
+// Prefer the most informative text we can find per anchor
+function bestTextForAnchor(aText?: string, titleAttr?: string, fallback?: string) {
+  const raw = (titleAttr || aText || fallback || '').trim()
+  return decodeEntities(raw).replace(/\s+/g,' ').slice(0, 160)
 }
+
+// Lightweight “is this English-ish?” heuristic
+function englishnessScore(text: string, domain: string): number {
+  if (!text) return 0
+  let s = 0
+
+  // Script heuristic: heavy Latin/ASCII is a good sign
+  const ascii = text.replace(/[^\x00-\x7F]/g, '')
+  const ratio = ascii.length / Math.max(text.length, 1)
+  if (ratio > 0.95) s += 12
+  else if (ratio > 0.85) s += 7
+  else if (ratio > 0.70) s += 3
+  else s -= 4
+
+  // Common English stopwords give another hint
+  const common = /\b(the|and|of|to|in|for|on|with|from|over|new|after|as|at|by|amid)\b/i
+  if (common.test(text)) s += 4
+
+  // Domain/TLD nudge
+  const tld = domain.split('.').pop() || ''
+  if (EN_TLDS.has(tld)) s += 3
+  if (EN_PREFERRED_DOMAINS.has(domain)) s += 10
+
+  return s
+}
+
+function headlineFromText(aText?: string, titleAttr?: string, fallback?: string) {
+  return bestTextForAnchor(aText, titleAttr, fallback)
+}
+
 function scoreDomain(domain: string) {
   let score = 0
   if (TRUSTED_DOMAINS.has(domain)) score += 50
@@ -148,41 +188,81 @@ function scoreDomain(domain: string) {
   if ((domain.match(/-/g)||[]).length > 2) score -= 2
   if (/\d/.test(domain)) score -= 1
   if (BLOCKED_PARTS.some(rx => rx.test(domain))) score -= 25
+  // Extra nudge for preferred English outlets
+  if (EN_PREFERRED_DOMAINS.has(domain)) score += 8
   return score
 }
-function extractAllLinks(html: string): URL[] {
-  const urls: URL[] = []
-  // Support both href="..." and href='...'
-  const rx = /href=(["'])(.*?)\1/ig
+
+// Parse anchors with href + inner text + title
+type RawAnchor = { url: URL; aText?: string; titleAttr?: string }
+function extractAllAnchors(html: string): RawAnchor[] {
+  const anchors: RawAnchor[] = []
+  const rx = /<a\s+[^>]*href=(["'])(.*?)\1[^>]*>(.*?)<\/a>/ig
   let m: RegExpExecArray | null
   while ((m = rx.exec(html))) {
+    const href = m[2]
+    const inner = m[3]?.replace(/<[^>]+>/g, '') // strip nested tags
+    // title="..."
+    const titleAttr = (m[0].match(/title="([^"]+)"/i)?.[1]) ?? undefined
     try {
-      const u = new URL(m[2])
-      if (u.protocol === 'http:' || u.protocol === 'https:') urls.push(u)
+      const u = new URL(href)
+      if (u.protocol === 'http:' || u.protocol === 'https:') {
+        anchors.push({ url: u, aText: inner, titleAttr })
+      }
     } catch {}
   }
-  return urls
+  // Also handle bare href attr cases (no closing </a> found above)
+  const rxHref = /href=(["'])(.*?)\1/ig
+  let m2: RegExpExecArray | null
+  while ((m2 = rxHref.exec(html))) {
+    try {
+      const u = new URL(m2[2])
+      if (!anchors.some(a => a.url.toString() === u.toString())) {
+        anchors.push({ url: u })
+      }
+    } catch {}
+  }
+  return anchors
 }
+
 function extractBestLink(html: string, fallbackName: string): PickedLink {
   if (!html) return { score: -999 }
-  const links = extractAllLinks(html)
-  if (!links.length) return { score: -999 }
-  const ranked = links.map(u => {
-    const domain = domainFrom(u)
-    const score = scoreDomain(domain) + (u.protocol === 'https:' ? 2 : 0)
-    return { url: cleanUrl(u), domain, score }
-  }).sort((a,b) => b.score - a.score)
+  const anchors = extractAllAnchors(html)
+  if (!anchors.length) return { score: -999 }
+
+  const ranked = anchors.map(a => {
+    const domain = domainFrom(a.url)
+    const base = scoreDomain(domain) + (a.url.protocol === 'https:' ? 2 : 0)
+    const headline = headlineFromText(a.aText, a.titleAttr, fallbackName)
+    const en = englishnessScore(headline, domain)
+    // Final score: reputation + Englishness (cap the language boost to avoid overpowering trust)
+    const score = base + Math.min(en, 15)
+    return {
+      url: cleanUrl(a.url),
+      domain,
+      headline,
+      score,
+      reason: `domain=${base}, en=${en}`
+    }
+  })
+  .sort((a,b) => b.score - a.score)
+
   const best = ranked[0]
   if (!best) return { score: -999 }
+
+  // Acceptance threshold slightly higher if not English-biased enough
   const ACCEPT_THRESHOLD = 0
-  if (best.score < ACCEPT_THRESHOLD) return { score: best.score }
+  if (best.score < ACCEPT_THRESHOLD) return { score: best.score, reason: 'below threshold' }
+
   return {
     url: best.url,
     source: best.domain,
-    headline: headlineFrom(html, fallbackName),
+    headline: best.headline,
     score: best.score,
+    reason: best.reason
   }
 }
+
 
 /** ---------- Category inference (broadened) ---------- */
 function inferCategory(name: string, html: string) {
