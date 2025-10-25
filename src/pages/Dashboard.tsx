@@ -32,7 +32,56 @@ async function reverseGeocodeCountry(lat: number, lon: number): Promise<string |
   if (!res.ok) return null
   const data = await res.json().catch(() => null)
   // Prefer 'countryName'; fall back to 'principalSubdivision' if weird edge cases
-  return (data?.countryName || data?.countryName || data?.principalSubdivision || null) ?? null
+  return normalizeCountryName(data?.countryName || data?.principalSubdivision || null)
+}
+
+// Normalize verbose country names to short, common forms.
+function normalizeCountryName(name: string | null | undefined): string | null {
+  if (!name) return null
+  const raw = name.trim()
+
+  // 1) Well-known long-form → short-form fixes
+  const SPECIALS: Record<string, string> = {
+    'The Gambia': 'Gambia',
+    'Gambia, The': 'Gambia',
+    'The Bahamas': 'Bahamas',
+    'Bahamas, The': 'Bahamas',
+    'The Netherlands': 'Netherlands',
+    'Netherlands, The': 'Netherlands',
+    'Russian Federation': 'Russia',
+    'Syrian Arab Republic': 'Syria',
+    "Lao People's Democratic Republic": 'Laos',
+    'Venezuela (Bolivarian Republic of)': 'Venezuela',
+    'Bolivia (Plurinational State of)': 'Bolivia',
+    'Brunei Darussalam': 'Brunei',
+    "Cote d'Ivoire": "Côte d'Ivoire",
+    "Côte d’Ivoire": "Côte d'Ivoire",
+    'Republic of Korea': 'South Korea',
+    "Democratic People's Republic of Korea": 'North Korea',
+    'Democratic Republic of the Congo': 'DR Congo',
+    'Congo, Democratic Republic of the': 'DR Congo',
+    'Republic of the Congo': 'Congo',
+    'Congo, Republic of the': 'Congo',
+    'United States of America': 'United States',
+    'United Kingdom of Great Britain and Northern Ireland': 'United Kingdom',
+    'United Republic of Tanzania': 'Tanzania',
+    'Federated States of Micronesia': 'Micronesia',
+    'Czech Republic': 'Czechia',
+    'Republic of Moldova': 'Moldova',
+    'Eswatini (Kingdom of)': 'Eswatini',
+  }
+  if (SPECIALS[raw]) return SPECIALS[raw]
+
+  // 2) Generic leading-article / “X of” stripping (safe, but keep DR/ROC handled above)
+  const n = raw
+    .replace(/^\s*the\s+/i, '')                    // drop leading “the ”
+    .replace(/,\s*the$/i, '')                      // drop trailing “, the”
+    .replace(/^(?:the\s+)?(?:[a-z'’]+\s+)*republic\s+of\s+/i, '') // “… Republic of …”
+    .replace(/^(?:the\s+)?(?:kingdom|state|emirate|sultanate)\s+of\s+/i, '') // “… of …”
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return n
 }
 
 // --------- Tiny helpers for collapsible sections (with localStorage memory)
@@ -977,7 +1026,7 @@ export default function Dashboard() {
       for (const r of reports) {
         const url = r.fields.url
         const n = r.fields.country?.[0]?.name
-        if (url && n) m.set(url, n)
+        if (url && n) m.set(url, normalizeCountryName(n)!)
       }
     }
 
@@ -988,7 +1037,7 @@ export default function Dashboard() {
         (n as any).countryName ||
         (n as any).country || // if present
         null
-      if (url && c) m.set(url, c)
+      if (url && c) m.set(url, normalizeCountryName(c)!)
     }
 
     return m
@@ -1007,38 +1056,33 @@ export default function Dashboard() {
     return Array.from(s).sort((a, b) => b.length - a.length)
   }, [reports])
 
-  // ALWAYS resolve to exactly one country (or null)
-  // Priority: URL map → coord reverse geocode cache → title (word-boundary) → item.countryName
+  // ALWAYS resolve to exactly one clean country (or null)
+  // Priority: URL map → coord cache → title (word-boundary) → item.countryName
   const getContextCountry = useCallback((item: HeadlineItem) => {
-    // 1) URL-based lookup (most reliable)
+    // 1) URL-based lookup
     if (item.url && urlToCountry.has(item.url)) {
-      return urlToCountry.get(item.url)! // single country
+      return normalizeCountryName(urlToCountry.get(item.url)!)
     }
 
     // 2) coord-based lookup (reverse geocode cache)
     if (typeof item.lat === 'number' && typeof item.lon === 'number') {
       const k = keyForCoord(item.lat, item.lon)
       const name = coordCountry[k]
-      if (name) return name
+      if (name) return normalizeCountryName(name)
     }
 
-    // 3) Title contains a known recent country (use word boundaries; prefer longest first)
+    // 3) Title contains a known recent country (word-boundary to avoid partials)
     if (item.headline && recentCountryNames.length) {
       const title = item.headline
-      const lower = title.toLowerCase()
-
-      // Build a regex that enforces word boundaries to avoid partials (e.g., "Niger" in "Nigeria")
       for (const name of recentCountryNames) {
         const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const rx = new RegExp(`\\b${escaped}\\b`, 'i')
-        if (rx.test(title) || lower.includes(name.toLowerCase())) {
-          return name
-        }
+        if (rx.test(title)) return normalizeCountryName(name)
       }
     }
 
-    // 4) Fallback to whatever the item already had (single field)
-    return item.countryName ?? null
+    // 4) Fallback to item.countryName
+    return normalizeCountryName(item.countryName)
   }, [urlToCountry, recentCountryNames, coordCountry])
 
   console.log('[Dashboard] reports length =', reports?.length)
@@ -1363,7 +1407,7 @@ export default function Dashboard() {
           !reports ? <Loading/> : (
             <ul className="divide-y">
               {reports.map(item => {
-                const countryName = item.fields.country?.[0]?.name
+                const countryName = normalizeCountryName(item.fields.country?.[0]?.name)
                 return (
                   <li key={item.id} className="py-3">
                     <div className="flex items-start gap-2">
