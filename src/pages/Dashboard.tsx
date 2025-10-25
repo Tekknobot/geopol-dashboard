@@ -217,11 +217,13 @@ function NewsCarousel({
   onOpenContext,
   index,
   onIndexChange,
+  getContextCountry,
 }: {
   items: HeadlineItem[]
   onOpenContext: (country: string) => void
   index: number
   onIndexChange: (i: number) => void
+  getContextCountry?: (item: HeadlineItem) => string | null
 }) {
   const [paused, setPaused] = useState(false)
   const total = items.length
@@ -262,6 +264,7 @@ function NewsCarousel({
 
   if (!total) return null
   const it = items[index]
+  const ctxCountry = (getContextCountry?.(it) ?? it.countryName ?? null)
 
   return (
     <section
@@ -286,11 +289,11 @@ function NewsCarousel({
                 type="button"
                 onClick={() => onOpenContext(it.countryName!)}
                 className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 ring-1 ring-slate-200 hover:bg-slate-200"
-                title={`Open geopolitical context: ${it.countryName}`}
-                aria-label={`Open context: ${it.countryName}`}
+                title={`Open geopolitical context: ${ctxCountry}`}
+                aria-label={`Open context: ${ctxCountry}`}
               >
                 <Info className="h-4 w-4" />
-                Context: {it.countryName}
+                Context: {ctxCountry}
               </button>
             )}            
             {typeof it.lat === 'number' && typeof it.lon === 'number' && (
@@ -315,12 +318,12 @@ function NewsCarousel({
             <a href={it.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500">
               Read article <ExternalLink className="h-4 w-4 opacity-70" />
             </a>
-            {it.countryName && (
+            {ctxCountry && (
               <>
                 <span className="opacity-50">•</span>
                 <button
                   type="button"
-                  onClick={() => onOpenContext(it.countryName!)}
+                  onClick={() => onOpenContext(ctxCountry!)}
                   className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs ring-1 ring-slate-200 hover:bg-slate-200"
                   title="Open geopolitical context"
                 >
@@ -914,6 +917,64 @@ export default function Dashboard() {
       .map(([date, count]) => ({ date, count }))
   }, [events])
 
+  // Map article URL -> country (from ReliefWeb + any map items that include a country)
+  const urlToCountry = useMemo(() => {
+    const m = new Map<string, string>()
+
+    // ReliefWeb reports
+    if (reports?.length) {
+      for (const r of reports) {
+        const url = r.fields.url
+        const n = r.fields.country?.[0]?.name
+        if (url && n) m.set(url, n)
+      }
+    }
+
+    // Map-derived items (if they include a country-ish field)
+    for (const n of uniqueMapNews) {
+      const url = (n as any).url
+      const c =
+        (n as any).countryName ||
+        (n as any).country || // if present
+        null
+      if (url && c) m.set(url, c)
+    }
+
+    return m
+  }, [reports, uniqueMapNews])
+
+  // Recent country names (for title matching fallback)
+  const recentCountryNames = useMemo(() => {
+    const s = new Set<string>()
+    if (reports?.length) {
+      for (const r of reports) {
+        const n = r.fields.country?.[0]?.name
+        if (n) s.add(n)
+      }
+    }
+    // return *array* sorted by length desc to avoid partial matches ("Congo" vs "DR Congo")
+    return Array.from(s).sort((a, b) => b.length - a.length)
+  }, [reports])
+
+  const getContextCountry = useCallback((item: HeadlineItem) => {
+    // 1) URL-based lookup (most reliable)
+    if (item.url && urlToCountry.has(item.url)) return urlToCountry.get(item.url)!
+
+    // 2) Title contains a known recent country (avoid heavy lookups)
+    if (item.headline && recentCountryNames.length) {
+      const title = item.headline
+      for (const name of recentCountryNames) {
+        // simple contains (case-sensitive works better to avoid over-match on short tokens)
+        if (title.includes(name)) return name
+        // optional: case-insensitive fallback
+        if (title.toLowerCase().includes(name.toLowerCase())) return name
+      }
+    }
+
+    // 3) Fallback to whatever the item already has
+    return item.countryName ?? null
+  }, [urlToCountry, recentCountryNames])
+
   console.log('[Dashboard] reports length =', reports?.length)
   
   return (
@@ -925,6 +986,7 @@ export default function Dashboard() {
           onOpenContext={(c) => setContextCountry(c)}
           index={carouselIndex}
           onIndexChange={setCarouselIndex}
+          getContextCountry={getContextCountry}
         />
       )}
 
