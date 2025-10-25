@@ -14,6 +14,27 @@ import type { MapNewsItem } from '../components/MapCore'
 import { eventsToMapNews } from '../utils/mapNews'
 import ReliefWebCarousel from '../components/ReliefWebCarousel'
 
+// ---------- Reverse geocode (lat/lon -> country) with caching
+const COORD_CACHE_KEY = 'geo:latlon->country';
+
+function keyForCoord(lat: number, lon: number) {
+  // round a bit to avoid per-pixel cache misses
+  return `${lat.toFixed(2)},${lon.toFixed(2)}`
+}
+
+/**
+ * Free, no-key reverse geocode (country-level) using BigDataCloud.
+ * Returns a country name (e.g., "Turkey") or null.
+ */
+async function reverseGeocodeCountry(lat: number, lon: number): Promise<string | null> {
+  const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
+  const res = await fetch(url, { method: 'GET' })
+  if (!res.ok) return null
+  const data = await res.json().catch(() => null)
+  // Prefer 'countryName'; fall back to 'principalSubdivision' if weird edge cases
+  return (data?.countryName || data?.countryName || data?.principalSubdivision || null) ?? null
+}
+
 // --------- Tiny helpers for collapsible sections (with localStorage memory)
 function usePersistedToggle(key: string, defaultOpen = false) {
   const [open, setOpen] = useState<boolean>(defaultOpen)
@@ -228,31 +249,26 @@ function NewsCarousel({
   const [paused, setPaused] = useState(false)
   const total = items.length
 
-  // Refs to avoid stale closures in the interval without changing prop types
   const indexRef = useRef(index)
   const totalRef = useRef(total)
 
-  // Keep refs in sync with latest values
   useEffect(() => { indexRef.current = index }, [index])
   useEffect(() => { totalRef.current = total }, [total])
 
-  // keep index in range if items change
   useEffect(() => {
     if (!total) return
     if (index >= total) onIndexChange(0)
   }, [total, index, onIndexChange])
 
-  // auto-advance (interval reads latest index/total via refs)
   useEffect(() => {
     if (paused || total <= 1) return
     const id = window.setInterval(() => {
       const next = (indexRef.current + 1) % totalRef.current
-      onIndexChange(next) // <- number, so TS is happy
+      onIndexChange(next)
     }, 6500)
     return () => clearInterval(id)
   }, [paused, total, onIndexChange])
 
-  // keyboard
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') onIndexChange((index + 1) % total)
@@ -265,7 +281,6 @@ function NewsCarousel({
   if (!total) return null
   const it = items[index]
 
-  // 🔑 always use the inferred ctxCountry when available; fallback to item.countryName
   const ctxCountry = (getContextCountry?.(it) ?? it.countryName ?? null)
 
   return (
@@ -374,6 +389,7 @@ function NewsCarousel({
     </section>
   )
 }
+
 
 // ---------- Lightweight geopolitics helpers
 
@@ -542,6 +558,14 @@ export default function Dashboard() {
   // 📡 News flowing from the map
   const [mapNews, setMapNews] = useState<MapNewsItem[]>([])
 
+  // lat/lon -> country cache (persist to localStorage)
+  const [coordCountry, setCoordCountry] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem(COORD_CACHE_KEY) || '{}') } catch { return {} }
+  })
+  useEffect(() => {
+    try { localStorage.setItem(COORD_CACHE_KEY, JSON.stringify(coordCountry)) } catch {}
+  }, [coordCountry])
+  
   // Merge incoming news batches without clobbering earlier (often better) headlines
   const handleNews = useCallback((incoming: MapNewsItem[]) => {
     if (!incoming?.length) return;
@@ -763,6 +787,43 @@ export default function Dashboard() {
     return () => { alive = false }
   }, [reports, countryRegionMap])
 
+  // When new map headlines arrive, reverse-geocode unknown coords -> country
+  useEffect(() => {
+    if (!uniqueMapNews.length) return
+
+    // choose some to resolve (skip ones we already cached)
+    const pending = uniqueMapNews.filter(n =>
+      typeof n.lat === 'number' &&
+      typeof n.lon === 'number' &&
+      !coordCountry[keyForCoord(n.lat!, n.lon!)]
+    )
+
+    if (!pending.length) return
+
+    let alive = true
+    ;(async () => {
+      // Be polite to the API (and avoid hammering)
+      for (const n of pending.slice(0, 60)) { // cap per batch
+        if (!alive) break
+        const lat = n.lat!, lon = n.lon!
+        const k = keyForCoord(lat, lon)
+        try {
+          const country = await reverseGeocodeCountry(lat, lon)
+          if (!alive) return
+          if (country) {
+            setCoordCountry(prev => (prev[k] ? prev : { ...prev, [k]: country }))
+          }
+        } catch {
+          // ignore errors
+        }
+        // light throttle
+        await new Promise(r => setTimeout(r, 200))
+      }
+    })()
+
+    return () => { alive = false }
+  }, [uniqueMapNews, coordCountry])
+
   // When map-driven headlines arrive, promote them once and cache
   useEffect(() => {
     if (uniqueMapNews.length === 0) return;
@@ -962,20 +1023,26 @@ export default function Dashboard() {
     // 1) URL-based lookup (most reliable)
     if (item.url && urlToCountry.has(item.url)) return urlToCountry.get(item.url)!
 
-    // 2) Title contains a known recent country (avoid heavy lookups)
+    // 2) coord-based lookup (reverse geocode cache)
+    if (typeof item.lat === 'number' && typeof item.lon === 'number') {
+      const k = keyForCoord(item.lat, item.lon)
+      const name = coordCountry[k]
+      if (name) return name
+    }
+
+    // 3) Title contains a known recent country (avoid heavy lookups)
     if (item.headline && recentCountryNames.length) {
       const title = item.headline
       for (const name of recentCountryNames) {
-        // simple contains (case-sensitive works better to avoid over-match on short tokens)
-        if (title.includes(name)) return name
-        // optional: case-insensitive fallback
-        if (title.toLowerCase().includes(name.toLowerCase())) return name
+        if (title.includes(name) || title.toLowerCase().includes(name.toLowerCase())) {
+          return name
+        }
       }
     }
 
-    // 3) Fallback to whatever the item already has
+    // 4) Fallback to whatever the item already had
     return item.countryName ?? null
-  }, [urlToCountry, recentCountryNames])
+  }, [urlToCountry, recentCountryNames, coordCountry])
 
   console.log('[Dashboard] reports length =', reports?.length)
   
