@@ -77,12 +77,12 @@ export default function ContextSidebar({ countryName, onClose }: Props) {
   if (!countryName) return null
 
   return (
-    <aside className="fixed right-0 top-0 z-40 h-screen w-full max-w-md border-l bg-white shadow-xl">
+    <aside className="fixed right-0 top-0 z-40 w-full max-w-md border-l bg-white shadow-xl h-[100dvh] flex flex-col">
       <div className="flex items-center justify-between border-b px-4 py-3">
         <h2 className="text-lg font-semibold">Context: {countryName}</h2>
         <button onClick={onClose} className="rounded bg-slate-100 px-2 py-1 text-sm hover:bg-slate-200">Close</button>
       </div>
-      <div className="space-y-4 overflow-y-auto p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-4 p-4 pb-[env(safe-area-inset-bottom)]">
         <Card title="Country facts">
           {!country ? <div className="text-sm text-slate-500">Loading…</div> :
             <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
