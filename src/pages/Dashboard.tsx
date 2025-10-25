@@ -301,18 +301,6 @@ function NewsCarousel({
                 {it.category}
               </span>
             )}
-            {ctxCountry && (
-              <button
-                type="button"
-                onClick={() => onOpenContext(ctxCountry)}
-                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 ring-1 ring-slate-200 hover:bg-slate-200"
-                title={`Open geopolitical context: ${ctxCountry}`}
-                aria-label={`Open context: ${ctxCountry}`}
-              >
-                <Info className="h-4 w-4" />
-                Context: {ctxCountry}
-              </button>
-            )}
             {typeof it.lat === 'number' && typeof it.lon === 'number' && (
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600 ring-1 ring-slate-200">
                 {it.lat.toFixed(2)}, {it.lon.toFixed(2)}
@@ -1019,9 +1007,13 @@ export default function Dashboard() {
     return Array.from(s).sort((a, b) => b.length - a.length)
   }, [reports])
 
+  // ALWAYS resolve to exactly one country (or null)
+  // Priority: URL map → coord reverse geocode cache → title (word-boundary) → item.countryName
   const getContextCountry = useCallback((item: HeadlineItem) => {
     // 1) URL-based lookup (most reliable)
-    if (item.url && urlToCountry.has(item.url)) return urlToCountry.get(item.url)!
+    if (item.url && urlToCountry.has(item.url)) {
+      return urlToCountry.get(item.url)! // single country
+    }
 
     // 2) coord-based lookup (reverse geocode cache)
     if (typeof item.lat === 'number' && typeof item.lon === 'number') {
@@ -1030,17 +1022,22 @@ export default function Dashboard() {
       if (name) return name
     }
 
-    // 3) Title contains a known recent country (avoid heavy lookups)
+    // 3) Title contains a known recent country (use word boundaries; prefer longest first)
     if (item.headline && recentCountryNames.length) {
       const title = item.headline
+      const lower = title.toLowerCase()
+
+      // Build a regex that enforces word boundaries to avoid partials (e.g., "Niger" in "Nigeria")
       for (const name of recentCountryNames) {
-        if (title.includes(name) || title.toLowerCase().includes(name.toLowerCase())) {
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const rx = new RegExp(`\\b${escaped}\\b`, 'i')
+        if (rx.test(title) || lower.includes(name.toLowerCase())) {
           return name
         }
       }
     }
 
-    // 4) Fallback to whatever the item already had
+    // 4) Fallback to whatever the item already had (single field)
     return item.countryName ?? null
   }, [urlToCountry, recentCountryNames, coordCountry])
 
@@ -1384,7 +1381,7 @@ export default function Dashboard() {
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 whitespace-normal break-words">
                           <span>{new Date(item.fields.date.created).toLocaleString()}</span>
                           <span className="opacity-60">—</span>
-                          <span>{countryName ? countryName : (item.fields.country?.map(c=>c.name).join(', ') || 'Global')}</span>
+                          <span>{countryName ?? 'Global'}</span>
                           {countryName && (
                             <>
                               <span className="opacity-60">·</span>
