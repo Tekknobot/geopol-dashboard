@@ -264,6 +264,8 @@ function NewsCarousel({
 
   if (!total) return null
   const it = items[index]
+
+  // 🔑 always use the inferred ctxCountry when available; fallback to item.countryName
   const ctxCountry = (getContextCountry?.(it) ?? it.countryName ?? null)
 
   return (
@@ -284,10 +286,10 @@ function NewsCarousel({
                 {it.category}
               </span>
             )}
-            {it.countryName && (
+            {ctxCountry && (
               <button
                 type="button"
-                onClick={() => onOpenContext(it.countryName!)}
+                onClick={() => onOpenContext(ctxCountry)}
                 className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 ring-1 ring-slate-200 hover:bg-slate-200"
                 title={`Open geopolitical context: ${ctxCountry}`}
                 aria-label={`Open context: ${ctxCountry}`}
@@ -295,7 +297,7 @@ function NewsCarousel({
                 <Info className="h-4 w-4" />
                 Context: {ctxCountry}
               </button>
-            )}            
+            )}
             {typeof it.lat === 'number' && typeof it.lon === 'number' && (
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600 ring-1 ring-slate-200">
                 {it.lat.toFixed(2)}, {it.lon.toFixed(2)}
@@ -323,11 +325,11 @@ function NewsCarousel({
                 <span className="opacity-50">•</span>
                 <button
                   type="button"
-                  onClick={() => onOpenContext(ctxCountry!)}
+                  onClick={() => onOpenContext(ctxCountry)}
                   className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs ring-1 ring-slate-200 hover:bg-slate-200"
                   title="Open geopolitical context"
                 >
-                  <Info className="h-4 w-4" /> Open context: {it.countryName}
+                  <Info className="h-4 w-4" /> Open context: {ctxCountry}
                 </button>
               </>
             )}
