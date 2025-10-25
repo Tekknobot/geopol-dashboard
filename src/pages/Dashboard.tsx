@@ -281,6 +281,18 @@ function NewsCarousel({
                 {it.category}
               </span>
             )}
+            {it.countryName && (
+              <button
+                type="button"
+                onClick={() => onOpenContext(it.countryName!)}
+                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 ring-1 ring-slate-200 hover:bg-slate-200"
+                title={`Open geopolitical context: ${it.countryName}`}
+                aria-label={`Open context: ${it.countryName}`}
+              >
+                <Info className="h-4 w-4" />
+                Context: {it.countryName}
+              </button>
+            )}            
             {typeof it.lat === 'number' && typeof it.lon === 'number' && (
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600 ring-1 ring-slate-200">
                 {it.lat.toFixed(2)}, {it.lon.toFixed(2)}
