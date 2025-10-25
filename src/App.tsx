@@ -14,7 +14,7 @@ export default function App() {
             className="text-xl md:text-2xl font-semibold rounded-lg px-2 py-1 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
             aria-label="Go to Overview"
           >
-            G-pol
+            Geoboard
           </NavLink>
           <nav className="flex gap-4 text-sm md:text-base">
             <NavLink
