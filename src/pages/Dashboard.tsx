@@ -38,10 +38,17 @@ async function reverseGeocodeCountry(lat: number, lon: number): Promise<string |
 // Normalize verbose country names to short, common forms.
 function normalizeCountryName(name: string | null | undefined): string | null {
   if (!name) return null
-  const raw = name.trim()
 
-  // 1) Well-known long-form → short-form fixes
+  // unify quotes/spaces a bit
+  let raw = name.replace(/[’]/g, "'").replace(/\s+/g, ' ').trim()
+
+  // --- 0) Quick trims for common UN suffixes like "(the)"
+  raw = raw.replace(/\s*\(the\)\s*$/i, '')        // e.g., "United States of America (the)" → "United States of America"
+           .replace(/,\s*the$/i, '')               // e.g., "Netherlands, The" → "Netherlands"
+
+  // --- 1) Exact long-form → short-form fixes
   const SPECIALS: Record<string, string> = {
+    // Your previous mappings
     'The Gambia': 'Gambia',
     'Gambia, The': 'Gambia',
     'The Bahamas': 'Bahamas',
@@ -55,7 +62,7 @@ function normalizeCountryName(name: string | null | undefined): string | null {
     'Bolivia (Plurinational State of)': 'Bolivia',
     'Brunei Darussalam': 'Brunei',
     "Cote d'Ivoire": "Côte d'Ivoire",
-    "Côte d’Ivoire": "Côte d'Ivoire",
+    "Côte d'Ivoire": "Côte d'Ivoire",
     'Republic of Korea': 'South Korea',
     "Democratic People's Republic of Korea": 'North Korea',
     'Democratic Republic of the Congo': 'DR Congo',
@@ -69,15 +76,43 @@ function normalizeCountryName(name: string | null | undefined): string | null {
     'Czech Republic': 'Czechia',
     'Republic of Moldova': 'Moldova',
     'Eswatini (Kingdom of)': 'Eswatini',
+
+    // UN/BigDataCloud UN-style variants you’re seeing:
+    'United Kingdom of Great Britain and Northern Ireland (the)': 'United Kingdom',
+    'United States of America (the)': 'United States',
+    'Niger (the)': 'Niger',
+    "Korea (the Democratic People's Republic of)": 'North Korea', // DPRK
+    'Korea (the Republic of)': 'South Korea',                      // ROK
+    'Palestine, State of': 'Palestine',
+    'Moldova (the Republic of)': 'Moldova',
+    'Tanzania, United Republic of': 'Tanzania',
   }
   if (SPECIALS[raw]) return SPECIALS[raw]
 
-  // 2) Generic leading-article / “X of” stripping (safe, but keep DR/ROC handled above)
-  const n = raw
-    .replace(/^\s*the\s+/i, '')                    // drop leading “the ”
-    .replace(/,\s*the$/i, '')                      // drop trailing “, the”
-    .replace(/^(?:the\s+)?(?:[a-z'’]+\s+)*republic\s+of\s+/i, '') // “… Republic of …”
-    .replace(/^(?:the\s+)?(?:kingdom|state|emirate|sultanate)\s+of\s+/i, '') // “… of …”
+  // --- 2) Generic comma forms like "X, State of" → "X"
+  // (keep specific Congo forms in SPECIALS above)
+  const commaForms = [
+    /,\s*State\s+of$/i,
+    /,\s*Republic\s+of$/i,
+    /,\s*Kingdom\s+of$/i,
+    /,\s*Emirate\s+of$/i,
+    /,\s*Sultanate\s+of$/i,
+    /,\s*Commonwealth\s+of$/i,
+    /,\s*Federation\s+of$/i,
+  ]
+  for (const rx of commaForms) {
+    if (rx.test(raw)) {
+      raw = raw.replace(rx, '')
+      break
+    }
+  }
+
+  // --- 3) Generic leading articles / “... of …” government forms
+  // (We’ve already handled DR/ROC/UK/US in SPECIALS.)
+  let n = raw
+    .replace(/^\s*the\s+/i, '') // leading "the "
+    .replace(/^(?:the\s+)?(?:[a-z'’]+\s+)*republic\s+of\s+/i, '') // "... Republic of "
+    .replace(/^(?:the\s+)?(?:kingdom|state|emirate|sultanate|federation|commonwealth)\s+of\s+/i, '') // "... of "
     .replace(/\s+/g, ' ')
     .trim()
 
