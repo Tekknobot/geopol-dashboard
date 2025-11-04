@@ -1,8 +1,96 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: light; }
+/* --- Your existing bits --- */
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
+
+/* --- Light defaults (tokens) --- */
+:root {
+  /* color-scheme improves native UI; default light */
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --surface: #f7f7f8;
+  --elev: #ededf0;
+  --text: #0b0f14;
+  --muted: #4b5563;
+  --primary: #1565c0;
+  --primary-contrast: #ffffff;
+  --border: #e5e7eb;
+  --link: #1d4ed8;
+  --focus: #2563eb;
+  --code-bg: #f5f7fb;
+}
+
+/* --- Respect system dark unless user forces light --- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not(.light) {
+    color-scheme: dark;
+    --bg: #0b0f14;
+    --surface: #11161c;
+    --elev: #181f28;
+    --text: #e6edf3;
+    --muted: #a7b1bd;
+    --primary: #4aa3ff;
+    --primary-contrast: #0b1117;
+    --border: #2b3440;
+    --link: #89b4ff;
+    --focus: #9ecaed;
+    --code-bg: #0f141a;
+  }
+}
+
+/* --- Force dark (attribute or class) --- */
+:root[data-theme="dark"], .dark {
+  color-scheme: dark;
+  --bg: #0b0f14;
+  --surface: #11161c;
+  --elev: #181f28;
+  --text: #e6edf3;
+  --muted: #a7b1bd;
+  --primary: #4aa3ff;
+  --primary-contrast: #0b1117;
+  --border: #2b3440;
+  --link: #89b4ff;
+  --focus: #9ecaed;
+  --code-bg: #0f141a;
+}
+
+/* --- Base element styling so your app “just works” in dark --- */
+@layer base {
+  html, body {
+    background-color: var(--bg);
+    color: var(--text);
+  }
+  a { color: var(--link); }
+  code, pre {
+    background-color: var(--code-bg);
+    border: 1px solid var(--border);
+  }
+}
+
+/* --- Optional: handy component primitives if you use plain HTML --- */
+@layer components {
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    @apply p-4;
+  }
+  .btn {
+    background: var(--primary);
+    color: var(--primary-contrast);
+    border: 1px solid rgb(0 0 0 / 0.15);
+    border-radius: 0.75rem;
+    @apply px-4 py-2 font-semibold;
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    @apply px-4 py-2;
+  }
+}
