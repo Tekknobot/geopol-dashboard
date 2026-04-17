@@ -686,6 +686,22 @@ function inferCategory(name: string, html: string): Cat {
 
 
 /** ---------- Progressive fetch & batch-yield from GDELT ---------- */
+const LEGEND_QUERIES: Record<string, string> = {
+  'Protest/Strike': '(protest OR strike OR walkout OR demonstration OR rally)',
+  'Coup': '(coup OR junta OR overthrow OR putsch)',
+  'Sanctions': '(sanctions OR embargo OR "asset freeze" OR blacklist OR "entity list")',
+  'Elections/Politics': '(election OR vote OR ballot OR campaign OR parliament OR senate OR president OR cabinet)',
+  'Energy': '(energy OR oil OR gas OR lng OR pipeline OR refinery OR electricity OR grid OR fuel)',
+  'Supply Chain': '("supply chain" OR shipping OR port OR blockade OR freight OR logistics OR container OR canal OR strait)',
+  'Macro/Finance': '(inflation OR currency OR debt OR default OR recession OR GDP OR budget OR "interest rate" OR bond OR IMF)',
+  'Security/Conflict': '(war OR conflict OR attack OR ceasefire OR bombing OR shelling OR militia OR troops OR police OR violence)',
+  'Migration': '(refugee OR migrant OR asylum OR displacement OR IDP)',
+  'Cyber': '(cyber OR ransomware OR malware OR "data breach" OR hacker OR DDoS OR phishing)',
+  'Trade/Export Controls': '(tariff OR quota OR WTO OR "export control" OR "export ban" OR "import ban" OR "trade restriction")',
+  'Diplomacy/Alliances': '(summit OR treaty OR alliance OR talks OR negotiation OR accord OR diplomacy)',
+  'Governance/Corruption': '(corruption OR bribery OR graft OR impeachment OR resignation OR ombudsman)',
+}
+
 async function fetchGeo(
   controller: AbortController,
   query: string,
@@ -766,16 +782,63 @@ async function fetchGeo(
   throw new Error(lastProblem);
 }
 
+async function fetchDocs(
+  controller: AbortController,
+  query: string,
+  maxrecords = 12
+) {
+  const base = (import.meta as any)?.env?.VITE_GDELT_PROXY_URL || '/api/gdelt'
+
+  const attempts = [
+    { query, timespan: '24h', maxrecords },
+    { query, timespan: '72h', maxrecords },
+    { query, timespan: '168h', maxrecords },
+  ]
+
+  let lastProblem = 'No usable DOC payload returned'
+
+  for (const attempt of attempts) {
+    const params = new URLSearchParams()
+    params.set('query', attempt.query)
+    params.set('mode', 'ArtList')
+    params.set('format', 'json')
+    params.set('timespan', attempt.timespan)
+    params.set('maxrecords', String(attempt.maxrecords))
+    params.set('sort', 'DateDesc')
+
+    const url = `${base}/api/v2/doc/doc?${params.toString()}`
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json, text/plain;q=0.9,*/*;q=0.8' },
+    })
+
+    const text = await res.text()
+
+    if (!res.ok) {
+      lastProblem = `DOC ${res.status}: ${text.slice(0, 200)}`
+      continue
+    }
+
+    try {
+      const json = JSON.parse(text)
+      const articles = Array.isArray(json?.articles) ? json.articles : []
+      if (articles.length) return articles
+      lastProblem = `DOC returned empty articles (${attempt.timespan})`
+    } catch {
+      lastProblem = 'Failed to parse DOC JSON payload'
+    }
+  }
+
+  throw new Error(lastProblem)
+}
 
 /** Map a raw feature to a SocioPoint (or null) */
-function featureToPoint(f: any): SocioPoint | null {
+function featureToPoint(f: any, forcedCategory?: string): SocioPoint | null {
   const props = f?.properties || {}
 
-  // Use full geometry support instead of assuming Point only.
   const { lat, lon } = centroidFromGeometry(f?.geometry)
   if (!validCoord(lat, lon)) return null
 
-  // Accept a wider range of possible GDELT property names.
   const name = (
     props.name ||
     props.label ||
@@ -788,7 +851,6 @@ function featureToPoint(f: any): SocioPoint | null {
     props.Actor1Geo_FullName ||
     props.Actor2Geo_FullName ||
     props.ActionGeo_FullName ||
-    props.V2Locations ||
     ''
   ).toString().trim()
 
@@ -801,13 +863,11 @@ function featureToPoint(f: any): SocioPoint | null {
     ''
   ).toString()
 
-  const category = inferCategory(name, html)
-  const label = name || category || 'Geopolitical event'
+  const label = name || forcedCategory || 'Geopolitical event'
+  const category = forcedCategory || inferCategory(name, html)
 
-  // Try to extract a ranked article link from HTML.
   const best = extractBestLink(html, label)
 
-  // Also accept direct URL-ish properties if present.
   const rawUrl =
     props.url ||
     props.sourceurl ||
@@ -833,6 +893,25 @@ function featureToPoint(f: any): SocioPoint | null {
     headline,
     source,
     url,
+  }
+}
+
+function articleToNewsItem(article: any, category: string, fallbackLat = 0, fallbackLon = 0): MapNewsItem | null {
+  const headline = (article?.title || article?.seendate || '').toString().trim()
+  const rawUrl = article?.url || article?.socialimage || ''
+  const url = rawUrl ? normalizeExternalUrl(String(rawUrl)) : ''
+  if (!headline || !url) return null
+
+  const source = (article?.domain || article?.sourcecountry || '').toString().trim() || undefined
+
+  return {
+    id: `${category}:${url}`,
+    headline,
+    url,
+    source,
+    category,
+    lat: fallbackLat,
+    lon: fallbackLon,
   }
 }
 
@@ -866,31 +945,21 @@ export default function MapCore({
     let alive = true
 
     const BATCH_SIZE = 80
-
-    // parallel queries (broad→narrow – order doesn't matter)
-    const Q1 = '(protest OR strike OR coup OR sanctions OR election OR energy OR oil OR gas OR shipping OR blockade OR "supply chain" OR tariff OR "export control" OR ransomware OR cyber OR refugee OR migration OR summit OR treaty OR alliance OR corruption OR impeachment)'
-    const Q2 = '(protest OR strike OR coup OR sanctions OR election OR energy OR shipping OR tariff OR cyber OR refugee OR summit OR corruption)'
-    const Q3 = '(politics OR government OR protest OR security)'
-
+    const allNews: MapNewsItem[] = []
     let totalFetched = 0
     let totalCandidates = 0
     let totalErrors = 0
 
-    async function runQuery(q: string) {
+    async function runCategory(cat: string, query: string) {
       try {
-        const feats = await fetchGeo(controller, q, '24h', 900)
+        const feats = await fetchGeo(controller, query, '24h', 900)
         if (!alive || controller.signal.aborted) return
-        if (!feats || feats.length === 0) {
-          totalErrors += 1
-          return
-        }
 
         totalFetched += feats.length
 
         const candidates: SocioPoint[] = []
-
         for (const f of feats) {
-          const pt = featureToPoint(f)
+          const pt = featureToPoint(f, cat)
           if (!pt) continue
 
           const key =
@@ -902,90 +971,80 @@ export default function MapCore({
           candidates.push(pt)
         }
 
-        if (!candidates.length) {
-          if (IS_DEV) {
-            // eslint-disable-next-line no-console
-            console.warn(`GDELT returned ${feats.length} features for query but 0 survived parsing`, q, feats.slice(0, 3))
-          }
-          return
-        }
+        if (candidates.length) {
+          totalCandidates += candidates.length
 
-        totalCandidates += candidates.length
+          let i = 0
+          const pump = () => {
+            if (!alive || controller.signal.aborted) return
 
-        let i = 0
-        const pump = () => {
-          if (!alive || controller.signal.aborted) return
-
-          const slice = candidates.slice(i, i + BATCH_SIZE)
-          if (slice.length) {
-            setPoints(prev => {
-              const nextPts = [...prev, ...slice]
+            const slice = candidates.slice(i, i + BATCH_SIZE)
+            if (slice.length) {
+              setPoints(prev => [...prev, ...slice])
 
               if (!userTouchedFilters.current) {
                 setActiveCats(prevCats => {
                   const merged = new Set(prevCats)
-                  for (const p of slice) merged.add(p.category)
+                  merged.add(cat)
                   return merged
                 })
               }
 
-              return nextPts
-            })
-
-            // Headlines should be optional; pins should not depend on links.
-            if (onNews) {
-              const items: MapNewsItem[] = slice
-                .filter(p => !!p.headline && !!p.url)
-                .map((p, idx) => ({
-                  id: `${p.category}:${p.url || p.label}:${Date.now()}:${idx}`,
-                  headline: p.headline!,
-                  url: p.url!,
-                  source: p.source,
-                  category: p.category,
-                  lat: p.lat,
-                  lon: p.lon,
-                }))
-
-              if (items.length) onNews(items)
+              i += BATCH_SIZE
             }
 
-            i += BATCH_SIZE
+            if (i < candidates.length) {
+              rafId.current = requestAnimationFrame(pump)
+            }
           }
 
-          if (i < candidates.length) {
-            rafId.current = requestAnimationFrame(pump)
-          }
+          rafId.current = requestAnimationFrame(pump)
         }
 
-        rafId.current = requestAnimationFrame(pump)
+        // Fetch document headlines separately for this legend category.
+        try {
+          const articles = await fetchDocs(controller, query, 10)
+          if (!alive || controller.signal.aborted) return
+
+          for (const article of articles) {
+            const item = articleToNewsItem(article, cat)
+            if (!item) continue
+            if (!allNews.some(x => x.url === item.url && x.category === item.category)) {
+              allNews.push(item)
+            }
+          }
+
+          if (onNews) onNews([...allNews])
+        } catch (e) {
+          if (IS_DEV) {
+            // eslint-disable-next-line no-console
+            console.warn(`DOC fetch failed for ${cat}`, e)
+          }
+        }
       } catch (e) {
         totalErrors += 1
         if (IS_DEV) {
           // eslint-disable-next-line no-console
-          console.error('GDELT query failed:', e)
+          console.error(`GEO fetch failed for ${cat}`, e)
         }
       }
     }
 
-    // fire all three concurrently and then decide if we should show an error
-    Promise.allSettled([runQuery(Q1), runQuery(Q2), runQuery(Q3)]).then(() => {
+    Promise.allSettled(
+      Object.entries(LEGEND_QUERIES).map(([cat, query]) => runCategory(cat, query))
+    ).then(() => {
       if (!alive || controller.signal.aborted) return
 
-      const nothingLoaded = totalCandidates === 0
-      if (nothingLoaded) {
+      if (totalCandidates === 0) {
         if (IS_DEV) {
           // eslint-disable-next-line no-console
-          console.warn('GDELT summary', {
-            totalFetched,
-            totalCandidates,
-            totalErrors,
-          })
+          console.warn('GDELT summary', { totalFetched, totalCandidates, totalErrors })
         }
 
         setErr(
           totalFetched > 0
             ? 'No map data loaded. GDELT returned features, but none could be converted into visible legend-category pins.'
-            : 'No map data loaded. GDELT returned no usable pinned results for the current queries.'
+            : 'No map data loaded. GDELT returned no usable pinned results for the legend categories.'
         )
       }
     })
@@ -1044,7 +1103,7 @@ export default function MapCore({
   }
   function selectAll() {
     userTouchedFilters.current = true
-    setActiveCats(new Set(Object.keys(counts)))
+    setActiveCats(new Set(ALL_CATEGORIES))
   }
   function clearAll() {
     userTouchedFilters.current = true
@@ -1132,7 +1191,14 @@ export default function MapCore({
       </details>
 
       {!hasPins && !err && <div className="text-xs text-slate-500">Loading pins… they’ll appear in batches shortly.</div>}
-      {err && <div className="text-xs text-red-600">{err}</div>}
+      {err && (
+        <div className="text-xs text-red-600">
+          {err}
+          <div className="mt-1 text-[11px] text-slate-500">
+            The map is driven by legend-category GDELT queries. If no pins appear, GEO returned no usable geocoded results for those category buckets.
+          </div>
+        </div>
+      )}
     </div>
   )
 }
