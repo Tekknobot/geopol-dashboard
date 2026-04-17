@@ -87,6 +87,49 @@ function validCoord(lat: number | null, lon: number | null) {
   return true
 }
 
+function flattenCoords(input: any, out: Array<[number, number]> = []): Array<[number, number]> {
+  if (!Array.isArray(input)) return out
+  if (input.length >= 2 && typeof input[0] === 'number' && typeof input[1] === 'number') {
+    out.push([Number(input[0]), Number(input[1])])
+    return out
+  }
+  for (const part of input) flattenCoords(part, out)
+  return out
+}
+
+function centroidFromGeometry(geometry: any): { lat: number | null; lon: number | null } {
+  const type = geometry?.type
+  const coords = geometry?.coordinates
+
+  if (type === 'Point') {
+    const lat = parseCoord(coords?.[1])
+    const lon = parseCoord(coords?.[0])
+    return { lat, lon }
+  }
+
+  const pts = flattenCoords(coords).filter(([lon, lat]) => validCoord(lat, lon))
+  if (!pts.length) return { lat: null, lon: null }
+
+  let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity
+  let sumLon = 0, sumLat = 0
+  for (const [lon, lat] of pts) {
+    minLon = Math.min(minLon, lon)
+    maxLon = Math.max(maxLon, lon)
+    minLat = Math.min(minLat, lat)
+    maxLat = Math.max(maxLat, lat)
+    sumLon += lon
+    sumLat += lat
+  }
+
+  const boxLon = Number.isFinite(minLon) && Number.isFinite(maxLon) ? (minLon + maxLon) / 2 : null
+  const boxLat = Number.isFinite(minLat) && Number.isFinite(maxLat) ? (minLat + maxLat) / 2 : null
+  if (validCoord(boxLat, boxLon)) return { lat: boxLat, lon: boxLon }
+
+  const avgLon = sumLon / pts.length
+  const avgLat = sumLat / pts.length
+  return { lat: avgLat, lon: avgLon }
+}
+
 function inferCategory(name: string, html: string) {
   const s = (name + " " + html).toLowerCase()
   if (/\b(protest|demonstration|strike|rally|march|walkout)\b/.test(s)) return "Protest/Strike"
@@ -108,15 +151,26 @@ function inferCategory(name: string, html: string) {
 async function fetchGeo(query: string, timespan = "24h", maxpoints = 900) {
   const base = (import.meta as any)?.env?.VITE_GDELT_PROXY_URL || "/api/gdelt"
   const attempts = [
-    { query, timespan, maxpoints },
-    { query, timespan: "72h", maxpoints },
-    { query, timespan: "168h", maxpoints },
-    { query: "(protest OR strike OR coup OR sanctions OR election OR war OR conflict)", timespan: "72h", maxpoints: Math.min(maxpoints, 600) },
-    { query: "(politics OR government OR security OR conflict)", timespan: "168h", maxpoints: Math.min(maxpoints, 600) },
+    { query, mode: 'PointData', timespan, maxpoints, geores: 1 },
+    { query, mode: 'PointData', timespan: '72h', maxpoints, geores: 1 },
+    { query, mode: 'PointData', timespan: '168h', maxpoints, geores: 1 },
+    { query, mode: 'PointData', timespan: '168h', maxpoints: Math.min(maxpoints, 600), geores: 0 },
+    { query: '(protest OR strike OR coup OR sanctions OR election OR war OR conflict)', mode: 'PointData', timespan: '72h', maxpoints: Math.min(maxpoints, 600), geores: 0 },
+    { query: '(politics OR government OR security OR conflict)', mode: 'PointData', timespan: '168h', maxpoints: Math.min(maxpoints, 600), geores: 0 },
+    { query, mode: 'country', timespan: '72h', maxpoints: Math.min(maxpoints, 250) },
+    { query, mode: 'country', timespan: '168h', maxpoints: Math.min(maxpoints, 250) },
   ]
   for (const attempt of attempts) {
-    const url = `${base}/api/v2/geo/geo?query=${encodeURIComponent(attempt.query)}&mode=PointData&format=GeoJSON&timespan=${encodeURIComponent(attempt.timespan)}&maxpoints=${attempt.maxpoints}&sortby=date&geores=1`
-    const res = await fetch(url, { headers: { Accept: "application/json, text/plain;q=0.9,*/*;q=0.8" } })
+    const params = new URLSearchParams()
+    params.set('query', attempt.query)
+    params.set('mode', attempt.mode)
+    params.set('format', 'GeoJSON')
+    params.set('timespan', attempt.timespan)
+    params.set('maxpoints', String(attempt.maxpoints))
+    params.set('sortby', 'date')
+    if ('geores' in attempt && typeof attempt.geores === 'number') params.set('geores', String(attempt.geores))
+    const url = `${base}/api/v2/geo/geo?${params.toString()}`
+    const res = await fetch(url, { headers: { Accept: 'application/json, text/plain;q=0.9,*/*;q=0.8' } })
     const text = await res.text()
     if (!res.ok) continue
     try {
@@ -124,7 +178,7 @@ async function fetchGeo(query: string, timespan = "24h", maxpoints = 900) {
       const features = Array.isArray(gj?.features) ? gj.features : []
       if (features.length) return features
     } catch {
-      const start = text.indexOf("{"); const end = text.lastIndexOf("}")
+      const start = text.indexOf('{'); const end = text.lastIndexOf('}')
       if (start !== -1 && end !== -1 && end > start) {
         try {
           const gj = JSON.parse(text.slice(start, end + 1))

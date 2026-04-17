@@ -105,6 +105,49 @@ function validCoord(lat: number | null, lon: number | null) {
   return true
 }
 
+function flattenCoords(input: any, out: Array<[number, number]> = []): Array<[number, number]> {
+  if (!Array.isArray(input)) return out
+  if (input.length >= 2 && typeof input[0] === 'number' && typeof input[1] === 'number') {
+    out.push([Number(input[0]), Number(input[1])])
+    return out
+  }
+  for (const part of input) flattenCoords(part, out)
+  return out
+}
+
+function centroidFromGeometry(geometry: any): { lat: number | null; lon: number | null } {
+  const type = geometry?.type
+  const coords = geometry?.coordinates
+
+  if (type === 'Point') {
+    const lat = parseCoord(coords?.[1])
+    const lon = parseCoord(coords?.[0])
+    return { lat, lon }
+  }
+
+  const pts = flattenCoords(coords).filter(([lon, lat]) => validCoord(lat, lon))
+  if (!pts.length) return { lat: null, lon: null }
+
+  let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity
+  let sumLon = 0, sumLat = 0
+  for (const [lon, lat] of pts) {
+    minLon = Math.min(minLon, lon)
+    maxLon = Math.max(maxLon, lon)
+    minLat = Math.min(minLat, lat)
+    maxLat = Math.max(maxLat, lat)
+    sumLon += lon
+    sumLat += lat
+  }
+
+  const boxLon = Number.isFinite(minLon) && Number.isFinite(maxLon) ? (minLon + maxLon) / 2 : null
+  const boxLat = Number.isFinite(minLat) && Number.isFinite(maxLat) ? (minLat + maxLat) / 2 : null
+  if (validCoord(boxLat, boxLon)) return { lat: boxLat, lon: boxLon }
+
+  const avgLon = sumLon / pts.length
+  const avgLat = sumLat / pts.length
+  return { lat: avgLat, lon: avgLon }
+}
+
 /** Decode a few common HTML entities from GDELT snippets */
 function decodeEntities(s: string) {
   return s
@@ -652,33 +695,37 @@ async function fetchGeo(
   const base = (import.meta as any)?.env?.VITE_GDELT_PROXY_URL || "/api/gdelt";
 
   const attempts = [
-    { query, timespan, maxpoints },
-    { query, timespan: "72h", maxpoints },
-    { query, timespan: "168h", maxpoints },
-    { query: "(protest OR strike OR coup OR sanctions OR election OR war OR conflict)", timespan: "72h", maxpoints: Math.min(maxpoints, 600) },
-    { query: "(politics OR government OR security OR conflict)", timespan: "168h", maxpoints: Math.min(maxpoints, 600) },
+    { query, mode: 'PointData', format: 'GeoJSON', timespan, maxpoints, geores: 1 },
+    { query, mode: 'PointData', format: 'GeoJSON', timespan: '72h', maxpoints, geores: 1 },
+    { query, mode: 'PointData', format: 'GeoJSON', timespan: '168h', maxpoints, geores: 1 },
+    { query, mode: 'PointData', format: 'GeoJSON', timespan: '168h', maxpoints: Math.min(maxpoints, 600), geores: 0 },
+    { query: '(protest OR strike OR coup OR sanctions OR election OR war OR conflict)', mode: 'PointData', format: 'GeoJSON', timespan: '72h', maxpoints: Math.min(maxpoints, 600), geores: 0 },
+    { query: '(politics OR government OR security OR conflict)', mode: 'PointData', format: 'GeoJSON', timespan: '168h', maxpoints: Math.min(maxpoints, 600), geores: 0 },
+    { query, mode: 'country', format: 'GeoJSON', timespan: '72h', maxpoints: Math.min(maxpoints, 250) },
+    { query, mode: 'country', format: 'GeoJSON', timespan: '168h', maxpoints: Math.min(maxpoints, 250) },
+    { query: '(protest OR strike OR coup OR sanctions OR election OR war OR conflict)', mode: 'country', format: 'GeoJSON', timespan: '168h', maxpoints: 200 },
   ];
 
-  let lastProblem = "No usable GeoJSON payload returned";
+  let lastProblem = 'No usable GeoJSON payload returned';
 
   for (const attempt of attempts) {
-    const url =
-      `${base}/api/v2/geo/geo` +
-      `?query=${encodeURIComponent(attempt.query)}` +
-      `&mode=PointData` +
-      `&format=GeoJSON` +
-      `&timespan=${encodeURIComponent(attempt.timespan)}` +
-      `&maxpoints=${attempt.maxpoints}` +
-      `&sortby=date` +
-      `&geores=1`;
+    const params = new URLSearchParams();
+    params.set('query', attempt.query);
+    params.set('mode', attempt.mode);
+    params.set('format', attempt.format);
+    params.set('timespan', attempt.timespan);
+    params.set('maxpoints', String(attempt.maxpoints));
+    params.set('sortby', 'date');
+    if ('geores' in attempt && typeof attempt.geores === 'number') params.set('geores', String(attempt.geores));
 
+    const url = `${base}/api/v2/geo/geo?${params.toString()}`;
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { Accept: "application/json, text/plain;q=0.9,*/*;q=0.8" },
+      headers: { Accept: 'application/json, text/plain;q=0.9,*/*;q=0.8' },
     });
 
     if (res.status === 429 || res.status === 503) {
-      lastProblem = "GDELT is rate-limiting or temporarily unavailable";
+      lastProblem = 'GDELT is rate-limiting or temporarily unavailable';
       continue;
     }
 
@@ -688,27 +735,31 @@ async function fetchGeo(
       continue;
     }
 
-    try {
-      const gj = JSON.parse(text);
+    const tryParse = (payload: string) => {
+      const gj = JSON.parse(payload);
       const features = Array.isArray(gj?.features) ? gj.features : [];
+      return features;
+    };
+
+    try {
+      const features = tryParse(text);
       if (features.length) return features;
-      lastProblem = "GDELT returned an empty feature collection";
+      lastProblem = `GDELT returned an empty feature collection (${attempt.mode}/${attempt.timespan})`;
       continue;
     } catch {
-      const start = text.indexOf("{"), end = text.lastIndexOf("}");
+      const start = text.indexOf('{'), end = text.lastIndexOf('}');
       if (start !== -1 && end > start) {
         try {
-          const gj = JSON.parse(text.slice(start, end + 1));
-          const features = Array.isArray(gj?.features) ? gj.features : [];
+          const features = tryParse(text.slice(start, end + 1));
           if (features.length) return features;
-          lastProblem = "GDELT returned an empty feature collection";
+          lastProblem = `GDELT returned an empty feature collection (${attempt.mode}/${attempt.timespan})`;
           continue;
         } catch {
-          lastProblem = "Failed to parse GDELT GeoJSON payload";
+          lastProblem = 'Failed to parse GDELT GeoJSON payload';
           continue;
         }
       }
-      lastProblem = "Failed to parse GDELT GeoJSON payload";
+      lastProblem = 'Failed to parse GDELT GeoJSON payload';
     }
   }
 
