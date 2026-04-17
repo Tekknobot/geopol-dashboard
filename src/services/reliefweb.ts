@@ -52,6 +52,7 @@ export async function getLatestReports(limit = 12, cacheMs = 1000 * 60 * 10) {
 
   const url = `${RW_BASE}?${new URLSearchParams({
     profile: "minimal",
+    appname: appName(),
   }).toString()}`;
 
   const key = `rw:reports:${limit}`;

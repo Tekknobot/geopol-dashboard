@@ -754,7 +754,7 @@ export default function Dashboard() {
         // ReliefWeb now (fast path)
         const rwPromise = (async () => {
           try {
-            const rw = await getLatestReports(12)
+            const rw = await getLatestReports(32)
             setReports(rw)
             setCache('rw:latest', rw)
             // If we still don't have map headlines, use RW for carousel
