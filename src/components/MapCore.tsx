@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EonetEvent } from '../services/eonet' // prop compatibility
+import { normalizeExternalUrl } from '../utils/links'
 
 // Safe "are we in dev?" check for browser builds (Vite/CRA)
 // Put this just below your imports.
@@ -238,7 +239,7 @@ function extractBestLink(html: string, fallbackName: string): PickedLink {
     // Final score: reputation + Englishness (cap the language boost to avoid overpowering trust)
     const score = base + Math.min(en, 15)
     return {
-      url: cleanUrl(a.url),
+      url: normalizeExternalUrl(cleanUrl(a.url)),
       domain,
       headline,
       score,
@@ -656,6 +657,7 @@ async function fetchGeo(
   const url =
     `${base}/api/v2/geo/geo` +
     `?query=${encodeURIComponent(query)}` +
+    `&mode=PointData` +
     `&format=GeoJSON` +
     `&timespan=${encodeURIComponent(timespan)}` +
     `&maxpoints=${maxpoints}`;
@@ -916,7 +918,7 @@ export default function MapCore({
                   <div className="text-xs text-slate-600">{p.category}</div>
                   {p.headline && p.url ? (
                     <div className="text-[11px]">
-                      <a href={p.url} target="_blank" rel="noopener noreferrer nofollow ugc" className="text-blue-600 underline" title={p.headline}>
+                      <a href={normalizeExternalUrl(p.url)} target="_blank" rel="noopener noreferrer nofollow ugc" className="text-blue-600 underline" title={p.headline}>
                         {p.headline}
                       </a>
                       {p.source ? <span className="text-slate-500"> — {p.source}</span> : null}

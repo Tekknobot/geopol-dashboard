@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Newspaper, ExternalLink, ChevronLeft, ChevronRight, Pause, Play, Info } from 'lucide-react'
 import type { ReliefWebItem } from '../services/reliefweb'
+import { normalizeExternalUrl } from '../utils/links'
 
 // --- Local helpers (duplicated small bits so this file is standalone)
 const CATEGORY = 'Humanitarian'
@@ -167,7 +168,7 @@ export default function ReliefWebCarousel({
             )}
           </div>
 
-          <a href={it.url} target="_blank" rel="noreferrer" className="block" title={it.headline}>
+          <a href={normalizeExternalUrl(it.url)} target="_blank" rel="noreferrer" className="block" title={it.headline}>
             {/* Add horizontal padding so text can’t sit under side buttons */}
             <h3 className="font-extrabold leading-tight tracking-tight text-xl sm:text-2xl md:text-3xl whitespace-normal break-words">
               {it.headline}
@@ -180,7 +181,7 @@ export default function ReliefWebCarousel({
               {it.source || (() => { try { return new URL(it.url).hostname.replace(/^www\./,'') } catch { return 'source' } })()}
             </span>
             <span className="opacity-50">•</span>
-            <a href={it.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500">
+            <a href={normalizeExternalUrl(it.url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500">
               Read <ExternalLink className="h-3.5 w-3.5 opacity-70" />
             </a>
             {it.countryName && onOpenContext && (

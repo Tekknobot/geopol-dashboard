@@ -1,5 +1,6 @@
 // src/utils/pins.ts
 import type { MapNewsItem } from "../components/MapCore"
+import { normalizeExternalUrl } from './links'
 
 type SocioPoint = {
   lat: number
@@ -24,7 +25,7 @@ const BLOCKED_PARTS = [
 ]
 const STRIP_PARAMS = ["utm_source","utm_medium","utm_campaign","utm_term","utm_content","fbclid","gclid","mc_cid","mc_eid"]
 
-function cleanUrl(u: URL) { STRIP_PARAMS.forEach(k => u.searchParams.delete(k)); return u.toString() }
+function cleanUrl(u: URL) { STRIP_PARAMS.forEach(k => u.searchParams.delete(k)); return normalizeExternalUrl(u.toString()) }
 function domainFrom(u: URL) { return u.hostname.toLowerCase().replace(/^www\./,"") }
 function decodeEntities(s: string) { return s.replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">") }
 function headlineFrom(html: string, fallback?: string) {

@@ -13,6 +13,7 @@ import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pau
 import type { MapNewsItem } from '../components/MapCore'
 import { eventsToMapNews } from '../utils/mapNews'
 import ReliefWebCarousel from '../components/ReliefWebCarousel'
+import { normalizeExternalUrl } from '../utils/links'
 
 // ---------- Reverse geocode (lat/lon -> country) with caching
 const COORD_CACHE_KEY = 'geo:latlon->country';
@@ -392,7 +393,7 @@ function NewsCarousel({
             )}
           </div>
 
-          <a href={it.url} target="_blank" rel="noreferrer" className="block" title={it.headline}>
+          <a href={normalizeExternalUrl(it.url)} target="_blank" rel="noreferrer" className="block" title={it.headline}>
             <h2 className="font-extrabold leading-tight tracking-tight text-3xl sm:text-5xl md:text-6xl xl:text-7xl whitespace-normal break-words">
               {it.headline}
             </h2>
@@ -404,7 +405,7 @@ function NewsCarousel({
               {it.source || (() => { try { return new URL(it.url).hostname.replace(/^www\./,'') } catch { return 'source' } })()}
             </span>
             <span className="opacity-50">•</span>
-            <a href={it.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500">
+            <a href={normalizeExternalUrl(it.url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500">
               Read article <ExternalLink className="h-4 w-4 opacity-70" />
             </a>
             {ctxCountry && (
@@ -1323,7 +1324,7 @@ export default function Dashboard() {
                               {headlines.map((h, i) => (
                                 <li key={i} className="flex items-center justify-between gap-2">
                                   <a
-                                    href={h.url}
+                                    href={normalizeExternalUrl(h.url)}
                                     target="_blank"
                                     rel="noreferrer"
                                     title={h.title}
@@ -1449,7 +1450,7 @@ export default function Dashboard() {
                       <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
                       <div className="min-w-0 flex-1">
                         <a
-                          href={item.fields.url}
+                          href={normalizeExternalUrl(item.fields.url)}
                           target="_blank"
                           rel="noreferrer"
                           title={item.fields.title}
@@ -1477,7 +1478,7 @@ export default function Dashboard() {
                         </div>
                         {countryName && <EventContextChips countryName={countryName} />}
                       </div>
-                      <a href={item.fields.url} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
+                      <a href={normalizeExternalUrl(item.fields.url)} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
                         <ExternalLink className="h-3.5 w-3.5 opacity-60" />
                       </a>
                     </div>
@@ -1494,7 +1495,7 @@ export default function Dashboard() {
                   <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
                   <div className="min-w-0 flex-1">
                     <a
-                      href={item.url}
+                      href={normalizeExternalUrl(item.url)}
                       target="_blank"
                       rel="noreferrer"
                       title={item.headline}
@@ -1515,7 +1516,7 @@ export default function Dashboard() {
                       <span className="shrink-0">Lat/Lon: {item.lat.toFixed(2)}, {item.lon.toFixed(2)}</span>
                     </div>
                   </div>
-                  <a href={item.url} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
+                  <a href={normalizeExternalUrl(item.url)} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
                     <ExternalLink className="h-3.5 w-3.5 opacity-60" />
                   </a>
                 </div>

@@ -4,6 +4,7 @@ import Card from "../components/Card"
 import Loading from "../components/Loading"
 import ErrorState from "../components/ErrorState"
 import { fetchPins24h, type PinRow } from "../utils/pins"
+import { normalizeExternalUrl } from "../utils/links"
 
 const ALL_CATS = [
   "Protest/Strike","Coup","Sanctions","Elections/Politics","Energy","Supply Chain",
@@ -134,7 +135,7 @@ export default function EventsPage() {
                             {item.category}
                           </span>
                           <a
-                            href={item.url}
+                            href={normalizeExternalUrl(item.url)}
                             target="_blank"
                             rel="noreferrer"
                             className="block text-[15px] md:text-[17px] font-semibold leading-snug hover:underline whitespace-normal break-words"
