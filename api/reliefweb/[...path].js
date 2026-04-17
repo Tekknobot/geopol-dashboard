@@ -1,24 +1,12 @@
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
-}
-
-async function readJsonBody(req) {
-  if (req.body && typeof req.body === 'object') return req.body;
-  if (typeof req.body === 'string' && req.body) {
-    try { return JSON.parse(req.body); } catch { return req.body; }
-  }
-  return undefined;
-}
-
 export default async function handler(req, res) {
-  setCors(res);
-  if (req.method === 'OPTIONS') return res.status(204).end();
-
   try {
-    const pathParam = req.query?.path;
-    const targetPath = Array.isArray(pathParam) ? pathParam.join('/') : String(pathParam || '');
+    const rawPath = req.query?.path ?? [];
+    const parts = Array.isArray(rawPath) ? rawPath : [rawPath];
+    const targetPath = parts.filter(Boolean).join('/');
+    if (!targetPath) {
+      res.status(400).json({ error: 'Missing ReliefWeb path' });
+      return;
+    }
 
     const qs = new URLSearchParams();
     for (const [key, value] of Object.entries(req.query || {})) {
@@ -30,30 +18,33 @@ export default async function handler(req, res) {
       }
     }
 
-    const url = `https://api.reliefweb.int/${targetPath}${qs.toString() ? `?${qs.toString()}` : ''}`;
-    const method = (req.method || 'GET').toUpperCase();
-    const body = method === 'GET' || method === 'HEAD' ? undefined : await readJsonBody(req);
+    let body;
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      if (typeof req.body === 'string') body = req.body;
+      else if (req.body != null) body = JSON.stringify(req.body);
+    }
 
+    const url = `https://api.reliefweb.int/${targetPath}${qs.toString() ? `?${qs.toString()}` : ''}`;
     const upstream = await fetch(url, {
-      method,
+      method: req.method || 'GET',
       headers: {
-        'User-Agent': 'geopol-dashboard/1.0',
-        'Accept': req.headers.accept || 'application/json, text/plain;q=0.9,*/*;q=0.8',
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        'accept': req.headers.accept || 'application/json, text/plain;q=0.9,*/*;q=0.8',
+        'content-type': req.headers['content-type'] || 'application/json',
+        'user-agent': 'geopol-dashboard-vercel-proxy/1.0'
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body
     });
 
-    const bodyText = await upstream.text();
-    const contentType = upstream.headers.get('content-type') || 'application/json; charset=utf-8';
-
+    const responseBody = await upstream.text();
     res.status(upstream.status);
-    res.setHeader('Content-Type', contentType);
-    return res.send(bodyText);
-  } catch (err) {
-    return res.status(500).json({
-      error: 'Proxy request failed',
-      details: err instanceof Error ? err.message : String(err),
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json; charset=utf-8');
+    res.send(responseBody);
+  } catch (error) {
+    res.status(500).json({
+      error: 'ReliefWeb proxy request failed',
+      details: error instanceof Error ? error.message : String(error)
     });
   }
 }

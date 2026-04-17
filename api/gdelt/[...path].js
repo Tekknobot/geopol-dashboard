@@ -1,16 +1,12 @@
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
-}
-
 export default async function handler(req, res) {
-  setCors(res);
-  if (req.method === 'OPTIONS') return res.status(204).end();
-
   try {
-    const pathParam = req.query?.path;
-    const targetPath = Array.isArray(pathParam) ? pathParam.join('/') : String(pathParam || '');
+    const rawPath = req.query?.path ?? [];
+    const parts = Array.isArray(rawPath) ? rawPath : [rawPath];
+    const targetPath = parts.filter(Boolean).join('/');
+    if (!targetPath) {
+      res.status(400).json({ error: 'Missing GDELT path' });
+      return;
+    }
 
     const qs = new URLSearchParams();
     for (const [key, value] of Object.entries(req.query || {})) {
@@ -26,21 +22,21 @@ export default async function handler(req, res) {
     const upstream = await fetch(url, {
       method: 'GET',
       headers: {
-        'User-Agent': 'geopol-dashboard/1.0',
-        'Accept': req.headers.accept || 'application/json, text/plain;q=0.9,*/*;q=0.8',
-      },
+        'accept': req.headers.accept || 'application/json, text/plain;q=0.9,*/*;q=0.8',
+        'user-agent': 'geopol-dashboard-vercel-proxy/1.0'
+      }
     });
 
-    const bodyText = await upstream.text();
-    const contentType = upstream.headers.get('content-type') || 'application/json; charset=utf-8';
-
+    const body = await upstream.text();
     res.status(upstream.status);
-    res.setHeader('Content-Type', contentType);
-    return res.send(bodyText);
-  } catch (err) {
-    return res.status(500).json({
-      error: 'Proxy request failed',
-      details: err instanceof Error ? err.message : String(err),
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json; charset=utf-8');
+    res.send(body);
+  } catch (error) {
+    res.status(500).json({
+      error: 'GDELT proxy request failed',
+      details: error instanceof Error ? error.message : String(error)
     });
   }
 }
