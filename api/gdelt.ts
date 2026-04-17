@@ -1,23 +1,21 @@
 export default async function handler(req: any, res: any) {
   try {
-    const { searchParams } = new URL(req.url, `http://${req.headers.host}`)
-
-    const queryString = searchParams.toString()
+    const url = new URL(req.url, `http://${req.headers.host}`)
 
     const gdeltUrl =
-      `https://api.gdeltproject.org/api/v2/geo/geo?${queryString}`
+      "https://api.gdeltproject.org/api/v2/geo/geo?" +
+      url.searchParams.toString()
 
-    const response = await fetch(gdeltUrl)
-
-    const data = await response.text()
+    const r = await fetch(gdeltUrl)
+    const text = await r.text()
 
     res.setHeader("Content-Type", "application/json")
-    res.status(200).send(data)
+    res.status(200).send(text)
 
-  } catch (err: any) {
+  } catch (e: any) {
     res.status(500).json({
       error: "GDELT proxy failed",
-      details: err.message
+      details: e.message
     })
   }
 }
