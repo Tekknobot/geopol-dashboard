@@ -1,10 +1,8 @@
-import { defineHandler, getQuery } from 'nitro/h3'
-
-export default defineHandler(async (event) => {
-  const path = event.context.params?.path || ''
+export default defineEventHandler(async (event) => {
+  const path = getRouterParam(event, 'path') || ''
+  const query = getQuery(event)
   const qs = new URLSearchParams()
 
-  const query = getQuery(event)
   for (const [key, value] of Object.entries(query)) {
     if (Array.isArray(value)) {
       for (const v of value) qs.append(key, String(v))
@@ -13,17 +11,19 @@ export default defineHandler(async (event) => {
     }
   }
 
-  const upstream = await fetch(`https://api.gdeltproject.org/${path}?${qs.toString()}`, {
-    headers: { 'User-Agent': 'geopol-dashboard/1.0' },
+  const url = `https://api.gdeltproject.org/${path}?${qs.toString()}`
+  const upstream = await fetch(url, {
+    headers: {
+      'User-Agent': 'geopol-dashboard/1.0',
+      'Accept': 'application/json, text/plain;q=0.9,*/*;q=0.8',
+    },
   })
 
   const text = await upstream.text()
 
-  return new Response(text, {
-    status: upstream.status,
-    headers: {
-      'content-type': upstream.headers.get('content-type') || 'application/json',
-      'access-control-allow-origin': '*',
-    },
-  })
+  setResponseStatus(event, upstream.status)
+  setHeader(event, 'content-type', upstream.headers.get('content-type') || 'application/json')
+  setHeader(event, 'access-control-allow-origin', '*')
+
+  return text
 })
