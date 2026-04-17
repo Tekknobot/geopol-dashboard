@@ -66,7 +66,7 @@ function sortByRelevance<T extends HeadlineItem>(arr: T[]): T[] { return [...arr
 export default function ReliefWebCarousel({
   reports,
   onOpenContext,
-  max = 60,
+  max = 24,
   storageKey = 'carousel:relief:last',
 }: {
   reports: ReliefWebItem[] | null

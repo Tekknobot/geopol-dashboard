@@ -3,7 +3,7 @@ import Card from '../components/Card'
 import Loading from '../components/Loading'
 import ErrorState from '../components/ErrorState'
 import { getLatestReports, ReliefWebItem } from '../services/reliefweb'
-import { getOpenEvents, EonetEvent } from '../services/eonet'
+import type { EonetEvent } from '../services/eonet'
 import { wbGetGlobalIndicator, toSeries, WbPoint, wbGetCountryIndicator, wbGetGlobalIndicator as wbGlobal } from '../services/worldBank'
 import { searchCountryByName, type Country } from '../services/restCountries'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, LabelList } from 'recharts'
@@ -11,7 +11,6 @@ import LazyEventMap from '../components/LazyEventMap'
 import { getCache, setCache } from '../services/cache'
 import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pause, Play, Info } from 'lucide-react'
 import type { MapNewsItem } from '../components/MapCore'
-import { eventsToMapNews } from '../utils/mapNews'
 import ReliefWebCarousel from '../components/ReliefWebCarousel'
 import { normalizeExternalUrl } from '../utils/links'
 
@@ -690,7 +689,7 @@ export default function Dashboard() {
 
   // Cached "front page" carousel so we can show headlines immediately
   const CAROUSEL_CACHE_KEY = 'carousel:last'
-  const CAROUSEL_MAX = 100; // show up to 100 items in the carousel
+  const CAROUSEL_MAX = 24; // keep the top carousel concise and stable
   const [carouselItems, setCarouselItems] = useState<HeadlineItem[]>(() => {
     try {
       const raw = localStorage.getItem(CAROUSEL_CACHE_KEY)
@@ -719,7 +718,6 @@ export default function Dashboard() {
         const cgdp = getCache<WbPoint[]>('wld:gdp', TTL)
         const ccpi = getCache<WbPoint[]>('wld:cpi', TTL)
         const crw  = getCache<ReliefWebItem[]>('rw:latest', TTL)
-        const cev  = getCache<EonetEvent[]>('eonet:open', TTL)
 
         if (cgdp) setGdpSeries(cgdp)
         if (ccpi) setCpiSeries(ccpi)
@@ -738,19 +736,6 @@ export default function Dashboard() {
             setCarouselItems(sortByRelevance(seed).slice(0, CAROUSEL_MAX))
           }
         }
-        // If we have cached EONET, surface those headlines immediately, too
-        if (cev) {
-          setEvents(cev)
-          setEventsLoading(false)
-          const cachedNews = eventsToMapNews(cev)
-          if (cachedNews.length) {
-            handleNews(cachedNews)
-            const ranked = sortByRelevance(cachedNews).slice(0, CAROUSEL_MAX)
-            setCarouselItems(ranked)
-            try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
-          }
-        }
-
         // ReliefWeb now (fast path)
         const rwPromise = (async () => {
           try {
@@ -791,27 +776,8 @@ export default function Dashboard() {
           }
         })()
 
-        // ⭐ EONET immediately (no idle), to get map-style headlines without the map
-        const newsPromise = (async () => {
-          try {
-            const ev = await getOpenEvents()
-            setEvents(ev); setCache('eonet:open', ev)
-            setEventsLoading(false)
-            const news = eventsToMapNews(ev)
-            if (news.length) {
-              handleNews(news)
-              const ranked = sortByRelevance(news).slice(0, CAROUSEL_MAX)
-              setCarouselItems(ranked)
-              try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
-            }
-          } catch {
-            // even on failure, stop "loading…" so the card can show a friendly empty state
-            setEventsLoading(false)
-          }
-        })()
-
         // Fire all; UI renders as things resolve
-        void Promise.race([rwPromise, kpiPromise, newsPromise])
+        void Promise.race([rwPromise, kpiPromise])
       } catch (e:any) {
         setError(e?.message || 'Failed to load data')
       }
@@ -1133,10 +1099,10 @@ export default function Dashboard() {
 
             <MiniSection title="What it shows" storageKey="intro:what" defaultOpen={false}>
               <ul className="list-disc list-inside space-y-1">
-                <li>Live map of incidents (last 24h)</li>
-                <li>Latest headlines tied to pins or feeds</li>
+                <li>Global map pinned from ReliefWeb headlines</li>
+                <li>Latest humanitarian headlines</li>
                 <li>GDP growth & CPI (World Bank)</li>
-                <li>ReliefWeb updates (fallback)</li>
+                <li>Country context from current reporting</li>
               </ul>
             </MiniSection>
 
@@ -1172,8 +1138,8 @@ export default function Dashboard() {
       </CollapsibleSection>
 
       {/* Map */}
-      <Card title="Global Socio-Political Events (Last 24h)">
-        <LazyEventMap events={events} onNews={handleNews} />
+      <Card title="Global ReliefWeb Headline Map">
+        <LazyEventMap events={events} reports={reports || []} onNews={handleNews} />
       </Card>
 
       {/* Regional Volatility Leaderboard (Counts, Last 7 Days) */}

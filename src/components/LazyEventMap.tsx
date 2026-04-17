@@ -1,5 +1,6 @@
 import React, { Suspense } from 'react'
 import type { EonetEvent } from '../services/eonet'
+import type { ReliefWebItem } from '../services/reliefweb'
 import type { MapNewsItem } from './MapCore'
 const MapCore = React.lazy(() => import('./MapCore'))
 
@@ -14,13 +15,15 @@ if (typeof window !== 'undefined') {
 export default function LazyEventMap({
   events,
   onNews,
+  reports = [],
 }: {
   events: EonetEvent[]
+  reports?: ReliefWebItem[]
   onNews?: (items: MapNewsItem[]) => void
 }) {
   return (
     <Suspense fallback={<div className="h-64 flex items-center justify-center text-slate-500">Loading map…</div>}>
-      <MapCore events={events} onNews={onNews} />
+      <MapCore events={events} reports={reports} onNews={onNews} />
     </Suspense>
   )
 }
