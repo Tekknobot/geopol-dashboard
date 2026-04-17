@@ -5,6 +5,7 @@ import Loading from '../components/Loading'
 import ErrorState from '../components/ErrorState'
 import { fetchPins24h, type PinRow } from '../utils/pins'
 import { normalizeExternalUrl } from '../utils/links'
+import { buildStructuralSnapshot, type StructuralSnapshot } from '../services/trackers'
 
 const ALL_CATS = [
   'Flood',
@@ -42,6 +43,7 @@ export default function EventsPage() {
   const [err, setErr] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [cats, setCats] = useState<Set<string>>(new Set(ALL_CATS))
+  const [structural, setStructural] = useState<StructuralSnapshot | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -50,6 +52,13 @@ export default function EventsPage() {
         const data = await fetchPins24h()
         if (!alive) return
         setRows(data)
+        const sampleCountries = Array.from(new Set(data.map(r => r.countryGuess).filter(Boolean))).slice(0, 8)
+        if (sampleCountries.length) {
+          const snapshot = await buildStructuralSnapshot(sampleCountries)
+          if (alive) setStructural(snapshot)
+        } else if (alive) {
+          setStructural(null)
+        }
       } catch (e: any) {
         if (!alive) return
         setErr(e?.message || 'Failed to load ReliefWeb reports')
@@ -84,18 +93,55 @@ export default function EventsPage() {
   }, [filtered])
 
   const trackerCards = useMemo(() => {
-    if (!rows) return [] as Array<{ title: string; value: number; note: string }>
+    if (!rows) return [] as Array<{ title: string; value: string; note: string; source: string }>
     const volatility = rows.length
     const corruption = rows.filter(r => r.category === 'Governance/Corruption').length
     const conflict = rows.filter(r => r.category === 'Conflict/Insecurity').length
     const outbreaks = rows.filter(r => r.category === 'Health/Outbreak').length
+    const displacement = rows.filter(r => r.category === 'Displacement').length
     return [
-      { title: 'Volatility', value: volatility, note: 'All ReliefWeb reports mapped in the last 24h' },
-      { title: 'Corruption / Governance', value: corruption, note: 'Reports tagged or inferred as governance and corruption related' },
-      { title: 'Conflict / Insecurity', value: conflict, note: 'Conflict and security-related reports in the same 24h window' },
-      { title: 'Health / Outbreak', value: outbreaks, note: 'Humanitarian health and outbreak coverage in the last 24h' },
+      {
+        title: 'Volatility',
+        value: volatility > 0 ? String(volatility) : (structural?.avgPoliticalStability != null ? structural.avgPoliticalStability.toFixed(2) : '—'),
+        note: volatility > 0
+          ? 'Mapped ReliefWeb reports in the last 24h.'
+          : 'Backfilled with sampled World Bank political stability scores when no live ReliefWeb report count is available.',
+        source: volatility > 0 ? 'ReliefWeb' : 'World Bank',
+      },
+      {
+        title: 'Corruption / Governance',
+        value: corruption > 0 ? String(corruption) : (structural?.avgCorruptionControl != null ? structural.avgCorruptionControl.toFixed(2) : '—'),
+        note: corruption > 0
+          ? 'Reports tagged or inferred as governance and corruption related.'
+          : 'Backfilled with sampled World Bank control-of-corruption estimates when live report coverage is thin.',
+        source: corruption > 0 ? 'ReliefWeb' : 'World Bank',
+      },
+      {
+        title: 'Conflict / Insecurity',
+        value: String(conflict),
+        note: 'Conflict and security-related ReliefWeb reports in the same 24h window.',
+        source: 'ReliefWeb',
+      },
+      {
+        title: 'Health / Outbreak',
+        value: String(outbreaks),
+        note: 'Humanitarian health and outbreak coverage in the last 24h.',
+        source: 'ReliefWeb',
+      },
+      {
+        title: 'Displacement',
+        value: String(displacement),
+        note: 'Displacement and migration-related reporting mapped from ReliefWeb.',
+        source: 'ReliefWeb',
+      },
+      {
+        title: 'Economic Stress',
+        value: structural?.avgInflation != null ? `${structural.avgInflation.toFixed(1)}%` : '—',
+        note: 'Sampled World Bank CPI trend across countries appearing in the current ReliefWeb feed.',
+        source: 'World Bank',
+      },
     ]
-  }, [rows])
+  }, [rows, structural])
 
   const volatilitySeries = useMemo(() => buildHourly(rows || []), [rows])
   const corruptionSeries = useMemo(() => buildHourly(rows || [], row => row.category === 'Governance/Corruption'), [rows])
@@ -114,11 +160,27 @@ export default function EventsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {trackerCards.map(card => (
           <Card key={card.title} title={card.title}>
-            <div className="text-3xl font-semibold tracking-tight">{card.value}</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-3xl font-semibold tracking-tight">{card.value}</div>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200">{card.source}</span>
+            </div>
             <p className="mt-2 text-xs text-slate-600">{card.note}</p>
           </Card>
         ))}
       </div>
+
+      {structural && (
+        <Card title="Structural backfill snapshot">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+            <div className="rounded border p-3"><div className="text-slate-500 text-xs">Sample countries</div><div className="mt-1 text-xl font-semibold">{structural.sampleSize}</div></div>
+            <div className="rounded border p-3"><div className="text-slate-500 text-xs">Political stability</div><div className="mt-1 text-xl font-semibold">{structural.avgPoliticalStability != null ? structural.avgPoliticalStability.toFixed(2) : '—'}</div></div>
+            <div className="rounded border p-3"><div className="text-slate-500 text-xs">Corruption control</div><div className="mt-1 text-xl font-semibold">{structural.avgCorruptionControl != null ? structural.avgCorruptionControl.toFixed(2) : '—'}</div></div>
+            <div className="rounded border p-3"><div className="text-slate-500 text-xs">Gov. effectiveness</div><div className="mt-1 text-xl font-semibold">{structural.avgGovernmentEffectiveness != null ? structural.avgGovernmentEffectiveness.toFixed(2) : '—'}</div></div>
+            <div className="rounded border p-3"><div className="text-slate-500 text-xs">Avg inflation</div><div className="mt-1 text-xl font-semibold">{structural.avgInflation != null ? `${structural.avgInflation.toFixed(1)}%` : '—'}</div></div>
+          </div>
+          <p className="mt-3 text-xs text-slate-600">This panel fills thin ReliefWeb tracker coverage with free World Bank indicators sampled from countries appearing in the live 24-hour report stream.</p>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <Card title="ReliefWeb Volatility Tracker (24h)">

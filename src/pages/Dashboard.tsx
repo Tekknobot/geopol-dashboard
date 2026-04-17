@@ -1513,12 +1513,12 @@ export default function Dashboard() {
       <Card title="What this app tracks">
         <div className="space-y-3 text-sm text-slate-700">
           <p>
-            The dashboard combines <span className="font-medium">real-time event intelligence</span> with key macroeconomic indicators
+            The dashboard combines <span className="font-medium">ReliefWeb live humanitarian reporting</span> with public structural indicators
             to provide a single view of emerging global dynamics—and situates local events in a broader geopolitical frame.
           </p>
 
           <ul className="list-disc list-inside pl-2 space-y-1.5">
-            <li><span className="font-medium">Live incident map:</span> Global unrest, political, and security events.</li>
+            <li><span className="font-medium">ReliefWeb map:</span> Live humanitarian reports pinned by country centroid.</li>
             <li><span className="font-medium">Macro backdrop:</span> GDP growth trends (World Bank, WLD series).</li>
             <li><span className="font-medium">Inflation data:</span> Year-over-year CPI (World Bank, WLD series).</li>
             <li><span className="font-medium">Humanitarian feed:</span> Latest situation reports (ReliefWeb API).</li>

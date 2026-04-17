@@ -282,13 +282,57 @@ export default function CountryExplorer() {
     const conflict = countryReports.filter(r => reliefWebCategory(r) === 'Conflict/Insecurity').length
     const displacement = countryReports.filter(r => reliefWebCategory(r) === 'Displacement').length
     const outbreaks = countryReports.filter(r => reliefWebCategory(r) === 'Health/Outbreak').length
+    const food = countryReports.filter(r => reliefWebCategory(r) === 'Food Security').length
+    const pv = series['PV.EST']?.country?.filter(p => p.value !== null).slice(-1)[0]?.value ?? null
+    const ge = series['GE.EST']?.country?.filter(p => p.value !== null).slice(-1)[0]?.value ?? null
+    const cc = series['CC.EST']?.country?.filter(p => p.value !== null).slice(-1)[0]?.value ?? null
+    const gdp = series['NY.GDP.MKTP.KD.ZG']?.country?.filter(p => p.value !== null).slice(-1)[0]?.value ?? null
+    const cpi = series['FP.CPI.TOTL.ZG']?.country?.filter(p => p.value !== null).slice(-1)[0]?.value ?? null
     return [
-      { title: 'Recent reports', value: countryReports.length },
-      { title: 'Corruption / Governance', value: corruption },
-      { title: 'Conflict / Insecurity', value: conflict },
-      { title: 'Displacement / Migration', value: displacement + outbreaks },
+      {
+        title: 'Volatility',
+        value: countryReports.length > 0 ? String(countryReports.length) : (pv != null ? pv.toFixed(2) : '—'),
+        note: countryReports.length > 0 ? 'Live ReliefWeb report count in the current 24-hour window.' : 'Backfilled with World Bank political stability estimate.',
+        source: countryReports.length > 0 ? 'ReliefWeb' : 'World Bank',
+      },
+      {
+        title: 'Conflict / Insecurity',
+        value: String(conflict),
+        note: 'Conflict and insecurity-related ReliefWeb reporting.',
+        source: 'ReliefWeb',
+      },
+      {
+        title: 'Governance effectiveness',
+        value: ge != null ? ge.toFixed(2) : '—',
+        note: 'World Bank governance effectiveness estimate.',
+        source: 'World Bank',
+      },
+      {
+        title: 'Corruption control',
+        value: corruption > 0 ? String(corruption) : (cc != null ? cc.toFixed(2) : '—'),
+        note: corruption > 0 ? 'Live governance / corruption reporting in ReliefWeb.' : 'Backfilled with World Bank control-of-corruption estimate.',
+        source: corruption > 0 ? 'ReliefWeb' : 'World Bank',
+      },
+      {
+        title: 'Economic stress',
+        value: cpi != null ? `${cpi.toFixed(1)}%` : '—',
+        note: 'Latest available World Bank CPI inflation reading.',
+        source: 'World Bank',
+      },
+      {
+        title: 'Humanitarian pressure',
+        value: String(displacement + outbreaks + food),
+        note: 'Combined displacement, outbreak, and food-security ReliefWeb reports.',
+        source: 'ReliefWeb',
+      },
+      {
+        title: 'GDP growth',
+        value: gdp != null ? `${gdp.toFixed(1)}%` : '—',
+        note: 'Latest available World Bank GDP growth reading.',
+        source: 'World Bank',
+      },
     ]
-  }, [countryReports])
+  }, [countryReports, series])
 
   return (
     <div className="space-y-6">
@@ -366,11 +410,14 @@ export default function CountryExplorer() {
       </Card>
 
       {selected && (
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {countryTrackerCards.map(card => (
             <Card key={card.title} title={card.title}>
-              <div className="text-3xl font-semibold tracking-tight">{card.value}</div>
-              <p className="mt-2 text-xs text-slate-600">Based on ReliefWeb reports from the current 24-hour window for {selected.name.common}.</p>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-3xl font-semibold tracking-tight">{card.value}</div>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200">{card.source}</span>
+              </div>
+              <p className="mt-2 text-xs text-slate-600">{card.note}</p>
             </Card>
           ))}
         </div>
