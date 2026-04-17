@@ -75,7 +75,8 @@ export async function getLatestReports(limit = 12, cacheMs = 1000 * 60 * 10) {
         throw err;
       }
       const raw = await res.json();
-      const data = (raw as any)?.data ?? [];
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      const data = Array.isArray((parsed as any)?.data) ? (parsed as any).data : [];
       setCache<ReliefWebItem[]>(key, data);
       return data as ReliefWebItem[];
     } catch (e: any) {
