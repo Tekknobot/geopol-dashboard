@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/api/gdelt/api/v2/:path*",
-      "destination": "https://api.gdeltproject.org/api/v2/:path*"
+      "source": "/api/gdelt/:path*",
+      "destination": "https://api.gdeltproject.org/:path*"
     },
     {
       "source": "/api/reliefweb/:path*",
