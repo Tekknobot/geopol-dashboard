@@ -643,76 +643,48 @@ function inferCategory(name: string, html: string): Cat {
 
 
 /** ---------- Progressive fetch & batch-yield from GDELT ---------- */
-function gdeltBases() {
-  const envBase = (import.meta as any)?.env?.VITE_GDELT_PROXY_URL
-  const bases = [
-    envBase,
-    '/api/gdelt',
-    import.meta.env.DEV ? '/gdelt' : null,
-    'https://api.gdeltproject.org',
-  ].filter(Boolean) as string[]
-
-  const seen = new Set<string>()
-  return bases.filter((base) => {
-    if (seen.has(base)) return false
-    seen.add(base)
-    return true
-  })
-}
-
-function buildGdeltUrl(base: string, query: string, timespan: string, maxpoints: number) {
-  return (
-    `${base.replace(/\/$/, '')}/api/v2/geo/geo` +
-    `?query=${encodeURIComponent(query)}` +
-    `&mode=PointData` +
-    `&format=GeoJSON` +
-    `&timespan=${encodeURIComponent(timespan)}` +
-    `&maxpoints=${maxpoints}`
-  )
-}
-
 async function fetchGeo(
   controller: AbortController,
   query: string,
   timespan = "24h",
   maxpoints = 900
 ) {
-  let lastError: Error | null = null
+  const base = (import.meta as any)?.env?.VITE_GDELT_PROXY_URL || "/api/gdelt";
 
-  for (const base of gdeltBases()) {
-    const url = buildGdeltUrl(base, query, timespan, maxpoints)
+  // Correct URL: include query + format=GeoJSON + timespan + maxpoints
+  const url =
+    `${base}/api/v2/geo/geo` +
+    `?query=${encodeURIComponent(query)}` +
+    `&mode=PointData` +
+    `&format=GeoJSON` +
+    `&timespan=${encodeURIComponent(timespan)}` +
+    `&maxpoints=${maxpoints}`;
 
-    try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: { Accept: "application/json, text/plain;q=0.9,*/*;q=0.8" },
-      })
+  const res = await fetch(url, {
+    signal: controller.signal,
+    headers: { Accept: "application/json, text/plain;q=0.9,*/*;q=0.8" },
+  });
 
-      if (res.status === 429 || res.status === 503) {
-        throw new Error("GDELT is rate-limiting or temporarily unavailable")
-      }
-
-      const text = await res.text()
-      if (!res.ok) throw new Error(`GDELT ${res.status}: ${text.slice(0, 200)}`)
-
-      try {
-        const gj = JSON.parse(text)
-        return Array.isArray(gj?.features) ? gj.features : []
-      } catch {
-        const start = text.indexOf("{"), end = text.lastIndexOf("}")
-        if (start !== -1 && end > start) {
-          const gj = JSON.parse(text.slice(start, end + 1))
-          return Array.isArray(gj?.features) ? gj.features : []
-        }
-        throw new Error("Failed to parse GDELT GeoJSON payload")
-      }
-    } catch (err: any) {
-      if (controller.signal.aborted) throw err
-      lastError = err instanceof Error ? err : new Error(String(err || 'Unknown GDELT error'))
-    }
+  // Handle GDELT rate limiting and transient errors
+  if (res.status === 429 || res.status === 503) {
+    throw new Error("GDELT is rate-limiting or temporarily unavailable");
   }
 
-  throw lastError ?? new Error('Unable to reach any GDELT endpoint')
+  const text = await res.text();
+  if (!res.ok) throw new Error(`GDELT ${res.status}: ${text.slice(0, 200)}`);
+
+  // Robust parse: some GDELT responses contain leading HTML noise on errors
+  try {
+    const gj = JSON.parse(text);
+    return Array.isArray(gj?.features) ? gj.features : [];
+  } catch {
+    const start = text.indexOf("{"), end = text.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      const gj = JSON.parse(text.slice(start, end + 1));
+      return Array.isArray(gj?.features) ? gj.features : [];
+    }
+    throw new Error("Failed to parse GDELT GeoJSON payload");
+  }
 }
 
 
@@ -749,11 +721,9 @@ const ALL_CATEGORIES = [
 export default function MapCore({
   events: _unused,
   onNews,
-  onStatusChange,
 }: {
   events: EonetEvent[]
   onNews?: (items: MapNewsItem[]) => void
-  onStatusChange?: (status: 'loading' | 'live' | 'fallback') => void
 }) {
   const [points, setPoints] = useState<SocioPoint[]>([])
   const [err, setErr] = useState<string | null>(null)
@@ -767,7 +737,6 @@ export default function MapCore({
     const controller = new AbortController()
     abortRef.current = controller
     let alive = true
-    onStatusChange?.('loading')
 
     const BATCH_SIZE = 80
 
@@ -859,10 +828,7 @@ export default function MapCore({
       if (!alive || controller.signal.aborted) return
       const nothingLoaded = totalFetched === 0 || (totalFetched > 0 && totalCandidates === 0)
       if (nothingLoaded) {
-        onStatusChange?.('fallback')
         setErr('No map data loaded. GDELT may be unreachable, blocked by the browser/network, or rate-limited.')
-      } else {
-        onStatusChange?.('live')
       }
     })
 
@@ -871,7 +837,7 @@ export default function MapCore({
       if (rafId.current) cancelAnimationFrame(rafId.current)
       controller.abort()
     }
-  }, [onNews, onStatusChange])
+  }, [onNews])
 
   // If filters change, republish full visible set (to keep Dashboard list in sync)
   useEffect(() => {

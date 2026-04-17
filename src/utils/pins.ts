@@ -106,7 +106,7 @@ function inferCategory(name: string, html: string) {
 }
 
 async function fetchGeo(query: string, timespan = "24h", maxpoints = 900) {
-  const base = "https://api.gdeltproject.org"
+  const base = (import.meta as any)?.env?.VITE_GDELT_PROXY_URL || "/api/gdelt"
   const url = `${base}/api/v2/geo/geo?query=${encodeURIComponent(query)}&mode=PointData&format=GeoJSON&timespan=${encodeURIComponent(timespan)}&maxpoints=${maxpoints}`
   const res = await fetch(url, { headers: { Accept: "application/json, text/plain;q=0.9,*/*;q=0.8" } })
   const text = await res.text()

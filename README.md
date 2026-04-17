@@ -18,8 +18,7 @@ npm run dev
 
 ## Notes
 - If you hit a CORS issue in dev, you can enable the commented proxies in `vite.config.ts`.
-- In production, the app now tries `VITE_GDELT_PROXY_URL`, then `/api/gdelt`, then direct GDELT.
-- Included `netlify.toml` and `vercel.json` so GDELT can be proxied on common static hosts.
+- For production deployment, host behind a reverse proxy if your hosting environment requires CORS mediation.
 
 ## Useful indicators
 - `PV.EST` Political Stability (estimate)

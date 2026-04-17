@@ -28,6 +28,8 @@ function keyForCoord(lat: number, lon: number) {
  * Returns a country name (e.g., "Turkey") or null.
  */
 async function reverseGeocodeCountry(lat: number, lon: number): Promise<string | null> {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null
   const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
   const res = await fetch(url, { method: 'GET' })
   if (!res.ok) return null
@@ -630,8 +632,6 @@ export default function Dashboard() {
 
   // 📡 News flowing from the map
   const [mapNews, setMapNews] = useState<MapNewsItem[]>([])
-  const [mapSourceReady, setMapSourceReady] = useState(false)
-  const [mapUsingFallback, setMapUsingFallback] = useState(false)
 
   // lat/lon -> country cache (persist to localStorage)
   const [coordCountry, setCoordCountry] = useState<Record<string, string>>(() => {
@@ -743,10 +743,17 @@ export default function Dashboard() {
             setCarouselItems(sortByRelevance(seed).slice(0, CAROUSEL_MAX))
           }
         }
-        // Keep cached EONET for the fallback layer, but do not let it replace GDELT headlines up front
+        // If we have cached EONET, surface those headlines immediately, too
         if (cev) {
           setEvents(cev)
           setEventsLoading(false)
+          const cachedNews = eventsToMapNews(cev)
+          if (cachedNews.length) {
+            handleNews(cachedNews)
+            const ranked = sortByRelevance(cachedNews).slice(0, CAROUSEL_MAX)
+            setCarouselItems(ranked)
+            try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
+          }
         }
 
         // ReliefWeb now (fast path)
@@ -789,12 +796,19 @@ export default function Dashboard() {
           }
         })()
 
-        // Load EONET in parallel so it is ready only if the geopolitical feed fails
+        // ⭐ EONET immediately (no idle), to get map-style headlines without the map
         const newsPromise = (async () => {
           try {
             const ev = await getOpenEvents()
             setEvents(ev); setCache('eonet:open', ev)
             setEventsLoading(false)
+            const news = eventsToMapNews(ev)
+            if (news.length) {
+              handleNews(news)
+              const ranked = sortByRelevance(news).slice(0, CAROUSEL_MAX)
+              setCarouselItems(ranked)
+              try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
+            }
           } catch {
             // even on failure, stop "loading…" so the card can show a friendly empty state
             setEventsLoading(false)
@@ -812,16 +826,6 @@ export default function Dashboard() {
 
   const lastGDP = useMemo(() => gdpSeries?.filter(p => p.value !== null).slice(-1)[0], [gdpSeries])
   const lastCPI = useMemo(() => cpiSeries?.filter(p => p.value !== null).slice(-1)[0], [cpiSeries])
-
-  useEffect(() => {
-    if (!mapUsingFallback || mapNews.length > 0 || !events.length) return
-    const fallbackNews = eventsToMapNews(events)
-    if (!fallbackNews.length) return
-    handleNews(fallbackNews)
-    const ranked = sortByRelevance(fallbackNews).slice(0, CAROUSEL_MAX)
-    setCarouselItems(ranked)
-    try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
-  }, [mapUsingFallback, mapNews.length, events, handleNews])
 
   const hasMapNews = mapNews.length > 0
 
@@ -1171,7 +1175,7 @@ export default function Dashboard() {
                 <li>Live map of incidents (last 24h)</li>
                 <li>Latest headlines tied to pins or feeds</li>
                 <li>GDP growth & CPI (World Bank)</li>
-                <li>{mapSourceReady && !mapUsingFallback ? 'GDELT geopolitical events (primary)' : 'ReliefWeb / NASA fallback if GDELT is unavailable'}</li>
+                <li>ReliefWeb updates (fallback)</li>
               </ul>
             </MiniSection>
 
@@ -1208,24 +1212,7 @@ export default function Dashboard() {
 
       {/* Map */}
       <Card title="Global Socio-Political Events (Last 24h)">
-        <LazyEventMap
-          events={events}
-          onNews={(items) => {
-            setMapSourceReady(true)
-            setMapUsingFallback(false)
-            handleNews(items)
-          }}
-          onStatusChange={(status) => {
-            if (status === 'live') {
-              setMapSourceReady(true)
-              setMapUsingFallback(false)
-            }
-            if (status === 'fallback') {
-              setMapSourceReady(true)
-              setMapUsingFallback(true)
-            }
-          }}
-        />
+        <LazyEventMap events={events} onNews={handleNews} />
       </Card>
 
       {/* Regional Volatility Leaderboard (Counts, Last 7 Days) */}
