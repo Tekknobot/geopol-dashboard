@@ -1,5 +1,5 @@
 // src/services/reliefweb.ts
-// UNOCHA ReliefWeb reports via same-origin proxy.
+// UNOCHA ReliefWeb reports via same-origin proxy..
 
 import { setCache } from "./cache";
 
