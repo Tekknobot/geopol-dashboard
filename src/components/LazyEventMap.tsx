@@ -14,13 +14,15 @@ if (typeof window !== 'undefined') {
 export default function LazyEventMap({
   events,
   onNews,
+  onStatusChange,
 }: {
   events: EonetEvent[]
   onNews?: (items: MapNewsItem[]) => void
+  onStatusChange?: (status: 'loading' | 'live' | 'fallback') => void
 }) {
   return (
     <Suspense fallback={<div className="h-64 flex items-center justify-center text-slate-500">Loading map…</div>}>
-      <MapCore events={events} onNews={onNews} />
+      <MapCore events={events} onNews={onNews} onStatusChange={onStatusChange} />
     </Suspense>
   )
 }

@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/gdelt/:path*",
+      "destination": "https://api.gdeltproject.org/:path*"
+    }
+  ]
+}
