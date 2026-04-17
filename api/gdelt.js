@@ -1,16 +1,8 @@
 export default async function handler(req, res) {
   try {
-    const pathParts = Array.isArray(req.query?.path)
-      ? req.query.path
-      : req.query?.path
-        ? [req.query.path]
-        : []
-
-    const path = pathParts.join('/')
     const params = new URLSearchParams()
 
     for (const [key, value] of Object.entries(req.query || {})) {
-      if (key === 'path') continue
       if (Array.isArray(value)) {
         for (const v of value) params.append(key, String(v))
       } else if (value != null) {
@@ -18,18 +10,13 @@ export default async function handler(req, res) {
       }
     }
 
-    const url = `https://api.reliefweb.int/${path}${params.toString() ? `?${params.toString()}` : ''}`
-    const method = req.method || 'GET'
-    const body = method !== 'GET' && method !== 'HEAD' ? req.body : undefined
-
+    const url = `https://api.gdeltproject.org/api/v2/geo/geo?${params.toString()}`
     const upstream = await fetch(url, {
-      method,
+      method: 'GET',
       headers: {
         'User-Agent': 'geopol-dashboard/1.0',
         'Accept': 'application/json, text/plain;q=0.9,*/*;q=0.8',
-        'Content-Type': 'application/json',
       },
-      body: body && method !== 'GET' && method !== 'HEAD' ? JSON.stringify(body) : undefined,
     })
 
     const text = await upstream.text()
@@ -38,6 +25,9 @@ export default async function handler(req, res) {
     res.setHeader('access-control-allow-origin', '*')
     res.send(text)
   } catch (err) {
-    res.status(500).json({ error: 'ReliefWeb proxy failed', details: err instanceof Error ? err.message : String(err) })
+    res.status(500).json({
+      error: 'GDELT proxy failed',
+      details: err instanceof Error ? err.message : String(err),
+    })
   }
 }

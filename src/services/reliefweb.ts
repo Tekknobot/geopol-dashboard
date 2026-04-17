@@ -16,7 +16,7 @@ export type ReliefWebItem = {
   };
 };
 
-const RW_BASE = ((import.meta as any)?.env?.VITE_RELIEFWEB_PROXY_URL || "/api/reliefweb") + "/v2";
+const RW_BASE = (import.meta as any)?.env?.VITE_RELIEFWEB_PROXY_URL || "/api/reliefweb";
 
 function appName() {
   const explicit = (import.meta as any)?.env?.VITE_RELIEFWEB_APPNAME;
@@ -50,7 +50,7 @@ export async function getLatestReports(limit = 12, cacheMs = 1000 * 60 * 10) {
     },
   };
 
-  const url = `${RW_BASE}/reports?${new URLSearchParams({
+  const url = `${RW_BASE}?${new URLSearchParams({
     profile: "minimal",
     appname: appName(),
   }).toString()}`;
