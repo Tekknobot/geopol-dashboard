@@ -1,7 +1,7 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import CountryExplorer from './pages/CountryExplorer'
-import EventsPage from './pages/Events' // ⬅️ NEW
+import EventsPage from './pages/Events' // ⬅️ NEW // 
 
 export default function App() {
   return (
