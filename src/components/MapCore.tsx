@@ -769,21 +769,71 @@ async function fetchGeo(
 
 /** Map a raw feature to a SocioPoint (or null) */
 function featureToPoint(f: any): SocioPoint | null {
-  const coords = f?.geometry?.coordinates
   const props = f?.properties || {}
-  const lat = parseCoord(coords?.[1]); const lon = parseCoord(coords?.[0])
+
+  // Use full geometry support instead of assuming Point only.
+  const { lat, lon } = centroidFromGeometry(f?.geometry)
   if (!validCoord(lat, lon)) return null
-  const name = (props.name || props.label || props.title || props.location || '').toString().trim()
-  const html = (props.html || props.description || '').toString()
+
+  // Accept a wider range of possible GDELT property names.
+  const name = (
+    props.name ||
+    props.label ||
+    props.title ||
+    props.location ||
+    props.country ||
+    props.countryname ||
+    props.admin ||
+    props.place ||
+    props.Actor1Geo_FullName ||
+    props.Actor2Geo_FullName ||
+    props.ActionGeo_FullName ||
+    props.V2Locations ||
+    ''
+  ).toString().trim()
+
+  const html = (
+    props.html ||
+    props.description ||
+    props.snippet ||
+    props.text ||
+    props.details ||
+    ''
+  ).toString()
+
   const category = inferCategory(name, html)
-  const label = name || category
+  const label = name || category || 'Geopolitical event'
+
+  // Try to extract a ranked article link from HTML.
   const best = extractBestLink(html, label)
-  const showLink = !!best.url
-  const headline = showLink ? (best.headline || label) : undefined
-  const source = showLink ? best.source : undefined
-  const url     = showLink ? best.url : undefined
-  if (!label) return null
-  return { lat: lat!, lon: lon!, label, category, headline, source, url }
+
+  // Also accept direct URL-ish properties if present.
+  const rawUrl =
+    props.url ||
+    props.sourceurl ||
+    props.shareurl ||
+    props.documentidentifier ||
+    props.link ||
+    ''
+
+  const directUrl = rawUrl ? normalizeExternalUrl(String(rawUrl)) : undefined
+  const url = best.url || directUrl
+
+  const headline = best.headline || label
+  const source =
+    best.source ||
+    (props.source || props.domain || props.sourcename || '').toString().trim() ||
+    undefined
+
+  return {
+    lat: lat!,
+    lon: lon!,
+    label,
+    category,
+    headline,
+    source,
+    url,
+  }
 }
 
 // Put this near your other top-level consts (above the component)
@@ -831,7 +881,6 @@ export default function MapCore({
         const feats = await fetchGeo(controller, q, '24h', 900)
         if (!alive || controller.signal.aborted) return
         if (!feats || feats.length === 0) {
-          // treat empty as a soft failure (often means upstream trouble)
           totalErrors += 1
           return
         }
@@ -839,42 +888,56 @@ export default function MapCore({
         totalFetched += feats.length
 
         const candidates: SocioPoint[] = []
+
         for (const f of feats) {
           const pt = featureToPoint(f)
           if (!pt) continue
-          const key = pt.url || `${pt.lat.toFixed(3)},${pt.lon.toFixed(3)}:${pt.label}`
+
+          const key =
+            pt.url ||
+            `${pt.lat.toFixed(3)},${pt.lon.toFixed(3)}:${pt.category}:${pt.label}`
+
           if (addedKeys.current.has(key)) continue
           addedKeys.current.add(key)
           candidates.push(pt)
         }
 
-        if (!candidates.length) return
+        if (!candidates.length) {
+          if (IS_DEV) {
+            // eslint-disable-next-line no-console
+            console.warn(`GDELT returned ${feats.length} features for query but 0 survived parsing`, q, feats.slice(0, 3))
+          }
+          return
+        }
+
         totalCandidates += candidates.length
 
         let i = 0
         const pump = () => {
           if (!alive || controller.signal.aborted) return
+
           const slice = candidates.slice(i, i + BATCH_SIZE)
           if (slice.length) {
             setPoints(prev => {
               const nextPts = [...prev, ...slice]
 
-              // Auto-enable any newly seen categories if the user hasn't touched filters yet
               if (!userTouchedFilters.current) {
-                const merged = new Set(activeCats)
-                for (const p of slice) merged.add(p.category)
-                // Only call setActiveCats if it actually changes to avoid extra renders
-                if (merged.size !== activeCats.size) setActiveCats(merged)
+                setActiveCats(prevCats => {
+                  const merged = new Set(prevCats)
+                  for (const p of slice) merged.add(p.category)
+                  return merged
+                })
               }
 
               return nextPts
             })
 
+            // Headlines should be optional; pins should not depend on links.
             if (onNews) {
               const items: MapNewsItem[] = slice
                 .filter(p => !!p.headline && !!p.url)
                 .map((p, idx) => ({
-                  id: `${p.category}:${p.url}:${Date.now()}:${idx}`,
+                  id: `${p.category}:${p.url || p.label}:${Date.now()}:${idx}`,
                   headline: p.headline!,
                   url: p.url!,
                   source: p.source,
@@ -882,14 +945,18 @@ export default function MapCore({
                   lat: p.lat,
                   lon: p.lon,
                 }))
+
               if (items.length) onNews(items)
             }
+
             i += BATCH_SIZE
           }
+
           if (i < candidates.length) {
             rafId.current = requestAnimationFrame(pump)
           }
         }
+
         rafId.current = requestAnimationFrame(pump)
       } catch (e) {
         totalErrors += 1
@@ -903,9 +970,23 @@ export default function MapCore({
     // fire all three concurrently and then decide if we should show an error
     Promise.allSettled([runQuery(Q1), runQuery(Q2), runQuery(Q3)]).then(() => {
       if (!alive || controller.signal.aborted) return
-      const nothingLoaded = totalFetched === 0 || (totalFetched > 0 && totalCandidates === 0)
+
+      const nothingLoaded = totalCandidates === 0
       if (nothingLoaded) {
-        setErr('No map data loaded. GDELT returned no usable pinned results for the current queries.')
+        if (IS_DEV) {
+          // eslint-disable-next-line no-console
+          console.warn('GDELT summary', {
+            totalFetched,
+            totalCandidates,
+            totalErrors,
+          })
+        }
+
+        setErr(
+          totalFetched > 0
+            ? 'No map data loaded. GDELT returned features, but none could be converted into visible legend-category pins.'
+            : 'No map data loaded. GDELT returned no usable pinned results for the current queries.'
+        )
       }
     })
 
