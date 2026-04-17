@@ -3,7 +3,6 @@ import Card from '../components/Card'
 import Loading from '../components/Loading'
 import ErrorState from '../components/ErrorState'
 import { getLatestReports, ReliefWebItem } from '../services/reliefweb'
-import type { EonetEvent } from '../services/eonet'
 import { wbGetGlobalIndicator, toSeries, WbPoint, wbGetCountryIndicator, wbGetGlobalIndicator as wbGlobal } from '../services/worldBank'
 import { searchCountryByName, type Country } from '../services/restCountries'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, LabelList } from 'recharts'
@@ -617,8 +616,7 @@ function ContextSidebar({ countryName, onClose }: { countryName: string | null; 
 // ---------- Main Dashboard
 export default function Dashboard() {
   const [reports, setReports] = useState<ReliefWebItem[] | null>(null)
-  const [events, setEvents] = useState<EonetEvent[]>([]) // empty = render map immediately
-  const [eventsLoading, setEventsLoading] = useState(true) // controls volatility tracker loading state
+  const [eventsLoading, setEventsLoading] = useState(true)
   const [gdpSeries, setGdpSeries] = useState<WbPoint[] | null>(null)
   const [cpiSeries, setCpiSeries] = useState<WbPoint[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -742,6 +740,7 @@ export default function Dashboard() {
             const rw = await getLatestReports(500)
             setReports(rw)
             setCache('rw:latest:24h', rw)
+            setEventsLoading(false)
             // If we still don't have map headlines, use RW for carousel
             if (mapNews.length === 0) {
               const itemsAll = rw.map(r => ({
@@ -757,7 +756,9 @@ export default function Dashboard() {
               setCarouselItems(ranked)
               try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
             }
-          } catch {}
+          } catch {
+            setEventsLoading(false)
+          }
         })()
 
         // KPIs in parallel (non-blocking)
@@ -968,19 +969,48 @@ export default function Dashboard() {
       .slice(0, 8)
   }, [reports, countryRegionMap])
 
-  // 🔹 Global Volatility (events/day for the past ~30 days)
+  // 🔹 Global Volatility (ReliefWeb reports/day over the last 14 days)
   const volatilitySeries = useMemo(() => {
-    if (!events) return []
+    if (!reports?.length) return []
+    const start = new Date()
+    start.setUTCHours(0, 0, 0, 0)
+    start.setUTCDate(start.getUTCDate() - 13)
+    const startMs = start.getTime()
     const byDay = new Map<string, number>()
-    events.forEach(e => {
-      const d = new Date((e as any).geometry?.[0]?.date ?? (e as any).closed ?? Date.now())
-      const key = d.toISOString().slice(0, 10) // YYYY-MM-DD
-      byDay.set(key, (byDay.get(key) || 0) + 1)
-    })
-    return Array.from(byDay.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, count]) => ({ date, count }))
-  }, [events])
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(startMs + i * 24 * 60 * 60 * 1000)
+      byDay.set(d.toISOString().slice(0, 10), 0)
+    }
+    for (const r of reports) {
+      const created = new Date(r.fields.date.created).getTime()
+      if (!Number.isFinite(created) || created < startMs) continue
+      const key = new Date(created).toISOString().slice(0, 10)
+      if (byDay.has(key)) byDay.set(key, (byDay.get(key) || 0) + 1)
+    }
+    return Array.from(byDay.entries()).map(([date, count]) => ({ date, count }))
+  }, [reports])
+
+  const corruptionSeries = useMemo(() => {
+    if (!reports?.length) return []
+    const start = new Date()
+    start.setUTCHours(0, 0, 0, 0)
+    start.setUTCDate(start.getUTCDate() - 13)
+    const startMs = start.getTime()
+    const byDay = new Map<string, number>()
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(startMs + i * 24 * 60 * 60 * 1000)
+      byDay.set(d.toISOString().slice(0, 10), 0)
+    }
+    for (const r of reports) {
+      const created = new Date(r.fields.date.created).getTime()
+      const hay = `${r.fields.title} ${(r.fields.theme || []).map(x => x?.name || '').join(' ')} ${(r.fields.disaster_type || []).map(x => x?.name || '').join(' ')}`.toLowerCase()
+      if (!Number.isFinite(created) || created < startMs) continue
+      if (!/(corruption|bribery|governance|accountability|oversight|anti-corruption)/.test(hay)) continue
+      const key = new Date(created).toISOString().slice(0, 10)
+      if (byDay.has(key)) byDay.set(key, (byDay.get(key) || 0) + 1)
+    }
+    return Array.from(byDay.entries()).map(([date, count]) => ({ date, count }))
+  }, [reports])
 
   // Map article URL -> country (from ReliefWeb + any map items that include a country)
   const urlToCountry = useMemo(() => {
@@ -1139,7 +1169,7 @@ export default function Dashboard() {
 
       {/* Map */}
       <Card title="Global ReliefWeb Headline Map">
-        <LazyEventMap events={events} reports={reports || []} onNews={handleNews} />
+        <LazyEventMap events={[]} reports={reports || []} onNews={handleNews} />
       </Card>
 
       {/* Regional Volatility Leaderboard (Counts, Last 7 Days) */}
@@ -1283,15 +1313,14 @@ export default function Dashboard() {
       )}
 
       {/* Global Volatility Tracker */}
-      {events && (
-        <Card title="Global Volatility Tracker">
+        <Card title="ReliefWeb Volatility Tracker">
           {eventsLoading ? (
             <div className="h-64 grid place-items-center">
               <Loading label="Calculating volatility…" />
             </div>
           ) : volatilitySeries.length === 0 ? (
             <div className="h-32 grid place-items-center text-xs text-slate-500">
-              No open events available right now.
+              No ReliefWeb report activity available right now.
             </div>
           ) : (
             <>
@@ -1302,17 +1331,42 @@ export default function Dashboard() {
                     <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} width={35} />
                     <Tooltip />
-                    <Line type="monotone" dataKey="count" name="Events" />
+                    <Line type="monotone" dataKey="count" name="Reports" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
               <p className="mt-2 text-xs text-slate-600">
-                Daily count of open EONET incidents globally. Spikes can signal rising instability or disaster activity.
+                Daily count of ReliefWeb reports over the last 14 days. Spikes indicate heavier humanitarian reporting volume.
               </p>
             </>
           )}
         </Card>
-      )}
+
+
+      <Card title="Governance / Corruption Tracker">
+        {!reports ? <Loading label="Loading corruption tracker…" /> : corruptionSeries.length === 0 ? (
+          <div className="h-32 grid place-items-center text-xs text-slate-500">
+            No governance or corruption-tagged report activity in the current report window.
+          </div>
+        ) : (
+          <>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={corruptionSeries}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} width={35} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="count" name="Reports" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="mt-2 text-xs text-slate-600">
+              Daily count of ReliefWeb governance and corruption-related reporting.
+            </p>
+          </>
+        )}
+      </Card>
 
       {/* KPI charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

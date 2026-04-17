@@ -50,7 +50,7 @@ export default function App() {
       </main>
 
       <footer className="border-t py-6 text-center text-sm text-slate-500">
-        Built with free public APIs (World Bank, REST Countries, ReliefWeb, NASA EONET)
+        Built with free public APIs (World Bank, REST Countries, ReliefWeb)
       </footer>
     </div>
   )

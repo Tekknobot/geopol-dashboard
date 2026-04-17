@@ -1,23 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import Card from '../components/Card'
 import Loading from '../components/Loading'
 import { searchCountryByName, Country } from '../services/restCountries'
 import { wbGetCountryIndicator, wbGetGlobalIndicator, toSeries, WbPoint } from '../services/worldBank'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { getLatestReports, reliefWebCategory, reliefWebCountry, reliefWebSource, type ReliefWebItem } from '../services/reliefweb'
+import { normalizeExternalUrl } from '../utils/links'
 
 const INDICATORS = [
   { code: 'PV.EST', label: 'Political Stability (WGI, est.)' },
   { code: 'GE.EST', label: 'Government Effectiveness (WGI, est.)' },
   { code: 'CC.EST', label: 'Control of Corruption (WGI, est.)' },
   { code: 'NY.GDP.MKTP.KD.ZG', label: 'GDP Growth (annual %)' },
-  { code: 'FP.CPI.TOTL.ZG', label: 'Inflation, CPI (annual %)' }
+  { code: 'FP.CPI.TOTL.ZG', label: 'Inflation, CPI (annual %)' },
 ]
 
 type SeriesBundle = { country: WbPoint[]; world: WbPoint[] }
 type WbCountryMeta = { id: string; name: string; region: { id: string; value: string } }
 type RegionalRow = { name: string; value: number | null; iso3: string; isFocus?: boolean }
 
-// ----- tiny utilities
 const debounce = (fn: Function, ms: number) => {
   let t: any
   return (...args: any[]) => {
@@ -29,8 +30,8 @@ const debounce = (fn: Function, ms: number) => {
 function mapRestRegionToWb(region: string): string[] {
   switch (region) {
     case 'Africa': return ['SSF']
-    case 'Americas': return ['NAC', 'LCN'] // North America, Latin America & Caribbean
-    case 'Asia': return ['EAS', 'SAS', 'MEA'] // WB v2 meta uses 'MEA' for MENA
+    case 'Americas': return ['NAC', 'LCN']
+    case 'Asia': return ['EAS', 'SAS', 'MEA']
     case 'Europe': return ['ECS']
     case 'Oceania': return ['EAS']
     default: return []
@@ -44,11 +45,10 @@ async function fetchWbCountryMeta(): Promise<WbCountryMeta[]> {
   return data.map(d => ({
     id: d.id as string,
     name: d.name as string,
-    region: { id: d.region?.id, value: d.region?.value }
+    region: { id: d.region?.id, value: d.region?.value },
   }))
 }
 
-// find the most recent non-null indicator value, scanning up to `years` back
 async function latestNonNull(iso3: string, indicator: string, years = 20): Promise<number | null> {
   const s = toSeries(await wbGetCountryIndicator(iso3, indicator, years))
   for (let i = s.length - 1; i >= 0; i--) {
@@ -59,25 +59,20 @@ async function latestNonNull(iso3: string, indicator: string, years = 20): Promi
 }
 
 export default function CountryExplorer() {
-  // UI state
   const [input, setInput] = useState('Canada')
   const [suggestions, setSuggestions] = useState<Country[]>([])
   const [selected, setSelected] = useState<Country | null>(null)
 
-  // data state
   const [series, setSeries] = useState<Record<string, SeriesBundle>>({})
   const [regionalRows, setRegionalRows] = useState<RegionalRow[] | null>(null)
   const [neighbors, setNeighbors] = useState<string[] | null>(null)
+  const [reports, setReports] = useState<ReliefWebItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // prevent out-of-order responses
   const loadIdRef = useRef(0)
-
-  // cache per ISO3
   const seriesCacheRef = useRef<Map<string, Record<string, SeriesBundle>>>(new Map())
 
-  // ---- search suggestions (debounced)
   useEffect(() => {
     const run = debounce(async (q: string) => {
       if (!q.trim()) { setSuggestions([]); return }
@@ -91,14 +86,23 @@ export default function CountryExplorer() {
     run(input)
   }, [input])
 
-  // choose a country
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const latest = await getLatestReports(500)
+        if (alive) setReports(latest)
+      } catch {}
+    })()
+    return () => { alive = false }
+  }, [])
+
   const choose = (c: Country) => {
     setSelected(c)
     setInput(c.name?.common || c.cca3 || '')
     void loadCountry(c)
   }
 
-  // enter picks first suggestion
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -106,7 +110,6 @@ export default function CountryExplorer() {
     }
   }
 
-  // ---- main loader (race-proof, cached)
   const loadCountry = async (c: Country) => {
     const iso3 = c.cca3
     setError(null)
@@ -117,7 +120,6 @@ export default function CountryExplorer() {
     const myLoadId = ++loadIdRef.current
 
     try {
-      // cache
       const cached = seriesCacheRef.current.get(iso3)
       let mapped: Record<string, SeriesBundle> | null = cached || null
 
@@ -137,7 +139,6 @@ export default function CountryExplorer() {
         seriesCacheRef.current.set(iso3, m)
       }
 
-      // neighbors (Country may not declare 'borders')
       const borderCodes = ((c as any)?.borders as string[] | undefined) || []
       if (borderCodes.length) {
         try {
@@ -149,7 +150,6 @@ export default function CountryExplorer() {
         if (myLoadId === loadIdRef.current) setNeighbors([])
       }
 
-      // regional comparator using WB region of the selected country (ranked bars + median tick)
       if (c.region) {
         try {
           const wbCountries = await fetchWbCountryMeta()
@@ -162,28 +162,24 @@ export default function CountryExplorer() {
             .filter(cc => regionIds.includes(cc.region.id))
             .map(cc => ({ name: cc.name, iso3: cc.id }))
 
-          // ensure selected is present
           if (!candidates.some(x => x.iso3 === selISO3)) {
             candidates.push({ name: c.name?.common || selISO3, iso3: selISO3 })
           }
 
           const rows = await Promise.all(
             candidates.map(async cand => {
-              const v = await latestNonNull(cand.iso3, 'PV.EST', 20) // <= look back farther
+              const v = await latestNonNull(cand.iso3, 'PV.EST', 20)
               return { name: cand.name, iso3: cand.iso3, value: v, isFocus: cand.iso3 === selISO3 } as RegionalRow
             })
           )
 
-          // sort (desc), keep tidy list, always include selected
           const withData = rows.filter(r => r.value !== null) as RegionalRow[]
-          withData.sort((a,b)=> (b.value as number) - (a.value as number))
-          const TOP = 20
-          let top = withData.slice(0, TOP)
+          withData.sort((a, b) => (b.value as number) - (a.value as number))
+          let top = withData.slice(0, 20)
           if (!top.some(r => r.iso3 === selISO3)) {
             const me = rows.find(r => r.iso3 === selISO3)
             if (me) top = [...top, me]
           }
-
           if (myLoadId === loadIdRef.current) setRegionalRows(top)
         } catch {
           if (myLoadId === loadIdRef.current) setRegionalRows([])
@@ -200,7 +196,20 @@ export default function CountryExplorer() {
     }
   }
 
-  // facts
+  useEffect(() => {
+    if (!selected && input) {
+      ;(async () => {
+        try {
+          const res = await searchCountryByName(input.trim())
+          if (res[0]) {
+            setSelected(res[0])
+            await loadCountry(res[0])
+          }
+        } catch {}
+      })()
+    }
+  }, [])
+
   const facts = useMemo(() => {
     if (!selected) return null
     return [
@@ -209,13 +218,12 @@ export default function CountryExplorer() {
       ['Capital', (selected.capital || ['—']).join(', ')],
       ['Population', selected.population?.toLocaleString()],
       ['Area (km²)', selected.area?.toLocaleString()],
-      ['Currencies', selected.currencies ? Object.values(selected.currencies).map(c=>`${c.name} (${c.symbol||''})`).join(', ') : '—'],
+      ['Currencies', selected.currencies ? Object.values(selected.currencies).map(c => `${c.name} (${c.symbol || ''})`).join(', ') : '—'],
       ['Languages', selected.languages ? Object.values(selected.languages).join(', ') : '—'],
       ['ISO2 / ISO3', `${selected.cca2} / ${selected.cca3}`],
     ]
   }, [selected])
 
-  // merge country+world by date
   const mergeCW = (bund: SeriesBundle | undefined) => {
     if (!bund) return []
     const map = new Map<string, any>()
@@ -225,7 +233,7 @@ export default function CountryExplorer() {
       row.country = p.value
       map.set(p.date, row)
     })
-    return Array.from(map.values()).sort((a,b)=>a.date.localeCompare(b.date))
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
   }
 
   const trend = (arr: WbPoint[] | undefined) => {
@@ -236,28 +244,8 @@ export default function CountryExplorer() {
     return d > 0 ? '↑' : d < 0 ? '↓' : '→'
   }
 
-  // initial load
-  useEffect(() => {
-    if (!selected && input) {
-      (async () => {
-        try {
-          const res = await searchCountryByName(input.trim())
-          if (res[0]) {
-            setSelected(res[0])
-            await loadCountry(res[0])
-          }
-        } catch {}
-      })()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // comparator stats (for median tick + scaling)
   const comparatorStats = useMemo(() => {
-    const vals = (regionalRows || [])
-      .map(r => r.value)
-      .filter((v): v is number => v !== null)
-      .sort((a,b)=>a-b)
+    const vals = (regionalRows || []).map(r => r.value).filter((v): v is number => v !== null).sort((a, b) => a - b)
     if (!vals.length) return { min: 0, med: 0, max: 0 }
     const q = (p: number) => {
       const pos = (vals.length - 1) * p
@@ -268,7 +256,6 @@ export default function CountryExplorer() {
     return { min: vals[0], med: q(0.5), max: vals[vals.length - 1] }
   }, [regionalRows])
 
-  // helper for bar percentage (safe for equal min/max)
   const pct = (val: number | null) => {
     if (val === null) return 0
     const { min, max } = comparatorStats
@@ -277,16 +264,41 @@ export default function CountryExplorer() {
   }
   const medPct = pct(comparatorStats.med)
 
+  const countryReports = useMemo(() => {
+    if (!selected) return []
+    const common = selected.name.common.toLowerCase()
+    const official = selected.name.official?.toLowerCase() || ''
+    return reports
+      .filter(r => {
+        const country = (reliefWebCountry(r) || '').toLowerCase()
+        return country === common || country === official || country.includes(common) || common.includes(country)
+      })
+      .sort((a, b) => Date.parse(b.fields.date.created) - Date.parse(a.fields.date.created))
+      .slice(0, 18)
+  }, [reports, selected])
+
+  const countryTrackerCards = useMemo(() => {
+    const corruption = countryReports.filter(r => reliefWebCategory(r) === 'Governance/Corruption').length
+    const conflict = countryReports.filter(r => reliefWebCategory(r) === 'Conflict/Insecurity').length
+    const displacement = countryReports.filter(r => reliefWebCategory(r) === 'Displacement').length
+    const outbreaks = countryReports.filter(r => reliefWebCategory(r) === 'Health/Outbreak').length
+    return [
+      { title: 'Recent reports', value: countryReports.length },
+      { title: 'Corruption / Governance', value: corruption },
+      { title: 'Conflict / Insecurity', value: conflict },
+      { title: 'Displacement / Migration', value: displacement + outbreaks },
+    ]
+  }, [countryReports])
+
   return (
     <div className="space-y-6">
-      {/* Search + facts */}
       <Card
         title="Country search"
         right={
           <div className="hidden md:block relative">
             <input
               value={input}
-              onChange={e=>setInput(e.target.value)}
+              onChange={e => setInput(e.target.value)}
               onKeyDown={onKeyDown}
               className="rounded-lg border px-3 py-1 text-sm w-72"
               placeholder="Type to search…"
@@ -294,11 +306,7 @@ export default function CountryExplorer() {
             {suggestions.length > 0 && (
               <ul className="absolute z-10 mt-1 w-72 max-h-64 overflow-auto rounded-lg border bg-white shadow">
                 {suggestions.map(s => (
-                  <li
-                    key={s.cca3}
-                    className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50"
-                    onClick={() => choose(s)}
-                  >
+                  <li key={s.cca3} className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50" onClick={() => choose(s)}>
                     {s.name?.common} <span className="text-slate-500">({s.region}{s.subregion ? ` — ${s.subregion}` : ''})</span>
                   </li>
                 ))}
@@ -307,49 +315,34 @@ export default function CountryExplorer() {
           </div>
         }
       >
-        {/* Mobile input */}
-        <div className="md:hidden mb-3">
-          <div className="relative">
-            <input
-              value={input}
-              onChange={e=>setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              className="w-full rounded-lg border px-3 py-2 text-sm"
-              placeholder="Search a country…"
-            />
-            {suggestions.length > 0 && (
-              <ul className="absolute z-10 mt-1 w-full max-h-64 overflow-auto rounded-lg border bg-white shadow">
-                {suggestions.map(s => (
-                  <li
-                    key={s.cca3}
-                    className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50"
-                    onClick={() => choose(s)}
-                  >
-                    {s.name?.common} <span className="text-slate-500">({s.region}{s.subregion ? ` — ${s.subregion}` : ''})</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+        <div className="md:hidden mb-3 relative">
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+            placeholder="Search a country…"
+          />
+          {suggestions.length > 0 && (
+            <ul className="absolute z-10 mt-1 w-full max-h-64 overflow-auto rounded-lg border bg-white shadow">
+              {suggestions.map(s => (
+                <li key={s.cca3} className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50" onClick={() => choose(s)}>
+                  {s.name?.common} <span className="text-slate-500">({s.region}{s.subregion ? ` — ${s.subregion}` : ''})</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
-        {loading && <Loading/>}
+        {loading && <Loading />}
 
         {selected && (
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center min-w-0">
             {selected.flags?.png && (
-              <img
-                src={selected.flags.png}
-                className="w-20 h-12 sm:w-24 sm:h-16 object-cover rounded-md border shrink-0"
-                alt="flag"
-                loading="lazy"
-              />
+              <img src={selected.flags.png} className="w-20 h-12 sm:w-24 sm:h-16 object-cover rounded-md border shrink-0" alt="flag" loading="lazy" />
             )}
-
             <div className="min-w-0 w-full">
               <div className="text-lg sm:text-xl font-semibold break-words">{selected.name.common}</div>
-
-              {/* Facts */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-2 mt-3 text-sm">
                 {facts?.map(([k, v]) => (
                   <div key={k} className="min-w-0">
@@ -360,12 +353,9 @@ export default function CountryExplorer() {
                   </div>
                 ))}
               </div>
-
-              {/* Neighbors */}
               {neighbors && (
                 <div className="mt-3 text-xs text-slate-600">
-                  <span className="font-semibold text-slate-700">Neighbors:</span>{' '}
-                  {neighbors.length ? neighbors.join(', ') : '—'}
+                  <span className="font-semibold text-slate-700">Neighbors:</span> {neighbors.length ? neighbors.join(', ') : '—'}
                 </div>
               )}
             </div>
@@ -375,7 +365,17 @@ export default function CountryExplorer() {
         {error && <div className="text-red-600 text-sm mt-2">{error}</div>}
       </Card>
 
-      {/* Regional Comparator — Ranked bars with median tick */}
+      {selected && (
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+          {countryTrackerCards.map(card => (
+            <Card key={card.title} title={card.title}>
+              <div className="text-3xl font-semibold tracking-tight">{card.value}</div>
+              <p className="mt-2 text-xs text-slate-600">Based on ReliefWeb reports from the current 24-hour window for {selected.name.common}.</p>
+            </Card>
+          ))}
+        </div>
+      )}
+
       {regionalRows && selected?.name?.common && (
         <Card title={`Regional Comparator · Political Stability (WGI) — ${selected.region}`}>
           {!regionalRows.length ? (
@@ -385,48 +385,27 @@ export default function CountryExplorer() {
               {regionalRows.map((r, i) => {
                 const isFocus = r.iso3 === selected.cca3
                 const hasData = typeof r.value === 'number'
-                // if no data at all, show a faint placeholder so the selection isn't visually "empty"
-                const placeholderPct = 30 // change to medPct to pin at median if you prefer
+                const placeholderPct = 30
                 const widthPct = hasData ? Math.max(0, Math.min(100, pct(r.value!))) : placeholderPct
                 return (
                   <li key={i} className="grid grid-cols-[160px_1fr_56px] items-center gap-3">
-                    {/* Name */}
                     <div className={`text-xs truncate ${isFocus ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>
                       {r.name}{!hasData ? ' (no data)' : ''}
                     </div>
-
-                    {/* Bar with median tick */}
                     <div className="relative h-3 rounded bg-slate-100">
-                      {/* bar fill */}
-                      <div
-                        className={`absolute left-0 top-0 h-3 rounded ${isFocus ? 'bg-slate-900' : 'bg-slate-600/80'} ${!hasData ? 'opacity-40' : ''}`}
-                        style={{ width: `${widthPct}%` }}
-                        title={hasData ? `${r.name}: ${Number(r.value).toFixed(2)}` : `${r.name}: No recent WGI value`}
-                      />
-                      {/* median tick */}
-                      <div
-                        className="absolute top-[-2px] w-0.5 h-4 bg-slate-400/80"
-                        style={{ left: `${medPct}%` }}
-                        title={`Regional median: ${Number(comparatorStats.med).toFixed(2)}`}
-                      />
+                      <div className={`absolute left-0 top-0 h-3 rounded ${isFocus ? 'bg-slate-900' : 'bg-slate-600/80'} ${!hasData ? 'opacity-40' : ''}`} style={{ width: `${widthPct}%` }} />
+                      <div className="absolute top-[-2px] w-0.5 h-4 bg-slate-400/80" style={{ left: `${medPct}%` }} />
                     </div>
-
-                    {/* Value */}
-                    <div className="text-xs text-right tabular-nums text-slate-600">
-                      {hasData ? Number(r.value).toFixed(2) : '—'}
-                    </div>
+                    <div className="text-xs text-right tabular-nums text-slate-600">{hasData ? Number(r.value).toFixed(2) : '—'}</div>
                   </li>
                 )
               })}
             </ul>
           )}
-          <div className="mt-2 text-[11px] text-slate-500">
-            Bars show country scores; thin tick marks the regional median. Selected country is bold and darker.
-          </div>
+          <div className="mt-2 text-[11px] text-slate-500">Bars show country scores; the thin tick marks the regional median.</div>
         </Card>
       )}
 
-      {/* Charts: Country vs World (dual-series) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {INDICATORS.map(ind => {
           const bundle = series[ind.code]
@@ -438,24 +417,20 @@ export default function CountryExplorer() {
 
           const rightNode = (
             <div className="text-xs text-slate-500">
-              {bundle?.country ? (
-                <>Country {trend(bundle.country)} {lc?.value !== null && lc ? <>· {lc.date}: {typeof lc.value === 'number' ? lc.value.toFixed(2) : '—'}</> : null}</>
-              ) : null}
+              {bundle?.country ? <>Country {trend(bundle.country)} {lc?.value !== null && lc ? <>· {lc.date}: {typeof lc.value === 'number' ? lc.value.toFixed(2) : '—'}</> : null}</> : null}
               {lw ? <> &nbsp;&nbsp;|&nbsp;&nbsp; World · {lw.date}: {typeof lw.value === 'number' ? lw.value.toFixed(2) : '—'}</> : null}
             </div>
           )
 
           return (
             <Card key={ind.code} title={ind.label} right={rightNode}>
-              {!bundle ? (
-                <Loading/>
-              ) : (
+              {!bundle ? <Loading /> : (
                 <div className="h-56 sm:h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={merged}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{fontSize: 10}}/>
-                      <YAxis domain={['auto','auto']} tick={{fontSize: 10}}/>
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                      <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} />
                       <Tooltip />
                       <Line type="monotone" dataKey="country" name="Country" dot={false} />
                       <Line type="monotone" dataKey="world" name="World" strokeDasharray="4 2" dot={false} />
@@ -467,6 +442,30 @@ export default function CountryExplorer() {
           )
         })}
       </div>
+
+      {selected && (
+        <Card title={`ReliefWeb reports · ${selected.name.common}`} right={<span className="text-xs text-slate-500">Links open the source article</span>}>
+          {!reports.length ? <Loading label="Loading recent reports…" /> : countryReports.length === 0 ? (
+            <div className="text-sm text-slate-600">No mapped ReliefWeb reports were found for this country in the current 24-hour report window.</div>
+          ) : (
+            <ul className="divide-y">
+              {countryReports.map(report => (
+                <li key={String(report.id)} className="py-3">
+                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200 mb-1">
+                    {reliefWebCategory(report)}
+                  </span>
+                  <a href={normalizeExternalUrl(report.fields.url)} target="_blank" rel="noreferrer" className="block text-[15px] md:text-[17px] font-semibold leading-snug hover:underline">
+                    {report.fields.title}
+                  </a>
+                  <div className="mt-1 text-[11px] text-slate-600">
+                    {reliefWebSource(report.fields.url)} · {new Date(report.fields.date.created).toLocaleString()}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
     </div>
   )
 }
