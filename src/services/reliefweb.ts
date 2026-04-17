@@ -19,10 +19,10 @@ export type ReliefWebItem = {
 const RW_BASE = (import.meta as any)?.env?.VITE_RELIEFWEB_PROXY_URL || "/api/reliefweb";
 
 function appName() {
-  const explicit = (import.meta as any)?.env?.VITE_RELIEFWEB_APPNAME;
-  if (explicit) return explicit;
-  if (typeof window !== "undefined" && window.location?.hostname) return window.location.hostname;
-  return "geopol-dashboard";
+  return (
+    (import.meta as any)?.env?.VITE_RELIEFWEB_APPNAME ||
+    "ShannaGeopolDashboardResearchX9K4RYHLJzF"
+  );
 }
 
 /**
