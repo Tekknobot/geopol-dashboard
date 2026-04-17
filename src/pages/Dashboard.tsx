@@ -24,18 +24,13 @@ function keyForCoord(lat: number, lon: number) {
 }
 
 /**
- * Free, no-key reverse geocode (country-level) using BigDataCloud.
- * Returns a country name (e.g., "Turkey") or null.
+ * Reverse geocoding for third-party event coordinates is intentionally disabled.
+ * BigDataCloud's free client endpoint is designed for the end user's own device location,
+ * not for bulk/event-pin lookups, and it now returns 400s for this usage pattern.
+ * We fall back to URL/title/country metadata instead of hammering the service.
  */
-async function reverseGeocodeCountry(lat: number, lon: number): Promise<string | null> {
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
-  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null
-  const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
-  const res = await fetch(url, { method: 'GET' })
-  if (!res.ok) return null
-  const data = await res.json().catch(() => null)
-  // Prefer 'countryName'; fall back to 'principalSubdivision' if weird edge cases
-  return normalizeCountryName(data?.countryName || data?.principalSubdivision || null)
+async function reverseGeocodeCountry(_lat: number, _lon: number): Promise<string | null> {
+  return null
 }
 
 // Normalize verbose country names to short, common forms.
@@ -862,42 +857,8 @@ export default function Dashboard() {
     return () => { alive = false }
   }, [reports, countryRegionMap])
 
-  // When new map headlines arrive, reverse-geocode unknown coords -> country
-  useEffect(() => {
-    if (!uniqueMapNews.length) return
-
-    // choose some to resolve (skip ones we already cached)
-    const pending = uniqueMapNews.filter(n =>
-      typeof n.lat === 'number' &&
-      typeof n.lon === 'number' &&
-      !coordCountry[keyForCoord(n.lat!, n.lon!)]
-    )
-
-    if (!pending.length) return
-
-    let alive = true
-    ;(async () => {
-      // Be polite to the API (and avoid hammering)
-      for (const n of pending.slice(0, 60)) { // cap per batch
-        if (!alive) break
-        const lat = n.lat!, lon = n.lon!
-        const k = keyForCoord(lat, lon)
-        try {
-          const country = await reverseGeocodeCountry(lat, lon)
-          if (!alive) return
-          if (country) {
-            setCoordCountry(prev => (prev[k] ? prev : { ...prev, [k]: country }))
-          }
-        } catch {
-          // ignore errors
-        }
-        // light throttle
-        await new Promise(r => setTimeout(r, 200))
-      }
-    })()
-
-    return () => { alive = false }
-  }, [uniqueMapNews, coordCountry])
+  // Coordinate reverse-geocoding is disabled for third-party event pins.
+  // We rely on URL/title/country metadata instead to avoid noisy 400s from the free client endpoint.
 
   // When map-driven headlines arrive, promote them once and cache
   useEffect(() => {
