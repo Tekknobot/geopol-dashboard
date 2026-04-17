@@ -3,7 +3,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import Card from '../components/Card'
 import Loading from '../components/Loading'
 import { searchCountryByName, Country } from '../services/restCountries'
-import { wbGetCountryIndicator, wbGetGlobalIndicator, toSeries, WbPoint } from '../services/worldBank'
+import { wbGetCountryIndicator, wbGetCountryIndicatorSeries, wbGetGlobalIndicatorSeries, toSeries, hasNumericPoints, latestNonNull, WbPoint } from '../services/worldBank'
 import { getLatestReports, reliefWebCategory, reliefWebCountry, reliefWebSource, type ReliefWebItem } from '../services/reliefweb'
 import { normalizeExternalUrl } from '../utils/links'
 
@@ -49,13 +49,37 @@ async function fetchWbCountryMeta(): Promise<WbCountryMeta[]> {
   }))
 }
 
-async function latestNonNull(iso3: string, indicator: string, years = 20): Promise<number | null> {
+async function latestNonNullValue(iso3: string, indicator: string, years = 20): Promise<number | null> {
   const s = toSeries(await wbGetCountryIndicator(iso3, indicator, years))
   for (let i = s.length - 1; i >= 0; i--) {
     const v = s[i].value
     if (typeof v === 'number') return v
   }
   return null
+}
+
+function IndicatorFallback({ label, bundle }: { label: string; bundle?: SeriesBundle }) {
+  const countryLatest = latestNonNull(bundle?.country || [])
+  const worldLatest = latestNonNull(bundle?.world || [])
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
+      <div className="text-sm font-medium text-slate-800">{label}</div>
+      <p className="mt-2 text-xs leading-5 text-slate-600">
+        The time-series for this indicator is missing from the current World Bank response.
+        Showing the latest available snapshot instead of an empty chart.
+      </p>
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="rounded-xl border bg-white px-3 py-2 text-sm">
+          <div className="text-[11px] uppercase tracking-wide text-slate-500">Country</div>
+          <div className="mt-1 font-semibold text-slate-900">{countryLatest ? `${countryLatest.value.toFixed(2)} · ${countryLatest.date}` : 'Unavailable'}</div>
+        </div>
+        <div className="rounded-xl border bg-white px-3 py-2 text-sm">
+          <div className="text-[11px] uppercase tracking-wide text-slate-500">World</div>
+          <div className="mt-1 font-semibold text-slate-900">{worldLatest ? `${worldLatest.value.toFixed(2)} · ${worldLatest.date}` : 'Unavailable'}</div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function CountryExplorer() {
@@ -125,14 +149,14 @@ export default function CountryExplorer() {
 
       if (!mapped) {
         const [countrySets, worldSets] = await Promise.all([
-          Promise.all(INDICATORS.map(ind => wbGetCountryIndicator(iso3, ind.code, 30))),
-          Promise.all(INDICATORS.map(ind => wbGetGlobalIndicator(ind.code, 30))),
+          Promise.all(INDICATORS.map(ind => wbGetCountryIndicatorSeries(iso3, ind.code))),
+          Promise.all(INDICATORS.map(ind => wbGetGlobalIndicatorSeries(ind.code))),
         ])
         const m: Record<string, SeriesBundle> = {}
         for (let i = 0; i < INDICATORS.length; i++) {
           m[INDICATORS[i].code] = {
-            country: toSeries(countrySets[i]),
-            world: toSeries(worldSets[i]),
+            country: countrySets[i],
+            world: worldSets[i],
           }
         }
         mapped = m
@@ -168,7 +192,7 @@ export default function CountryExplorer() {
 
           const rows = await Promise.all(
             candidates.map(async cand => {
-              const v = await latestNonNull(cand.iso3, 'PV.EST', 20)
+              const v = await latestNonNullValue(cand.iso3, 'PV.EST', 20)
               return { name: cand.name, iso3: cand.iso3, value: v, isFocus: cand.iso3 === selISO3 } as RegionalRow
             })
           )
@@ -469,20 +493,45 @@ export default function CountryExplorer() {
             </div>
           )
 
+          const hasCountry = hasNumericPoints(bundle?.country || [])
+          const hasWorld = hasNumericPoints(bundle?.world || [])
+
           return (
             <Card key={ind.code} title={ind.label} right={rightNode}>
-              {!bundle ? <Loading /> : (
-                <div className="h-56 sm:h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={merged}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                      <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="country" name="Country" dot={false} />
-                      <Line type="monotone" dataKey="world" name="World" strokeDasharray="4 2" dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+              {!bundle ? <Loading /> : (!hasCountry && !hasWorld) ? (
+                <IndicatorFallback label={ind.label} bundle={bundle} />
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2 text-[11px] text-slate-600">
+                    <span className={`rounded-full px-2 py-0.5 ring-1 ${hasCountry ? 'bg-slate-100 ring-slate-200' : 'bg-amber-50 text-amber-800 ring-amber-200'}`}>
+                      {hasCountry ? 'Country series loaded' : 'Country fallback only'}
+                    </span>
+                    <span className={`rounded-full px-2 py-0.5 ring-1 ${hasWorld ? 'bg-slate-100 ring-slate-200' : 'bg-amber-50 text-amber-800 ring-amber-200'}`}>
+                      {hasWorld ? 'World series loaded' : 'World comparison missing'}
+                    </span>
+                  </div>
+                  <div className="h-56 sm:h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={merged}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                        <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} />
+                        <Tooltip />
+                        {hasCountry && <Line type="monotone" dataKey="country" name="Country" dot={false} />}
+                        {hasWorld && <Line type="monotone" dataKey="world" name="World" strokeDasharray="4 2" dot={false} />}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {(!hasCountry || !hasWorld) && (
+                    <div className="grid grid-cols-1 gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                      <div className="rounded-xl bg-slate-50 px-3 py-2">
+                        Latest country value: {lc && typeof lc.value === 'number' ? `${lc.value.toFixed(2)} (${lc.date})` : 'unavailable'}
+                      </div>
+                      <div className="rounded-xl bg-slate-50 px-3 py-2">
+                        Latest world value: {lw && typeof lw.value === 'number' ? `${lw.value.toFixed(2)} (${lw.date})` : 'unavailable'}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </Card>
