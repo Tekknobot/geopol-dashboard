@@ -3,7 +3,7 @@ import { Newspaper, ExternalLink, ChevronLeft, ChevronRight, Pause, Play, Info }
 import type { ReliefWebItem } from '../services/reliefweb'
 import { normalizeExternalUrl } from '../utils/links'
 
-// --- Local helpers (duplicated small bits so this file is standalone)
+// --- Local helpers (Duplicated small bits so this file is standalone.)
 const CATEGORY = 'Humanitarian'
 const domainFromUrl = (u: string) => { try { return new URL(u).hostname.replace(/^www\./,'').toLowerCase() } catch { return '' } }
 const TRUSTED_DOMAINS = new Set([
