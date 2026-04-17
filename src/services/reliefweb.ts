@@ -16,7 +16,7 @@ export type ReliefWebItem = {
   };
 };
 
-const RW_BASE = "https://api.reliefweb.int/v1";
+const RW_BASE = "/api/reliefweb/v1";
 
 /**
  * Fetch latest published reports. Limit default 12.
