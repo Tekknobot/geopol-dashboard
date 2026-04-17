@@ -26,10 +26,11 @@ function appName() {
 }
 
 /**
- * Fetch latest published reports. Limit default 12.
- * Uses fields projection to keep payload small.
+ * Fetch latest published reports and keep only items created within the last 24 hours.
+ * We intentionally request a larger batch so the dashboard can plot the full recent report set,
+ * rather than just a small headline sample.
  */
-export async function getLatestReports(limit = 12, cacheMs = 1000 * 60 * 10) {
+export async function getLatestReports(limit = 500, cacheMs = 1000 * 60 * 10) {
   const body = {
     limit,
     sort: ["date.created:desc"],
@@ -77,8 +78,13 @@ export async function getLatestReports(limit = 12, cacheMs = 1000 * 60 * 10) {
       const raw = await res.json();
       const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
       const data = Array.isArray((parsed as any)?.data) ? (parsed as any).data : [];
-      setCache<ReliefWebItem[]>(key, data);
-      return data as ReliefWebItem[];
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      const filtered = (data as ReliefWebItem[]).filter((item) => {
+        const created = item?.fields?.date?.created ? Date.parse(item.fields.date.created) : NaN;
+        return Number.isFinite(created) && created >= cutoff;
+      });
+      setCache<ReliefWebItem[]>(key, filtered);
+      return filtered as ReliefWebItem[];
     } catch (e: any) {
       lastErr = e;
       if (e?.name === "AbortError") break;

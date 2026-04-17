@@ -717,7 +717,7 @@ export default function Dashboard() {
         // Warm from cache immediately
         const cgdp = getCache<WbPoint[]>('wld:gdp', TTL)
         const ccpi = getCache<WbPoint[]>('wld:cpi', TTL)
-        const crw  = getCache<ReliefWebItem[]>('rw:latest', TTL)
+        const crw  = getCache<ReliefWebItem[]>('rw:latest:24h', TTL)
 
         if (cgdp) setGdpSeries(cgdp)
         if (ccpi) setCpiSeries(ccpi)
@@ -739,9 +739,9 @@ export default function Dashboard() {
         // ReliefWeb now (fast path)
         const rwPromise = (async () => {
           try {
-            const rw = await getLatestReports(32)
+            const rw = await getLatestReports(500)
             setReports(rw)
-            setCache('rw:latest', rw)
+            setCache('rw:latest:24h', rw)
             // If we still don't have map headlines, use RW for carousel
             if (mapNews.length === 0) {
               const itemsAll = rw.map(r => ({
