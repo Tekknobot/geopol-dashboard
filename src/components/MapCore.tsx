@@ -944,20 +944,23 @@ export default function MapCore({
     abortRef.current = controller
     let alive = true
 
-    const BATCH_SIZE = 80
+    let totalGeoPins = 0
+    let totalDocNews = 0
+
     const allNews: MapNewsItem[] = []
-    let totalFetched = 0
-    let totalCandidates = 0
-    let totalErrors = 0
 
     async function runCategory(cat: string, query: string) {
+      /* ---------------------------
+        GEO FETCH (MAP PINS)
+      --------------------------- */
+
       try {
-        const feats = await fetchGeo(controller, query, '24h', 900)
+        const feats = await fetchGeo(controller, query, '72h', 600)
+
         if (!alive || controller.signal.aborted) return
 
-        totalFetched += feats.length
-
         const candidates: SocioPoint[] = []
+
         for (const f of feats) {
           const pt = featureToPoint(f, cat)
           if (!pt) continue
@@ -968,92 +971,118 @@ export default function MapCore({
 
           if (addedKeys.current.has(key)) continue
           addedKeys.current.add(key)
+
           candidates.push(pt)
         }
 
         if (candidates.length) {
-          totalCandidates += candidates.length
+          totalGeoPins += candidates.length
 
-          let i = 0
-          const pump = () => {
-            if (!alive || controller.signal.aborted) return
+          setPoints(prev => [...prev, ...candidates])
 
-            const slice = candidates.slice(i, i + BATCH_SIZE)
-            if (slice.length) {
-              setPoints(prev => [...prev, ...slice])
-
-              if (!userTouchedFilters.current) {
-                setActiveCats(prevCats => {
-                  const merged = new Set(prevCats)
-                  merged.add(cat)
-                  return merged
-                })
-              }
-
-              i += BATCH_SIZE
-            }
-
-            if (i < candidates.length) {
-              rafId.current = requestAnimationFrame(pump)
-            }
-          }
-
-          rafId.current = requestAnimationFrame(pump)
-        }
-
-        // Fetch document headlines separately for this legend category.
-        try {
-          const articles = await fetchDocs(controller, query, 10)
-          if (!alive || controller.signal.aborted) return
-
-          for (const article of articles) {
-            const item = articleToNewsItem(article, cat)
-            if (!item) continue
-            if (!allNews.some(x => x.url === item.url && x.category === item.category)) {
-              allNews.push(item)
-            }
-          }
-
-          if (onNews) onNews([...allNews])
-        } catch (e) {
-          if (IS_DEV) {
-            // eslint-disable-next-line no-console
-            console.warn(`DOC fetch failed for ${cat}`, e)
+          if (!userTouchedFilters.current) {
+            setActiveCats(prev => {
+              const next = new Set(prev)
+              next.add(cat)
+              return next
+            })
           }
         }
+
       } catch (e) {
-        totalErrors += 1
         if (IS_DEV) {
-          // eslint-disable-next-line no-console
-          console.error(`GEO fetch failed for ${cat}`, e)
+          console.warn(`GEO failed for ${cat}`, e)
+        }
+      }
+
+      /* ---------------------------
+        DOC FETCH (HEADLINES)
+      --------------------------- */
+
+      try {
+        const articles = await fetchDocs(controller, query, 12)
+
+        if (!alive || controller.signal.aborted) return
+
+        for (const article of articles) {
+
+          const headline =
+            (article?.title || '').toString().trim()
+
+          const rawUrl =
+            article?.url || ''
+
+          if (!headline || !rawUrl) continue
+
+          const url = normalizeExternalUrl(rawUrl)
+
+          const item: MapNewsItem = {
+            id: `${cat}:${url}`,
+            headline,
+            url,
+            source:
+              article?.domain ||
+              article?.sourcecountry ||
+              undefined,
+            category: cat,
+            lat: 0,
+            lon: 0,
+          }
+
+          if (!allNews.some(x => x.url === item.url)) {
+            allNews.push(item)
+          }
+        }
+
+        totalDocNews += allNews.length
+
+        if (onNews) {
+          onNews([...allNews])
+        }
+
+      } catch (e) {
+        if (IS_DEV) {
+          console.warn(`DOC failed for ${cat}`, e)
         }
       }
     }
 
-    Promise.allSettled(
-      Object.entries(LEGEND_QUERIES).map(([cat, query]) => runCategory(cat, query))
-    ).then(() => {
-      if (!alive || controller.signal.aborted) return
+    /* ---------------------------
+      RUN ALL LEGEND CATEGORIES
+    --------------------------- */
 
-      if (totalCandidates === 0) {
-        if (IS_DEV) {
-          // eslint-disable-next-line no-console
-          console.warn('GDELT summary', { totalFetched, totalCandidates, totalErrors })
-        }
+    Promise.allSettled(
+      Object.entries(LEGEND_QUERIES).map(
+        ([cat, query]) =>
+          runCategory(cat, query)
+      )
+    ).then(() => {
+
+      if (!alive) return
+
+      /* Only fallback if BOTH fail */
+
+      if (totalGeoPins === 0 && totalDocNews === 0) {
 
         setErr(
-          totalFetched > 0
-            ? 'No map data loaded. GDELT returned features, but none could be converted into visible legend-category pins.'
-            : 'No map data loaded. GDELT returned no usable pinned results for the legend categories.'
+          'No live geopolitical results were returned from GDELT. Try again shortly.'
         )
+
+        if (IS_DEV) {
+          console.warn('FINAL SUMMARY', {
+            totalGeoPins,
+            totalDocNews
+          })
+        }
+
       }
     })
 
     return () => {
       alive = false
-      if (rafId.current) cancelAnimationFrame(rafId.current)
       controller.abort()
     }
+
   }, [onNews])
 
   // If filters change, republish full visible set (to keep Dashboard list in sync)
