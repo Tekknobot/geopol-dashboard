@@ -107,23 +107,34 @@ function inferCategory(name: string, html: string) {
 
 async function fetchGeo(query: string, timespan = "24h", maxpoints = 900) {
   const base = (import.meta as any)?.env?.VITE_GDELT_PROXY_URL || "/api/gdelt"
-  const url = `${base}/api/v2/geo/geo?query=${encodeURIComponent(query)}&mode=PointData&format=GeoJSON&timespan=${encodeURIComponent(timespan)}&maxpoints=${maxpoints}`
-  const res = await fetch(url, { headers: { Accept: "application/json, text/plain;q=0.9,*/*;q=0.8" } })
-  const text = await res.text()
-  if (!res.ok) return []
-  try {
-    const gj = JSON.parse(text)
-    return Array.isArray(gj?.features) ? gj.features : []
-  } catch {
-    const start = text.indexOf("{"); const end = text.lastIndexOf("}")
-    if (start !== -1 && end !== -1 && end > start) {
-      try {
-        const gj = JSON.parse(text.slice(start, end + 1))
-        return Array.isArray(gj?.features) ? gj.features : []
-      } catch {}
+  const attempts = [
+    { query, timespan, maxpoints },
+    { query, timespan: "72h", maxpoints },
+    { query, timespan: "168h", maxpoints },
+    { query: "(protest OR strike OR coup OR sanctions OR election OR war OR conflict)", timespan: "72h", maxpoints: Math.min(maxpoints, 600) },
+    { query: "(politics OR government OR security OR conflict)", timespan: "168h", maxpoints: Math.min(maxpoints, 600) },
+  ]
+  for (const attempt of attempts) {
+    const url = `${base}/api/v2/geo/geo?query=${encodeURIComponent(attempt.query)}&mode=PointData&format=GeoJSON&timespan=${encodeURIComponent(attempt.timespan)}&maxpoints=${attempt.maxpoints}&sortby=date&geores=1`
+    const res = await fetch(url, { headers: { Accept: "application/json, text/plain;q=0.9,*/*;q=0.8" } })
+    const text = await res.text()
+    if (!res.ok) continue
+    try {
+      const gj = JSON.parse(text)
+      const features = Array.isArray(gj?.features) ? gj.features : []
+      if (features.length) return features
+    } catch {
+      const start = text.indexOf("{"); const end = text.lastIndexOf("}")
+      if (start !== -1 && end !== -1 && end > start) {
+        try {
+          const gj = JSON.parse(text.slice(start, end + 1))
+          const features = Array.isArray(gj?.features) ? gj.features : []
+          if (features.length) return features
+        } catch {}
+      }
     }
-    return []
   }
+  return []
 }
 
 function featureToPoint(f: any): SocioPoint | null {
@@ -131,15 +142,14 @@ function featureToPoint(f: any): SocioPoint | null {
   const props = f?.properties || {}
   const lat = parseCoord(coords?.[1]); const lon = parseCoord(coords?.[0])
   if (!validCoord(lat, lon)) return null
-  const name = (props.name || "").toString(); const html = (props.html || "").toString()
+  const name = (props.name || props.label || props.title || props.location || "").toString().trim()
+  const html = (props.html || props.description || "").toString()
   const category = inferCategory(name, html)
-  const best = extractBestLink(html, name)
-  const isOther = category === "Other"
-  const trustworthy = (best.score ?? -999) >= 10 || (best as any).source && TRUSTED_DOMAINS.has((best as any).source)
-  if (isOther && !trustworthy) return null
-  const headline = (best as any).headline ?? name
+  const best = extractBestLink(html, name || category)
+  const headline = (best as any).headline ?? (name || category)
   const source = (best as any).source
   const url     = (best as any).url
+  if (!(name || category)) return null
   return { lat: lat!, lon: lon!, label: name || category, category, headline, source, url }
 }
 

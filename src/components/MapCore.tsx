@@ -651,40 +651,68 @@ async function fetchGeo(
 ) {
   const base = (import.meta as any)?.env?.VITE_GDELT_PROXY_URL || "/api/gdelt";
 
-  // Correct URL: include query + format=GeoJSON + timespan + maxpoints
-  const url =
-    `${base}/api/v2/geo/geo` +
-    `?query=${encodeURIComponent(query)}` +
-    `&mode=PointData` +
-    `&format=GeoJSON` +
-    `&timespan=${encodeURIComponent(timespan)}` +
-    `&maxpoints=${maxpoints}`;
+  const attempts = [
+    { query, timespan, maxpoints },
+    { query, timespan: "72h", maxpoints },
+    { query, timespan: "168h", maxpoints },
+    { query: "(protest OR strike OR coup OR sanctions OR election OR war OR conflict)", timespan: "72h", maxpoints: Math.min(maxpoints, 600) },
+    { query: "(politics OR government OR security OR conflict)", timespan: "168h", maxpoints: Math.min(maxpoints, 600) },
+  ];
 
-  const res = await fetch(url, {
-    signal: controller.signal,
-    headers: { Accept: "application/json, text/plain;q=0.9,*/*;q=0.8" },
-  });
+  let lastProblem = "No usable GeoJSON payload returned";
 
-  // Handle GDELT rate limiting and transient errors
-  if (res.status === 429 || res.status === 503) {
-    throw new Error("GDELT is rate-limiting or temporarily unavailable");
-  }
+  for (const attempt of attempts) {
+    const url =
+      `${base}/api/v2/geo/geo` +
+      `?query=${encodeURIComponent(attempt.query)}` +
+      `&mode=PointData` +
+      `&format=GeoJSON` +
+      `&timespan=${encodeURIComponent(attempt.timespan)}` +
+      `&maxpoints=${attempt.maxpoints}` +
+      `&sortby=date` +
+      `&geores=1`;
 
-  const text = await res.text();
-  if (!res.ok) throw new Error(`GDELT ${res.status}: ${text.slice(0, 200)}`);
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: "application/json, text/plain;q=0.9,*/*;q=0.8" },
+    });
 
-  // Robust parse: some GDELT responses contain leading HTML noise on errors
-  try {
-    const gj = JSON.parse(text);
-    return Array.isArray(gj?.features) ? gj.features : [];
-  } catch {
-    const start = text.indexOf("{"), end = text.lastIndexOf("}");
-    if (start !== -1 && end > start) {
-      const gj = JSON.parse(text.slice(start, end + 1));
-      return Array.isArray(gj?.features) ? gj.features : [];
+    if (res.status === 429 || res.status === 503) {
+      lastProblem = "GDELT is rate-limiting or temporarily unavailable";
+      continue;
     }
-    throw new Error("Failed to parse GDELT GeoJSON payload");
+
+    const text = await res.text();
+    if (!res.ok) {
+      lastProblem = `GDELT ${res.status}: ${text.slice(0, 200)}`;
+      continue;
+    }
+
+    try {
+      const gj = JSON.parse(text);
+      const features = Array.isArray(gj?.features) ? gj.features : [];
+      if (features.length) return features;
+      lastProblem = "GDELT returned an empty feature collection";
+      continue;
+    } catch {
+      const start = text.indexOf("{"), end = text.lastIndexOf("}");
+      if (start !== -1 && end > start) {
+        try {
+          const gj = JSON.parse(text.slice(start, end + 1));
+          const features = Array.isArray(gj?.features) ? gj.features : [];
+          if (features.length) return features;
+          lastProblem = "GDELT returned an empty feature collection";
+          continue;
+        } catch {
+          lastProblem = "Failed to parse GDELT GeoJSON payload";
+          continue;
+        }
+      }
+      lastProblem = "Failed to parse GDELT GeoJSON payload";
+    }
   }
+
+  throw new Error(lastProblem);
 }
 
 
@@ -694,18 +722,16 @@ function featureToPoint(f: any): SocioPoint | null {
   const props = f?.properties || {}
   const lat = parseCoord(coords?.[1]); const lon = parseCoord(coords?.[0])
   if (!validCoord(lat, lon)) return null
-  const name = (props.name || '').toString(); const html = (props.html || '').toString()
+  const name = (props.name || props.label || props.title || props.location || '').toString().trim()
+  const html = (props.html || props.description || '').toString()
   const category = inferCategory(name, html)
   const label = name || category
-  const best = extractBestLink(html, name)
-  const isOther = category === 'Other'
-  const trustworthy = (best.score >= 10) || (best.source ? TRUSTED_DOMAINS.has(best.source) : false)
-  // Keep some "Other" pins if they at least have a link or a decent label
-  if (isOther && !trustworthy && !best.url && label.length < 6) return null
-  const showLink = best.score >= 0
-  const headline = showLink ? best.headline : undefined
+  const best = extractBestLink(html, label)
+  const showLink = !!best.url
+  const headline = showLink ? (best.headline || label) : undefined
   const source = showLink ? best.source : undefined
-  const url     = showLink ? best.url     : undefined
+  const url     = showLink ? best.url : undefined
+  if (!label) return null
   return { lat: lat!, lon: lon!, label, category, headline, source, url }
 }
 
@@ -828,7 +854,7 @@ export default function MapCore({
       if (!alive || controller.signal.aborted) return
       const nothingLoaded = totalFetched === 0 || (totalFetched > 0 && totalCandidates === 0)
       if (nothingLoaded) {
-        setErr('No map data loaded. GDELT may be unreachable, blocked by the browser/network, or rate-limited.')
+        setErr('No map data loaded. GDELT returned no usable pinned results for the current queries.')
       }
     })
 
