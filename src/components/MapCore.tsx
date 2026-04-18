@@ -209,22 +209,6 @@ const COUNTRY_ALIASES: Array<[string, string]> = [
   ['caucasus', 'Asia'],
   ['central asia', 'Asia'],
   ['southeast asia', 'Asia'],  
-
-  [/\/world\/middle-east\//i, 'Middle East'],
-  [/\/world\/asia-pacific\//i, 'Asia'],
-  [/\/world\/asia\/?/i, 'Asia'],
-  [/\/world\/africa\/?/i, 'Africa'],
-  [/\/world\/europe\/?/i, 'Europe'],
-  [/\/world\/latin-america\/?/i, 'Latin America'],
-  [/\/world\/uk\//i, 'United Kingdom'],
-  [/\/world\/china\//i, 'China'],
-  [/\/world\/india\//i, 'India'],
-  [/\/world\/australia\//i, 'Australia'],
-  [/\/world\/canada\//i, 'Canada'],
-  [/\/world\/russia\//i, 'Russia'],
-  [/\/world\/ukraine\//i, 'Ukraine'],
-  [/\/world\/israel\//i, 'Israel'],
-  [/\/\/live\/world-/i, 'World'],  
 ]
 
 const URL_HINTS: Array<[RegExp, string]> = [
