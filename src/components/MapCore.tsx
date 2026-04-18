@@ -8,7 +8,7 @@ import { worldNewsCategory } from '../services/worldNews'
 import { searchCountryByName } from '../services/restCountries'
 import { normalizeExternalUrl } from '../utils/links'
 
-function svgMarker(color: string, emoji: string) {
+function svgMarker(color: string, emoji: string, count?: number) {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
       <defs>
@@ -19,6 +19,8 @@ function svgMarker(color: string, emoji: string) {
       <g filter="url(#shadow)">
         <circle cx="24" cy="24" r="16" fill="${color}" />
         <text x="24" y="28" text-anchor="middle" font-size="18" font-family="system-ui, -apple-system, Segoe UI, Emoji">${emoji}</text>
+        ${count && count > 1 ? `<circle cx="36" cy="12" r="9" fill="#0f172a" />
+        <text x="36" y="15" text-anchor="middle" font-size="10" font-weight="700" fill="white" font-family="system-ui, -apple-system, Segoe UI">${count > 99 ? '99+' : String(count)}</text>` : ''}
       </g>
     </svg>
   `.trim()
@@ -31,23 +33,23 @@ function svgMarker(color: string, emoji: string) {
   })
 }
 
-function iconForCategory(cat: string) {
+function iconForCategory(cat: string, count?: number) {
   const c = (cat || '').toLowerCase()
-  if (c.includes('flood')) return svgMarker('#0ea5e9', '🌊')
-  if (c.includes('earthquake')) return svgMarker('#b45309', '🪨')
-  if (c.includes('drought')) return svgMarker('#ca8a04', '☀️')
-  if (c.includes('storm') || c.includes('cyclone') || c.includes('hurricane') || c.includes('typhoon')) return svgMarker('#7c3aed', '🌀')
-  if (c.includes('outbreak') || c.includes('health')) return svgMarker('#dc2626', '🩺')
-  if (c.includes('food') || c.includes('nutrition') || c.includes('famine')) return svgMarker('#16a34a', '🌾')
-  if (c.includes('conflict') || c.includes('violence') || c.includes('security')) return svgMarker('#ea580c', '🪖')
-  if (c.includes('displacement') || c.includes('migration') || c.includes('rights')) return svgMarker('#0284c7', '🧭')
-  if (c.includes('governance') || c.includes('corruption') || c.includes('politics')) return svgMarker('#475569', '🏛️')
-  if (c.includes('economy') || c.includes('markets')) return svgMarker('#059669', '📈')
-  if (c.includes('energy')) return svgMarker('#b91c1c', '⚡')
-  if (c.includes('technology') || c.includes('cyber')) return svgMarker('#4338ca', '💻')
-  if (c.includes('diplomacy')) return svgMarker('#0f766e', '🤝')
-  if (c.includes('climate') || c.includes('disaster')) return svgMarker('#2563eb', '🌍')
-  return svgMarker('#64748b', '•')
+  if (c.includes('flood')) return svgMarker('#0ea5e9', '🌊', count)
+  if (c.includes('earthquake')) return svgMarker('#b45309', '🪨', count)
+  if (c.includes('drought')) return svgMarker('#ca8a04', '☀️', count)
+  if (c.includes('storm') || c.includes('cyclone') || c.includes('hurricane') || c.includes('typhoon')) return svgMarker('#7c3aed', '🌀', count)
+  if (c.includes('outbreak') || c.includes('health')) return svgMarker('#dc2626', '🩺', count)
+  if (c.includes('food') || c.includes('nutrition') || c.includes('famine')) return svgMarker('#16a34a', '🌾', count)
+  if (c.includes('conflict') || c.includes('violence') || c.includes('security')) return svgMarker('#ea580c', '🪖', count)
+  if (c.includes('displacement') || c.includes('migration') || c.includes('rights')) return svgMarker('#0284c7', '🧭', count)
+  if (c.includes('governance') || c.includes('corruption') || c.includes('politics')) return svgMarker('#475569', '🏛️', count)
+  if (c.includes('economy') || c.includes('markets')) return svgMarker('#059669', '📈', count)
+  if (c.includes('energy')) return svgMarker('#b91c1c', '⚡', count)
+  if (c.includes('technology') || c.includes('cyber')) return svgMarker('#4338ca', '💻', count)
+  if (c.includes('diplomacy')) return svgMarker('#0f766e', '🤝', count)
+  if (c.includes('climate') || c.includes('disaster')) return svgMarker('#2563eb', '🌍', count)
+  return svgMarker('#64748b', '•', count)
 }
 
 function inferReliefWebCategory(r: ReliefWebItem): string {
@@ -97,6 +99,45 @@ type SocioPoint = {
   headline: string
   source: string
   url: string
+}
+
+type GroupedPoint = {
+  lat: number
+  lon: number
+  label: string
+  category: string
+  items: SocioPoint[]
+}
+
+
+function coordKey(lat: number, lon: number) {
+  return `${lat.toFixed(4)},${lon.toFixed(4)}`
+}
+
+function groupPointsByLocation(points: SocioPoint[]): GroupedPoint[] {
+  const groups = new Map<string, GroupedPoint>()
+  for (const point of points) {
+    const key = `${coordKey(point.lat, point.lon)}::${point.category}`
+    const existing = groups.get(key)
+    if (existing) {
+      existing.items.push(point)
+    } else {
+      groups.set(key, {
+        lat: point.lat,
+        lon: point.lon,
+        label: point.label,
+        category: point.category,
+        items: [point],
+      })
+    }
+  }
+
+  return Array.from(groups.values())
+    .map(group => ({
+      ...group,
+      items: [...group.items].sort((a, b) => a.headline.localeCompare(b.headline)),
+    }))
+    .sort((a, b) => b.items.length - a.items.length)
 }
 
 const ALL_CATEGORIES = [
@@ -381,8 +422,10 @@ export default function MapCore({
   }, [counts])
 
   const shownPoints = useMemo(() => points.filter(p => activeCats.has(p.category)), [points, activeCats])
+  const groupedShownPoints = useMemo(() => groupPointsByLocation(shownPoints), [shownPoints])
   const total = points.length
   const shown = shownPoints.length
+  const shownMarkers = groupedShownPoints.length
   const hasPins = shownPoints.length > 0
 
   function toggleCat(cat: string) {
@@ -405,18 +448,30 @@ export default function MapCore({
             attribution='&copy; OpenStreetMap contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          {shownPoints.map((p, idx) => (
-            <Marker key={`${p.url || p.label}-${idx}`} position={[p.lat, p.lon]} icon={iconForCategory(p.category)}>
+          {groupedShownPoints.map((group, idx) => (
+            <Marker key={`${group.label}-${group.category}-${idx}`} position={[group.lat, group.lon]} icon={iconForCategory(group.category, group.items.length)}>
               <Popup>
-                <div className="space-y-1 min-w-[220px]">
-                  <div className="text-xs font-semibold text-slate-500">{p.category}</div>
-                  <div className="font-semibold leading-snug">{p.headline || p.label}</div>
-                  <div className="text-xs text-slate-600">{p.label}{p.source ? ` • ${p.source}` : ''}</div>
-                  {p.url && (
-                    <a href={p.url} target="_blank" rel="noreferrer" className="text-sm underline underline-offset-2">
-                      Open headline
-                    </a>
-                  )}
+                <div className="space-y-2 min-w-[260px] max-w-[340px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs font-semibold text-slate-500">{group.category}</div>
+                    <div className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200">
+                      {group.items.length} headline{group.items.length === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-600">{group.label}</div>
+                  <div className="max-h-56 overflow-y-auto pr-1 space-y-2">
+                    {group.items.map((item, itemIdx) => (
+                      <div key={`${item.url}-${itemIdx}`} className="border-t first:border-t-0 pt-2 first:pt-0">
+                        <div className="font-semibold leading-snug text-sm">{item.headline || item.label}</div>
+                        <div className="text-[11px] text-slate-600">{item.source ? `${item.source} • ` : ''}{item.label}</div>
+                        {item.url && (
+                          <a href={item.url} target="_blank" rel="noreferrer" className="inline-block mt-1 text-sm underline underline-offset-2">
+                            Open headline
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </Popup>
             </Marker>
@@ -428,7 +483,7 @@ export default function MapCore({
         <summary className="cursor-pointer list-none select-none">
           <div className="flex items-center justify-between gap-2">
             <span className="font-semibold">Legend (world news + ReliefWeb)</span>
-            <span className="text-slate-600">Shown: {shown}/{total}</span>
+            <span className="text-slate-600">Headlines: {shown}/{total} · Markers: {shownMarkers}</span>
           </div>
         </summary>
 
