@@ -896,7 +896,7 @@ export default function Dashboard() {
     return Array.from(counts.entries())
       .map(([type, count]) => ({ type, count }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 12)
+      .slice(0, 64)
   }, [reports])
 
   // Map event type -> array of recent headlines (last 7d)
