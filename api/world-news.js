@@ -5,8 +5,8 @@ const FEEDS = [
   { name: 'CBC', url: 'https://www.cbc.ca/webfeed/rss/rss-world' },
 ]
 
-const MAX_PER_FEED = 12
-const MAX_TOTAL = 48
+const MAX_PER_FEED = 20
+const MAX_TOTAL = 80
 
 function decodeXml(str = '') {
   return String(str)
@@ -104,6 +104,16 @@ export default async function handler(_req, res) {
       const tb = Date.parse(b.publishedAt || '') || 0
       return tb - ta
     })
+
+    if (!sorted.length) {
+      res.status(503)
+      res.setHeader('content-type', 'application/json; charset=utf-8')
+      res.setHeader('access-control-allow-origin', '*')
+      return res.send(JSON.stringify({
+        error: 'World news feeds temporarily unavailable',
+        warnings,
+      }))
+    }
 
     res.status(200)
     res.setHeader('content-type', 'application/json; charset=utf-8')

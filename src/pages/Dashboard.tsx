@@ -753,19 +753,31 @@ export default function Dashboard() {
         const worldNewsPromise = (async () => {
           try {
             const items = await getLatestWorldNews()
+
+            // Do not overwrite good cached data with an empty response
+            if (!Array.isArray(items) || items.length === 0) return
+
             setWorldNews(items)
             setCache('world-news:latest', items)
-            const ranked = sortByRelevance(items.map(item => ({
-              id: item.id,
-              headline: item.title,
-              url: item.url,
-              source: item.source,
-              category: worldNewsCategory(item),
-              countryName: null,
-              created: worldNewsCreatedMs(item),
-            }))).slice(0, CAROUSEL_MAX)
-            setCarouselItems(ranked)
-            try { localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(ranked)) } catch {}
+
+            const ranked = sortByRelevance(
+              items.map(item => ({
+                id: item.id,
+                headline: item.title,
+                url: item.url,
+                source: item.source,
+                category: worldNewsCategory(item),
+                countryName: null,
+                created: worldNewsCreatedMs(item),
+              }))
+            ).slice(0, CAROUSEL_MAX)
+
+            if (ranked.length > 0) {
+              setCarouselItems(ranked)
+              try {
+                localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(ranked))
+              } catch {}
+            }
           } catch {
             // keep cached carousel if available
           }
