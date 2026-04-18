@@ -3,6 +3,7 @@ import Card from '../components/Card'
 import Loading from '../components/Loading'
 import ErrorState from '../components/ErrorState'
 import { getLatestReports, ReliefWebItem } from '../services/reliefweb'
+import { getLatestWorldNews, type WorldNewsItem, worldNewsCategory, worldNewsCreatedMs } from '../services/worldNews'
 import { wbGetGlobalIndicator, toSeries, WbPoint, wbGetCountryIndicator, wbGetGlobalIndicator as wbGlobal } from '../services/worldBank'
 import { searchCountryByName, type Country } from '../services/restCountries'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, LabelList } from 'recharts'
@@ -621,6 +622,7 @@ export default function Dashboard() {
   const [cpiSeries, setCpiSeries] = useState<WbPoint[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [carouselIndex, setCarouselIndex] = useState(0)
+  const [worldNews, setWorldNews] = useState<WorldNewsItem[]>([])
 
   // 📡 News flowing from the map
   const [mapNews, setMapNews] = useState<MapNewsItem[]>([])
@@ -686,7 +688,7 @@ export default function Dashboard() {
   }, [mapNews]);
 
   // Cached "front page" carousel so we can show headlines immediately
-  const CAROUSEL_CACHE_KEY = 'carousel:last'
+  const CAROUSEL_CACHE_KEY = 'carousel:world:last'
   const CAROUSEL_MAX = 24; // keep the top carousel concise and stable
   const [carouselItems, setCarouselItems] = useState<HeadlineItem[]>(() => {
     try {
@@ -716,20 +718,22 @@ export default function Dashboard() {
         const cgdp = getCache<WbPoint[]>('wld:gdp', TTL)
         const ccpi = getCache<WbPoint[]>('wld:cpi', TTL)
         const crw  = getCache<ReliefWebItem[]>('rw:latest:24h', TTL)
+        const cwn  = getCache<WorldNewsItem[]>('world-news:latest', TTL)
 
         if (cgdp) setGdpSeries(cgdp)
         if (ccpi) setCpiSeries(ccpi)
-        if (crw) {
-          setReports(crw)
+        if (crw) setReports(crw)
+        if (cwn) {
+          setWorldNews(cwn)
           if (carouselItems.length === 0) {
-            const seed = crw.map(r => ({
-              id: String(r.id),
-              headline: r.fields.title,
-              url: r.fields.url,
-              source: (() => { try { return new URL(r.fields.url).hostname.replace(/^www\./,'') } catch { return 'source' } })(),
-              category: 'Update',
-              countryName: r.fields.country?.[0]?.name,
-              created: new Date(r.fields.date.created).getTime(), // NEW
+            const seed = cwn.map(item => ({
+              id: item.id,
+              headline: item.title,
+              url: item.url,
+              source: item.source,
+              category: worldNewsCategory(item),
+              countryName: null,
+              created: worldNewsCreatedMs(item),
             }))
             setCarouselItems(sortByRelevance(seed).slice(0, CAROUSEL_MAX))
           }
@@ -741,23 +745,29 @@ export default function Dashboard() {
             setReports(rw)
             setCache('rw:latest:24h', rw)
             setEventsLoading(false)
-            // If we still don't have map headlines, use RW for carousel
-            if (mapNews.length === 0) {
-              const itemsAll = rw.map(r => ({
-                id: String(r.id),
-                headline: r.fields.title,
-                url: r.fields.url,
-                source: (() => { try { return new URL(r.fields.url).hostname.replace(/^www\./,'') } catch { return 'source' } })(),
-                category: 'Update',
-                countryName: r.fields.country?.[0]?.name,
-                created: new Date(r.fields.date.created).getTime(), // NEW
-              }))
-              const ranked = sortByRelevance(itemsAll).slice(0, CAROUSEL_MAX)
-              setCarouselItems(ranked)
-              try { localStorage.setItem('carousel:last', JSON.stringify(ranked)) } catch {}
-            }
           } catch {
             setEventsLoading(false)
+          }
+        })()
+
+        const worldNewsPromise = (async () => {
+          try {
+            const items = await getLatestWorldNews()
+            setWorldNews(items)
+            setCache('world-news:latest', items)
+            const ranked = sortByRelevance(items.map(item => ({
+              id: item.id,
+              headline: item.title,
+              url: item.url,
+              source: item.source,
+              category: worldNewsCategory(item),
+              countryName: null,
+              created: worldNewsCreatedMs(item),
+            }))).slice(0, CAROUSEL_MAX)
+            setCarouselItems(ranked)
+            try { localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(ranked)) } catch {}
+          } catch {
+            // keep cached carousel if available
           }
         })()
 
@@ -778,7 +788,7 @@ export default function Dashboard() {
         })()
 
         // Fire all; UI renders as things resolve
-        void Promise.race([rwPromise, kpiPromise])
+        void Promise.race([rwPromise, worldNewsPromise, kpiPromise])
       } catch (e:any) {
         setError(e?.message || 'Failed to load data')
       }
@@ -827,22 +837,6 @@ export default function Dashboard() {
   // Coordinate reverse-geocoding is disabled for third-party event pins.
   // We rely on URL/title/country metadata instead to avoid noisy 400s from the free client endpoint.
 
-  // When map-driven headlines arrive, promote them once and cache
-  useEffect(() => {
-    if (uniqueMapNews.length === 0) return;
-      const itemsAll = uniqueMapNews.map(n => ({
-        id: n.id,
-        headline: n.headline,
-        url: n.url,
-        source: n.source,
-        category: n.category,
-        lat: n.lat,
-        lon: n.lon,
-      }));
-      const ranked = sortByRelevance(itemsAll).slice(0, CAROUSEL_MAX);
-      setCarouselItems(ranked);
-      try { localStorage.setItem(CAROUSEL_CACHE_KEY, JSON.stringify(ranked)) } catch {}
-  }, [uniqueMapNews]);
 
   // 👇 Countries that landed in "Other" (7d window)
   const otherCountries = useMemo(() => {
@@ -1168,8 +1162,8 @@ export default function Dashboard() {
       </CollapsibleSection>
 
       {/* Map */}
-      <Card title="Global ReliefWeb Headline Map">
-        <LazyEventMap events={[]} reports={reports || []} onNews={handleNews} />
+      <Card title="Global Headline Map">
+        <LazyEventMap events={[]} reports={reports || []} worldNews={worldNews} onNews={handleNews} />
       </Card>
 
       {/* Regional Volatility Leaderboard (Counts, Last 7 Days) */}
@@ -1413,7 +1407,7 @@ export default function Dashboard() {
 
       {/* Headlines list */}
       <CollapsibleSection
-        title={uniqueMapNews.length ? 'Latest Headlines (from Map, 24h)' : 'Latest Humanitarian Updates (ReliefWeb)'}
+        title={uniqueMapNews.length ? 'Latest Headlines (from Map)' : 'Latest Humanitarian Updates (ReliefWeb)'}
         storageKey="news:list"
         defaultOpen={false}
         rightHint={

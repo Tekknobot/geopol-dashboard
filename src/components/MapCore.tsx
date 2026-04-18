@@ -3,6 +3,8 @@ import L from 'leaflet'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EonetEvent } from '../services/eonet'
 import type { ReliefWebItem } from '../services/reliefweb'
+import type { WorldNewsItem } from '../services/worldNews'
+import { worldNewsCategory } from '../services/worldNews'
 import { searchCountryByName } from '../services/restCountries'
 import { normalizeExternalUrl } from '../utils/links'
 
@@ -39,6 +41,11 @@ function iconForCategory(cat: string) {
   if (c.includes('food') || c.includes('nutrition') || c.includes('famine')) return svgMarker('#16a34a', '🌾')
   if (c.includes('conflict') || c.includes('violence') || c.includes('security')) return svgMarker('#ea580c', '🪖')
   if (c.includes('displacement') || c.includes('migration') || c.includes('refugee')) return svgMarker('#8b5cf6', '🧳')
+  if (c.includes('politic')) return svgMarker('#2563eb', '🏛️')
+  if (c.includes('economy') || c.includes('market') || c.includes('trade')) return svgMarker('#059669', '💹')
+  if (c.includes('energy')) return svgMarker('#f59e0b', '⚡')
+  if (c.includes('technology') || c.includes('cyber')) return svgMarker('#0891b2', '💻')
+  if (c.includes('diplomacy')) return svgMarker('#7c3aed', '🤝')
   return svgMarker('#374151', '●')
 }
 
@@ -70,10 +77,18 @@ const ALL_CATEGORIES = [
   'Food Security',
   'Conflict/Insecurity',
   'Displacement',
+  'Politics',
+  'Economy/Markets',
+  'Energy',
+  'Technology/Cyber',
+  'Diplomacy',
+  'Climate/Disaster',
+  'Migration/Human Rights',
+  'World News',
   'Other',
 ]
 
-function inferCategory(r: ReliefWebItem): string {
+function inferReliefWebCategory(r: ReliefWebItem): string {
   const themes = (r.fields.theme || []).map(x => x?.name || '').join(' | ')
   const disasters = (r.fields.disaster_type || []).map(x => x?.name || '').join(' | ')
   const title = r.fields.title || ''
@@ -91,7 +106,7 @@ function inferCategory(r: ReliefWebItem): string {
 }
 
 function sourceFromUrl(url: string) {
-  try { return new URL(url).hostname.replace(/^www\./, '') } catch { return 'reliefweb.int' }
+  try { return new URL(url).hostname.replace(/^www\./, '') } catch { return 'source' }
 }
 
 function dedupeNews(items: MapNewsItem[]) {
@@ -106,13 +121,42 @@ function dedupeNews(items: MapNewsItem[]) {
   return out
 }
 
+const COUNTRY_ALIASES: Array<[string, string]> = [
+  ['united states', 'United States'], ['u.s.', 'United States'], ['us ', 'United States'], ['washington', 'United States'],
+  ['canada', 'Canada'], ['ottawa', 'Canada'], ['toronto', 'Canada'],
+  ['mexico', 'Mexico'], ['brazil', 'Brazil'], ['argentina', 'Argentina'], ['chile', 'Chile'], ['colombia', 'Colombia'], ['peru', 'Peru'], ['venezuela', 'Venezuela'], ['haiti', 'Haiti'],
+  ['united kingdom', 'United Kingdom'], ['britain', 'United Kingdom'], ['uk ', 'United Kingdom'], ['london', 'United Kingdom'],
+  ['france', 'France'], ['paris', 'France'], ['germany', 'Germany'], ['berlin', 'Germany'], ['italy', 'Italy'], ['rome', 'Italy'], ['spain', 'Spain'], ['madrid', 'Spain'],
+  ['russia', 'Russia'], ['moscow', 'Russia'], ['ukraine', 'Ukraine'], ['kyiv', 'Ukraine'], ['poland', 'Poland'], ['brussels', 'Belgium'],
+  ['israel', 'Israel'], ['gaza', 'Palestine'], ['west bank', 'Palestine'], ['palestinian', 'Palestine'], ['iran', 'Iran'], ['tehran', 'Iran'],
+  ['iraq', 'Iraq'], ['baghdad', 'Iraq'], ['syria', 'Syria'], ['damascus', 'Syria'], ['lebanon', 'Lebanon'], ['beirut', 'Lebanon'],
+  ['saudi', 'Saudi Arabia'], ['riyadh', 'Saudi Arabia'], ['uae', 'United Arab Emirates'], ['dubai', 'United Arab Emirates'], ['abu dhabi', 'United Arab Emirates'],
+  ['yemen', 'Yemen'], ['sudan', 'Sudan'], ['khartoum', 'Sudan'], ['egypt', 'Egypt'], ['cairo', 'Egypt'], ['libya', 'Libya'],
+  ['ethiopia', 'Ethiopia'], ['somalia', 'Somalia'], ['kenya', 'Kenya'], ['nigeria', 'Nigeria'], ['south africa', 'South Africa'], ['congo', 'DR Congo'],
+  ['china', 'China'], ['beijing', 'China'], ['hong kong', 'Hong Kong'], ['taiwan', 'Taiwan'], ['taipei', 'Taiwan'], ['japan', 'Japan'], ['tokyo', 'Japan'],
+  ['south korea', 'South Korea'], ['seoul', 'South Korea'], ['north korea', 'North Korea'], ['pyongyang', 'North Korea'], ['india', 'India'], ['delhi', 'India'],
+  ['pakistan', 'Pakistan'], ['islamabad', 'Pakistan'], ['afghanistan', 'Afghanistan'], ['myanmar', 'Myanmar'], ['thailand', 'Thailand'], ['bangkok', 'Thailand'],
+  ['philippines', 'Philippines'], ['manila', 'Philippines'], ['indonesia', 'Indonesia'], ['jakarta', 'Indonesia'], ['australia', 'Australia'], ['sydney', 'Australia'],
+  ['new zealand', 'New Zealand'], ['singapore', 'Singapore'],
+]
+
+function inferCountryHint(text: string): string | null {
+  const hay = ` ${String(text || '').toLowerCase()} `
+  for (const [alias, country] of COUNTRY_ALIASES) {
+    if (hay.includes(` ${alias.toLowerCase()} `) || hay.includes(alias.toLowerCase())) return country
+  }
+  return null
+}
+
 export default function MapCore({
   events: _unused,
   reports = [],
+  worldNews = [],
   onNews,
 }: {
   events: EonetEvent[]
   reports?: ReliefWebItem[]
+  worldNews?: WorldNewsItem[]
   onNews?: (items: MapNewsItem[]) => void
 }) {
   const [points, setPoints] = useState<SocioPoint[]>([])
@@ -126,24 +170,31 @@ export default function MapCore({
     async function buildPins() {
       try {
         setErr(null)
-        const rows = (reports || []).filter(r => r?.fields?.title && r?.fields?.url)
-        if (!rows.length) {
+
+        const reliefRows = (reports || []).filter(r => r?.fields?.title && r?.fields?.url)
+        const worldRows = (worldNews || []).filter(r => r?.title && r?.url)
+
+        if (!reliefRows.length && !worldRows.length) {
           if (alive) {
             setPoints([])
             if (onNews) onNews([])
-            setErr('No ReliefWeb headlines are available right now.')
+            setErr('No mappable headlines are available right now.')
           }
           return
         }
 
-        const uniqueCountries = Array.from(new Set(
-          rows
-            .map(r => r.fields.country?.[0]?.name?.trim())
-            .filter((v): v is string => !!v)
-        ))
+        const candidateCountries = new Set<string>()
+        for (const r of reliefRows) {
+          const country = r.fields.country?.[0]?.name?.trim()
+          if (country) candidateCountries.add(country)
+        }
+        for (const item of worldRows) {
+          const hint = inferCountryHint(`${item.title} ${item.description || ''}`)
+          if (hint) candidateCountries.add(hint)
+        }
 
         const coordMap = new Map<string, [number, number]>()
-        await Promise.all(uniqueCountries.map(async (country) => {
+        await Promise.all(Array.from(candidateCountries).map(async (country) => {
           try {
             const results = await searchCountryByName(country)
             const best = results.find(c => Array.isArray(c.latlng) && c.latlng.length >= 2)
@@ -157,55 +208,55 @@ export default function MapCore({
         const nextNews: MapNewsItem[] = []
         const seenPointKeys = new Set<string>()
 
-        for (const r of rows) {
+        for (const r of reliefRows) {
           const country = r.fields.country?.[0]?.name?.trim()
           if (!country) continue
           const coords = coordMap.get(country)
           if (!coords) continue
-
           const [lat, lon] = coords
           const url = normalizeExternalUrl(r.fields.url)
           const headline = r.fields.title.trim()
-          const category = inferCategory(r)
-          const key = `${country}:${url}`
+          const category = inferReliefWebCategory(r)
+          const key = `rw:${country}:${url}`
           if (seenPointKeys.has(key)) continue
           seenPointKeys.add(key)
+          const source = sourceFromUrl(url)
 
-          nextPoints.push({
-            lat,
-            lon,
-            label: country,
-            category,
-            headline,
-            source: sourceFromUrl(url),
-            url,
-          })
+          nextPoints.push({ lat, lon, label: country, category, headline, source, url })
+          nextNews.push({ id: `rw:${r.id}`, headline, url, source, category, lat, lon })
+        }
 
-          nextNews.push({
-            id: String(r.id),
-            headline,
-            url,
-            source: sourceFromUrl(url),
-            category,
-            lat,
-            lon,
-          })
+        for (const item of worldRows) {
+          const country = inferCountryHint(`${item.title} ${item.description || ''}`)
+          if (!country) continue
+          const coords = coordMap.get(country)
+          if (!coords) continue
+          const [lat, lon] = coords
+          const url = normalizeExternalUrl(item.url)
+          const headline = item.title.trim()
+          const category = worldNewsCategory(item)
+          const key = `wn:${country}:${url}`
+          if (seenPointKeys.has(key)) continue
+          seenPointKeys.add(key)
+          const source = item.source || sourceFromUrl(url)
+
+          nextPoints.push({ lat, lon, label: country, category, headline, source, url })
+          nextNews.push({ id: `wn:${item.id}`, headline, url, source, category, lat, lon })
         }
 
         if (!alive) return
-
         setPoints(nextPoints)
         if (onNews) onNews(dedupeNews(nextNews))
-        if (!nextPoints.length) setErr('ReliefWeb returned headlines, but none included usable country-based map locations.')
+        if (!nextPoints.length) setErr('Headline feeds loaded, but none included usable country-based map locations.')
       } catch (e: any) {
         if (!alive) return
-        setErr(e?.message || 'Failed to build ReliefWeb map pins.')
+        setErr(e?.message || 'Failed to build map pins.')
       }
     }
 
     void buildPins()
     return () => { alive = false }
-  }, [reports, onNews])
+  }, [reports, worldNews, onNews])
 
   const counts = useMemo(() => {
     const m: Record<string, number> = {}
@@ -260,7 +311,7 @@ export default function MapCore({
       <details className="bg-white rounded-xl border shadow-sm px-3 py-3 text-[12px] md:open">
         <summary className="cursor-pointer list-none select-none">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-semibold">Legend (ReliefWeb headlines)</span>
+            <span className="font-semibold">Legend (world news + ReliefWeb)</span>
             <span className="text-slate-600">Shown: {shown}/{total}</span>
           </div>
         </summary>
@@ -282,14 +333,12 @@ export default function MapCore({
                   key={cat}
                   type="button"
                   onClick={() => toggleCat(cat)}
-                  className={`flex items-center justify-between gap-2 rounded px-2 py-1 border transition ${on ? 'bg-white' : 'opacity-50'} hover:bg-slate-50`}
-                  title={`${cat} — ${n} pin(s)`}
+                  className={`flex items-center gap-2 rounded-lg border px-2 py-2 text-left transition ${on ? 'bg-slate-50 border-slate-300' : 'bg-white opacity-60 border-slate-200'}`}
+                  title={on ? 'Hide category' : 'Show category'}
                 >
-                  <span className="flex items-center gap-2 truncate">
-                    <img src={icon.options.iconUrl as string} alt="" width={14} height={14} className="inline-block" />
-                    <span className="truncate">{cat}</span>
-                  </span>
-                  <span className="tabular-nums">{n}</span>
+                  <img src={icon.options.iconUrl as string} alt="" className="h-6 w-6 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{cat}</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 ring-1 ring-slate-200">{n}</span>
                 </button>
               )
             })}
@@ -297,13 +346,9 @@ export default function MapCore({
         </div>
       </details>
 
-      {!hasPins && !err && <div className="text-xs text-slate-500">Loading ReliefWeb headline pins…</div>}
-      {err && (
-        <div className="text-xs text-red-600">
+      {!hasPins && err && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {err}
-          <div className="mt-1 text-[11px] text-slate-500">
-            The map now uses ReliefWeb headlines only and does not fall back to GDELT or natural-disaster feeds.
-          </div>
         </div>
       )}
     </div>
