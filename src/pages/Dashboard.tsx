@@ -689,7 +689,7 @@ export default function Dashboard() {
 
   // Cached "front page" carousel so we can show headlines immediately
   const CAROUSEL_CACHE_KEY = 'carousel:world:last'
-  const CAROUSEL_MAX = 24; // keep the top carousel concise and stable
+  const CAROUSEL_MAX = 64; // keep the top carousel concise and stable
   const [carouselItems, setCarouselItems] = useState<HeadlineItem[]>(() => {
     try {
       const raw = localStorage.getItem(CAROUSEL_CACHE_KEY)
