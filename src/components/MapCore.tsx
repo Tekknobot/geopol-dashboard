@@ -40,13 +40,53 @@ function iconForCategory(cat: string) {
   if (c.includes('outbreak') || c.includes('health')) return svgMarker('#dc2626', '🩺')
   if (c.includes('food') || c.includes('nutrition') || c.includes('famine')) return svgMarker('#16a34a', '🌾')
   if (c.includes('conflict') || c.includes('violence') || c.includes('security')) return svgMarker('#ea580c', '🪖')
-  if (c.includes('displacement') || c.includes('migration') || c.includes('refugee')) return svgMarker('#8b5cf6', '🧳')
-  if (c.includes('politic')) return svgMarker('#2563eb', '🏛️')
-  if (c.includes('economy') || c.includes('market') || c.includes('trade')) return svgMarker('#059669', '💹')
-  if (c.includes('energy')) return svgMarker('#f59e0b', '⚡')
-  if (c.includes('technology') || c.includes('cyber')) return svgMarker('#0891b2', '💻')
-  if (c.includes('diplomacy')) return svgMarker('#7c3aed', '🤝')
-  return svgMarker('#374151', '●')
+  if (c.includes('displacement') || c.includes('migration') || c.includes('rights')) return svgMarker('#0284c7', '🧭')
+  if (c.includes('governance') || c.includes('corruption') || c.includes('politics')) return svgMarker('#475569', '🏛️')
+  if (c.includes('economy') || c.includes('markets')) return svgMarker('#059669', '📈')
+  if (c.includes('energy')) return svgMarker('#b91c1c', '⚡')
+  if (c.includes('technology') || c.includes('cyber')) return svgMarker('#4338ca', '💻')
+  if (c.includes('diplomacy')) return svgMarker('#0f766e', '🤝')
+  if (c.includes('climate') || c.includes('disaster')) return svgMarker('#2563eb', '🌍')
+  return svgMarker('#64748b', '•')
+}
+
+function inferReliefWebCategory(r: ReliefWebItem): string {
+  const hay = [
+    r.fields.title,
+    ...(r.fields.theme || []).map((x) => x?.name || ''),
+    ...(r.fields.disaster_type || []).map((x) => x?.name || ''),
+  ]
+    .join(' | ')
+    .toLowerCase()
+
+  if (/(flood|flooding)/i.test(hay)) return 'Flood'
+  if (/(earthquake|seismic)/i.test(hay)) return 'Earthquake'
+  if (/(drought|heatwave|dry spell)/i.test(hay)) return 'Drought'
+  if (/(cyclone|storm|hurricane|typhoon)/i.test(hay)) return 'Storm/Cyclone'
+  if (/(cholera|measles|outbreak|health|epidemic|pandemic|disease)/i.test(hay)) return 'Health/Outbreak'
+  if (/(food security|nutrition|famine|ipc|hunger)/i.test(hay)) return 'Food Security'
+  if (/(conflict|violence|security|attack|armed|hostilities|protection)/i.test(hay)) return 'Conflict/Insecurity'
+  if (/(displacement|refugee|migration|idp|returnee)/i.test(hay)) return 'Displacement'
+  if (/(corruption|bribery|governance|oversight|accountability|anti-corruption)/i.test(hay)) return 'Governance/Corruption'
+  return 'Other'
+}
+
+function sourceFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return 'news'
+  }
+}
+
+export type MapNewsItem = {
+  id: string
+  headline: string
+  url: string
+  source: string
+  category: string
+  lat?: number
+  lon?: number
 }
 
 type SocioPoint = {
@@ -54,67 +94,24 @@ type SocioPoint = {
   lon: number
   label: string
   category: string
-  headline?: string
-  source?: string
-  url?: string
-}
-export type MapNewsItem = {
-  id: string
   headline: string
+  source: string
   url: string
-  source?: string
-  category: string
-  lat: number
-  lon: number
 }
 
 const ALL_CATEGORIES = [
-  'Flood',
-  'Earthquake',
-  'Storm/Cyclone',
-  'Drought',
-  'Health/Outbreak',
-  'Food Security',
-  'Conflict/Insecurity',
-  'Displacement',
-  'Politics',
-  'Economy/Markets',
-  'Energy',
-  'Technology/Cyber',
-  'Diplomacy',
-  'Climate/Disaster',
-  'Migration/Human Rights',
-  'World News',
-  'Other',
+  'Politics', 'Economy/Markets', 'Energy', 'Technology/Cyber', 'Diplomacy', 'Climate/Disaster',
+  'Migration/Human Rights', 'Conflict/Security', 'Flood', 'Earthquake', 'Storm/Cyclone',
+  'Drought', 'Health/Outbreak', 'Food Security', 'Conflict/Insecurity', 'Displacement',
+  'Governance/Corruption', 'Other', 'World News', 'Health'
 ]
-
-function inferReliefWebCategory(r: ReliefWebItem): string {
-  const themes = (r.fields.theme || []).map(x => x?.name || '').join(' | ')
-  const disasters = (r.fields.disaster_type || []).map(x => x?.name || '').join(' | ')
-  const title = r.fields.title || ''
-  const hay = `${themes} | ${disasters} | ${title}`.toLowerCase()
-
-  if (/(flood|flooding)/i.test(hay)) return 'Flood'
-  if (/(earthquake|seismic)/i.test(hay)) return 'Earthquake'
-  if (/(cyclone|storm|hurricane|typhoon)/i.test(hay)) return 'Storm/Cyclone'
-  if (/(drought|heatwave|dry spell)/i.test(hay)) return 'Drought'
-  if (/(cholera|measles|outbreak|health|epidemic|pandemic|disease)/i.test(hay)) return 'Health/Outbreak'
-  if (/(food security|nutrition|famine|ipc|hunger)/i.test(hay)) return 'Food Security'
-  if (/(conflict|violence|security|attack|armed|hostilities|protection)/i.test(hay)) return 'Conflict/Insecurity'
-  if (/(displacement|refugee|migration|idp|returnee)/i.test(hay)) return 'Displacement'
-  return 'Other'
-}
-
-function sourceFromUrl(url: string) {
-  try { return new URL(url).hostname.replace(/^www\./, '') } catch { return 'source' }
-}
 
 function dedupeNews(items: MapNewsItem[]) {
   const seen = new Set<string>()
   const out: MapNewsItem[] = []
   for (const item of items) {
-    const key = item.url || item.id
-    if (!key || seen.has(key)) continue
+    const key = `${item.url}::${item.category}`
+    if (!item.url || seen.has(key)) continue
     seen.add(key)
     out.push(item)
   }
@@ -122,30 +119,65 @@ function dedupeNews(items: MapNewsItem[]) {
 }
 
 const COUNTRY_ALIASES: Array<[string, string]> = [
-  ['united states', 'United States'], ['u.s.', 'United States'], ['us ', 'United States'], ['washington', 'United States'],
-  ['canada', 'Canada'], ['ottawa', 'Canada'], ['toronto', 'Canada'],
-  ['mexico', 'Mexico'], ['brazil', 'Brazil'], ['argentina', 'Argentina'], ['chile', 'Chile'], ['colombia', 'Colombia'], ['peru', 'Peru'], ['venezuela', 'Venezuela'], ['haiti', 'Haiti'],
-  ['united kingdom', 'United Kingdom'], ['britain', 'United Kingdom'], ['uk ', 'United Kingdom'], ['london', 'United Kingdom'],
-  ['france', 'France'], ['paris', 'France'], ['germany', 'Germany'], ['berlin', 'Germany'], ['italy', 'Italy'], ['rome', 'Italy'], ['spain', 'Spain'], ['madrid', 'Spain'],
-  ['russia', 'Russia'], ['moscow', 'Russia'], ['ukraine', 'Ukraine'], ['kyiv', 'Ukraine'], ['poland', 'Poland'], ['brussels', 'Belgium'],
-  ['israel', 'Israel'], ['gaza', 'Palestine'], ['west bank', 'Palestine'], ['palestinian', 'Palestine'], ['iran', 'Iran'], ['tehran', 'Iran'],
-  ['iraq', 'Iraq'], ['baghdad', 'Iraq'], ['syria', 'Syria'], ['damascus', 'Syria'], ['lebanon', 'Lebanon'], ['beirut', 'Lebanon'],
-  ['saudi', 'Saudi Arabia'], ['riyadh', 'Saudi Arabia'], ['uae', 'United Arab Emirates'], ['dubai', 'United Arab Emirates'], ['abu dhabi', 'United Arab Emirates'],
-  ['yemen', 'Yemen'], ['sudan', 'Sudan'], ['khartoum', 'Sudan'], ['egypt', 'Egypt'], ['cairo', 'Egypt'], ['libya', 'Libya'],
-  ['ethiopia', 'Ethiopia'], ['somalia', 'Somalia'], ['kenya', 'Kenya'], ['nigeria', 'Nigeria'], ['south africa', 'South Africa'], ['congo', 'DR Congo'],
-  ['china', 'China'], ['beijing', 'China'], ['hong kong', 'Hong Kong'], ['taiwan', 'Taiwan'], ['taipei', 'Taiwan'], ['japan', 'Japan'], ['tokyo', 'Japan'],
-  ['south korea', 'South Korea'], ['seoul', 'South Korea'], ['north korea', 'North Korea'], ['pyongyang', 'North Korea'], ['india', 'India'], ['delhi', 'India'],
-  ['pakistan', 'Pakistan'], ['islamabad', 'Pakistan'], ['afghanistan', 'Afghanistan'], ['myanmar', 'Myanmar'], ['thailand', 'Thailand'], ['bangkok', 'Thailand'],
-  ['philippines', 'Philippines'], ['manila', 'Philippines'], ['indonesia', 'Indonesia'], ['jakarta', 'Indonesia'], ['australia', 'Australia'], ['sydney', 'Australia'],
-  ['new zealand', 'New Zealand'], ['singapore', 'Singapore'],
+  ['u.s.', 'United States'], ['u.s', 'United States'], ['us ', 'United States'], [' usa', 'United States'], ['united states', 'United States'], ['america', 'United States'],
+  ['uk', 'United Kingdom'], ['u.k.', 'United Kingdom'], ['britain', 'United Kingdom'], ['united kingdom', 'United Kingdom'], ['england', 'United Kingdom'],
+  ['eu', 'European Union'], ['european union', 'European Union'],
+  ['uae', 'United Arab Emirates'], ['emirates', 'United Arab Emirates'],
+  ['russia', 'Russia'], ['ukraine', 'Ukraine'], ['china', 'China'], ['taiwan', 'Taiwan'], ['japan', 'Japan'], ['south korea', 'South Korea'], ['north korea', 'North Korea'],
+  ['india', 'India'], ['pakistan', 'Pakistan'], ['afghanistan', 'Afghanistan'], ['iran', 'Iran'], ['iraq', 'Iraq'], ['israel', 'Israel'], ['gaza', 'Palestine'], ['palestinian', 'Palestine'], ['palestine', 'Palestine'], ['lebanon', 'Lebanon'], ['syria', 'Syria'], ['yemen', 'Yemen'], ['saudi', 'Saudi Arabia'], ['qatar', 'Qatar'], ['oman', 'Oman'], ['jordan', 'Jordan'], ['turkey', 'Turkey'],
+  ['sudan', 'Sudan'], ['south sudan', 'South Sudan'], ['ethiopia', 'Ethiopia'], ['somalia', 'Somalia'], ['kenya', 'Kenya'], ['uganda', 'Uganda'], ['tanzania', 'Tanzania'], ['congo', 'DR Congo'], ['dr congo', 'DR Congo'], ['drc', 'DR Congo'], ['nigeria', 'Nigeria'], ['ghana', 'Ghana'], ['cameroon', 'Cameroon'], ['mali', 'Mali'], ['niger', 'Niger'], ['burkina faso', 'Burkina Faso'], ['chad', 'Chad'],
+  ['france', 'France'], ['germany', 'Germany'], ['spain', 'Spain'], ['italy', 'Italy'], ['portugal', 'Portugal'], ['greece', 'Greece'], ['poland', 'Poland'], ['romania', 'Romania'], ['hungary', 'Hungary'], ['serbia', 'Serbia'],
+  ['canada', 'Canada'], ['mexico', 'Mexico'], ['brazil', 'Brazil'], ['argentina', 'Argentina'], ['chile', 'Chile'], ['colombia', 'Colombia'], ['venezuela', 'Venezuela'], ['peru', 'Peru'], ['ecuador', 'Ecuador'], ['haiti', 'Haiti'], ['cuba', 'Cuba'],
+  ['australia', 'Australia'], ['new zealand', 'New Zealand'], ['philippines', 'Philippines'], ['indonesia', 'Indonesia'], ['thailand', 'Thailand'], ['myanmar', 'Myanmar'], ['burma', 'Myanmar'], ['vietnam', 'Vietnam'], ['laos', 'Laos'], ['cambodia', 'Cambodia'], ['singapore', 'Singapore'], ['malaysia', 'Malaysia'],
+  ['brussels', 'Belgium'], ['moscow', 'Russia'], ['washington', 'United States'], ['beijing', 'China'], ['taipei', 'Taiwan'], ['tokyo', 'Japan'], ['london', 'United Kingdom'], ['paris', 'France'], ['berlin', 'Germany'], ['rome', 'Italy'], ['ottawa', 'Canada'], ['mexico city', 'Mexico'], ['kyiv', 'Ukraine'], ['kiev', 'Ukraine'], ['jerusalem', 'Israel'], ['tehran', 'Iran'], ['baghdad', 'Iraq'], ['damascus', 'Syria'], ['beirut', 'Lebanon'], ['cairo', 'Egypt'], ['khartoum', 'Sudan'], ['addis ababa', 'Ethiopia'], ['nairobi', 'Kenya'], ['lagos', 'Nigeria'], ['johannesburg', 'South Africa'], ['pretoria', 'South Africa'], ['canberra', 'Australia'], ['wellington', 'New Zealand'], ['manila', 'Philippines'], ['jakarta', 'Indonesia'], ['bangkok', 'Thailand'], ['hanoi', 'Vietnam'],
 ]
 
-function inferCountryHint(text: string): string | null {
+const URL_HINTS: Array<[RegExp, string]> = [
+  [/\/world\/us-?canada\//i, 'United States'],
+  [/\/news\/world-us-canada\//i, 'United States'],
+  [/\/news\/world-asia/i, 'Asia'],
+  [/\/news\/world-middle-east/i, 'Middle East'],
+  [/\/news\/world-europe/i, 'Europe'],
+  [/\/news\/world-africa/i, 'Africa'],
+]
+
+const REGION_FALLBACKS: Record<string, [number, number]> = {
+  Europe: [54, 15],
+  Africa: [2, 20],
+  Asia: [34, 100],
+  'Middle East': [29, 45],
+  'European Union': [50, 10],
+}
+
+function inferCountryHint(text: string, url?: string): string | null {
   const hay = ` ${String(text || '').toLowerCase()} `
   for (const [alias, country] of COUNTRY_ALIASES) {
     if (hay.includes(` ${alias.toLowerCase()} `) || hay.includes(alias.toLowerCase())) return country
   }
+  const rawUrl = String(url || '')
+  for (const [pattern, place] of URL_HINTS) {
+    if (pattern.test(rawUrl)) return place
+  }
   return null
+}
+
+async function resolveCoords(place: string, coordMap: Map<string, [number, number]>) {
+  if (coordMap.has(place)) return
+  if (REGION_FALLBACKS[place]) {
+    coordMap.set(place, REGION_FALLBACKS[place])
+    return
+  }
+  try {
+    const results = await searchCountryByName(place)
+    const best = results.find(c => Array.isArray(c.latlng) && c.latlng.length >= 2)
+    if (best?.latlng) coordMap.set(place, [best.latlng[0], best.latlng[1]])
+  } catch {}
+}
+
+async function resolveInBatches(places: string[], coordMap: Map<string, [number, number]>, batchSize = 8) {
+  for (let i = 0; i < places.length; i += batchSize) {
+    await Promise.all(places.slice(i, i + batchSize).map((place) => resolveCoords(place, coordMap)))
+  }
 }
 
 export default function MapCore({
@@ -183,24 +215,19 @@ export default function MapCore({
           return
         }
 
-        const candidateCountries = new Set<string>()
-        for (const r of reliefRows) {
-          const country = r.fields.country?.[0]?.name?.trim()
-          if (country) candidateCountries.add(country)
-        }
+        const reliefCandidates = reliefRows
+          .map((r) => r.fields.country?.[0]?.name?.trim())
+          .filter((value): value is string => Boolean(value))
+
+        const worldPlaceById = new Map<string, string>()
         for (const item of worldRows) {
-          const hint = inferCountryHint(`${item.title} ${item.description || ''}`)
-          if (hint) candidateCountries.add(hint)
+          const place = inferCountryHint(`${item.title} ${item.description || ''}`, item.url)
+          if (place) worldPlaceById.set(item.id, place)
         }
 
+        const candidatePlaces = Array.from(new Set([...reliefCandidates, ...worldPlaceById.values()]))
         const coordMap = new Map<string, [number, number]>()
-        await Promise.all(Array.from(candidateCountries).map(async (country) => {
-          try {
-            const results = await searchCountryByName(country)
-            const best = results.find(c => Array.isArray(c.latlng) && c.latlng.length >= 2)
-            if (best?.latlng) coordMap.set(country, [best.latlng[0], best.latlng[1]])
-          } catch {}
-        }))
+        await resolveInBatches(candidatePlaces, coordMap, 8)
 
         if (!alive) return
 
@@ -227,20 +254,20 @@ export default function MapCore({
         }
 
         for (const item of worldRows) {
-          const country = inferCountryHint(`${item.title} ${item.description || ''}`)
-          if (!country) continue
-          const coords = coordMap.get(country)
+          const place = worldPlaceById.get(item.id)
+          if (!place) continue
+          const coords = coordMap.get(place)
           if (!coords) continue
           const [lat, lon] = coords
           const url = normalizeExternalUrl(item.url)
           const headline = item.title.trim()
           const category = worldNewsCategory(item)
-          const key = `wn:${country}:${url}`
+          const key = `wn:${place}:${url}`
           if (seenPointKeys.has(key)) continue
           seenPointKeys.add(key)
           const source = item.source || sourceFromUrl(url)
 
-          nextPoints.push({ lat, lon, label: country, category, headline, source, url })
+          nextPoints.push({ lat, lon, label: place, category, headline, source, url })
           nextNews.push({ id: `wn:${item.id}`, headline, url, source, category, lat, lon })
         }
 
@@ -263,6 +290,13 @@ export default function MapCore({
     for (const p of points) m[p.category] = (m[p.category] || 0) + 1
     return m
   }, [points])
+
+  useEffect(() => {
+    if (userTouchedFilters.current) return
+    const available = Object.keys(counts)
+    if (!available.length) return
+    setActiveCats(new Set(available))
+  }, [counts])
 
   const shownPoints = useMemo(() => points.filter(p => activeCats.has(p.category)), [points, activeCats])
   const total = points.length
