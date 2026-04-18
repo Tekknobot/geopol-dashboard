@@ -6,7 +6,7 @@ const FEEDS = [
 ]
 
 const MAX_PER_FEED = 20
-const MAX_TOTAL = 80
+const MAX_TOTAL = 100
 
 function decodeXml(str = '') {
   return String(str)

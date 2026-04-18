@@ -670,8 +670,8 @@ export default function Dashboard() {
   }, []);
 
   // De-dupe & cap map headlines so count matches what's rendered
-  const NEWS_VISIBLE = 40;            // how many you render in the list
-  const NEWS_POOL_MAX = 300;          // safety cap for the pool
+  const NEWS_VISIBLE = 80;            // how many you render in the list
+  const NEWS_POOL_MAX = 500;          // safety cap for the pool
 
   const uniqueMapNews = useMemo(() => {
     const seen = new Set<string>();
@@ -689,7 +689,7 @@ export default function Dashboard() {
 
   // Cached "front page" carousel so we can show headlines immediately
   const CAROUSEL_CACHE_KEY = 'carousel:world:last'
-  const CAROUSEL_MAX = 64; // keep the top carousel concise and stable
+  const CAROUSEL_MAX = 100; // keep the top carousel concise and stable
   const [carouselItems, setCarouselItems] = useState<HeadlineItem[]>(() => {
     try {
       const raw = localStorage.getItem(CAROUSEL_CACHE_KEY)
