@@ -130,6 +130,33 @@ const COUNTRY_ALIASES: Array<[string, string]> = [
   ['canada', 'Canada'], ['mexico', 'Mexico'], ['brazil', 'Brazil'], ['argentina', 'Argentina'], ['chile', 'Chile'], ['colombia', 'Colombia'], ['venezuela', 'Venezuela'], ['peru', 'Peru'], ['ecuador', 'Ecuador'], ['haiti', 'Haiti'], ['cuba', 'Cuba'],
   ['australia', 'Australia'], ['new zealand', 'New Zealand'], ['philippines', 'Philippines'], ['indonesia', 'Indonesia'], ['thailand', 'Thailand'], ['myanmar', 'Myanmar'], ['burma', 'Myanmar'], ['vietnam', 'Vietnam'], ['laos', 'Laos'], ['cambodia', 'Cambodia'], ['singapore', 'Singapore'], ['malaysia', 'Malaysia'],
   ['brussels', 'Belgium'], ['moscow', 'Russia'], ['washington', 'United States'], ['beijing', 'China'], ['taipei', 'Taiwan'], ['tokyo', 'Japan'], ['london', 'United Kingdom'], ['paris', 'France'], ['berlin', 'Germany'], ['rome', 'Italy'], ['ottawa', 'Canada'], ['mexico city', 'Mexico'], ['kyiv', 'Ukraine'], ['kiev', 'Ukraine'], ['jerusalem', 'Israel'], ['tehran', 'Iran'], ['baghdad', 'Iraq'], ['damascus', 'Syria'], ['beirut', 'Lebanon'], ['cairo', 'Egypt'], ['khartoum', 'Sudan'], ['addis ababa', 'Ethiopia'], ['nairobi', 'Kenya'], ['lagos', 'Nigeria'], ['johannesburg', 'South Africa'], ['pretoria', 'South Africa'], ['canberra', 'Australia'], ['wellington', 'New Zealand'], ['manila', 'Philippines'], ['jakarta', 'Indonesia'], ['bangkok', 'Thailand'], ['hanoi', 'Vietnam'],
+
+  ['eu leaders', 'European Union'],
+  ['europe', 'Europe'],
+  ['asia', 'Asia'],
+  ['africa', 'Africa'],
+  ['latin america', 'Brazil'],
+
+  ['white house', 'United States'],
+  ['congress', 'United States'],
+  ['pentagon', 'United States'],
+
+  ['kremlin', 'Russia'],
+  ['donbas', 'Ukraine'],
+
+  ['gulf', 'Middle East'],
+  ['red sea', 'Middle East'],
+
+  ['hong kong', 'China'],
+  ['xinjiang', 'China'],
+
+  ['west bank', 'Palestine'],
+
+  ['nato', 'Belgium'],
+  ['brussels', 'Belgium'],
+
+  ['un ', 'United States'],
+  ['united nations', 'United States'],
 ]
 
 const URL_HINTS: Array<[RegExp, string]> = [
@@ -147,6 +174,8 @@ const REGION_FALLBACKS: Record<string, [number, number]> = {
   Asia: [34, 100],
   'Middle East': [29, 45],
   'European Union': [50, 10],
+  'Latin America': [-8, -55],
+  'North America': [45, -100],
 }
 
 function inferCountryHint(text: string, url?: string): string | null {
