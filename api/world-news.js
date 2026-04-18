@@ -5,8 +5,8 @@ const FEEDS = [
   { name: 'CBC', url: 'https://www.cbc.ca/webfeed/rss/rss-world' },
 ]
 
-const MAX_PER_FEED = 20
-const MAX_TOTAL = 80
+const MAX_PER_FEED = 12
+const MAX_TOTAL = 48
 
 function decodeXml(str = '') {
   return String(str)
