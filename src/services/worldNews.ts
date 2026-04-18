@@ -32,11 +32,15 @@ export function worldNewsCategory(item: Pick<WorldNewsItem, 'title' | 'descripti
 }
 
 export async function getLatestWorldNews(cacheMs = 1000 * 60 * 5): Promise<WorldNewsItem[]> {
-  const data = await fetchJson<{ items?: WorldNewsItem[] }>(WORLD_NEWS_BASE, {
+  return fetchJson<WorldNewsItem[]>(WORLD_NEWS_BASE, {
     maxAgeMs: cacheMs,
     cacheKey: 'world-news:latest',
     retries: 2,
     timeoutMs: 15000,
+    map: (json) => {
+      const items = Array.isArray((json as any)?.items) ? ((json as any).items as WorldNewsItem[]) : []
+      if (!items.length) throw new Error('No world news items available')
+      return items
+    },
   })
-  return Array.isArray(data?.items) ? data.items : []
 }

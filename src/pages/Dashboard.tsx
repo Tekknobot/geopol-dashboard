@@ -723,7 +723,7 @@ export default function Dashboard() {
         if (cgdp) setGdpSeries(cgdp)
         if (ccpi) setCpiSeries(ccpi)
         if (crw) setReports(crw)
-        if (cwn) {
+        if (Array.isArray(cwn) && cwn.length > 0) {
           setWorldNews(cwn)
           if (carouselItems.length === 0) {
             const seed = cwn.map(item => ({
