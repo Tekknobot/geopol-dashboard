@@ -7,10 +7,9 @@ const MapCore = React.lazy(() => import('./MapCore'))
 
 // Warm the chunk so it’s ready when we hit the section
 if (typeof window !== 'undefined') {
-  const preload = () => import('./MapCore');
-  (window as any).requestIdleCallback
-    ? (window as any).requestIdleCallback(preload)
-    : setTimeout(preload, 0);
+  const preload = () => import('./MapCore')
+  const idle = (window as any).requestIdleCallback
+  if (typeof idle === 'function') idle(preload)
 }
 
 export default function LazyEventMap({

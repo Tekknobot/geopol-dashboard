@@ -8,9 +8,7 @@ import "leaflet/dist/leaflet.css";   // if you’re not relying on the <link> in
 import "./leaflet-icons";            // the file above
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <HashRouter>
-      <App />
-    </HashRouter>
-  </React.StrictMode>
+  <HashRouter>
+    <App />
+  </HashRouter>
 )

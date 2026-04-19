@@ -618,6 +618,7 @@ function ContextSidebar({ countryName, onClose }: { countryName: string | null; 
 export default function Dashboard() {
   const [reports, setReports] = useState<ReliefWebItem[] | null>(null)
   const [eventsLoading, setEventsLoading] = useState(true)
+  const [showHeavyOverview, setShowHeavyOverview] = useState(false)
   const [gdpSeries, setGdpSeries] = useState<WbPoint[] | null>(null)
   const [cpiSeries, setCpiSeries] = useState<WbPoint[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -711,6 +712,32 @@ export default function Dashboard() {
   // 6-hour cache
   const TTL = 6 * 60 * 60 * 1000
 
+
+  useEffect(() => {
+    let cancelled = false
+    let timeoutId: number | null = null
+    const idle = (window as any).requestIdleCallback as undefined | ((cb: () => void) => number)
+
+    const enableHeavyOverview = () => {
+      if (!cancelled) setShowHeavyOverview(true)
+    }
+
+    if (typeof idle === 'function') {
+      const idleId = idle(enableHeavyOverview)
+      return () => {
+        cancelled = true
+        const cancelIdle = (window as any).cancelIdleCallback as undefined | ((id: number) => void)
+        if (typeof cancelIdle === 'function') cancelIdle(idleId)
+      }
+    }
+
+    timeoutId = window.setTimeout(enableHeavyOverview, 300)
+    return () => {
+      cancelled = true
+      if (timeoutId !== null) window.clearTimeout(timeoutId)
+    }
+  }, [])
+
   useEffect(() => {
     (async () => {
       try {
@@ -741,7 +768,7 @@ export default function Dashboard() {
         // ReliefWeb now (fast path)
         const rwPromise = (async () => {
           try {
-            const rw = await getLatestReports(500)
+            const rw = await getLatestReports(250)
             setReports(rw)
             setCache('rw:latest:24h', rw)
             setEventsLoading(false)
@@ -1175,7 +1202,13 @@ export default function Dashboard() {
 
       {/* Map */}
       <Card title="Global Headline Map">
-        <LazyEventMap events={[]} reports={reports || []} worldNews={worldNews} onNews={handleNews} />
+        {showHeavyOverview ? (
+          <LazyEventMap events={[]} reports={reports || []} worldNews={worldNews} onNews={handleNews} />
+        ) : (
+          <div className="h-[520px] grid place-items-center rounded-xl border bg-white text-sm text-slate-500">
+            Loading overview map…
+          </div>
+        )}
       </Card>
 
       {/* Regional Volatility Leaderboard (Counts, Last 7 Days) */}

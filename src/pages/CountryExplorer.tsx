@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import Card from '../components/Card'
 import Loading from '../components/Loading'
@@ -20,14 +19,6 @@ type SeriesBundle = { country: WbPoint[]; world: WbPoint[] }
 type WbCountryMeta = { id: string; name: string; region: { id: string; value: string } }
 type RegionalRow = { name: string; value: number | null; iso3: string; isFocus?: boolean }
 
-const debounce = (fn: Function, ms: number) => {
-  let t: any
-  return (...args: any[]) => {
-    clearTimeout(t)
-    t = setTimeout(() => fn(...args), ms)
-  }
-}
-
 function mapRestRegionToWb(region: string): string[] {
   switch (region) {
     case 'Africa': return ['SSF']
@@ -39,26 +30,15 @@ function mapRestRegionToWb(region: string): string[] {
   }
 }
 
-let wbCountryMetaPromise: Promise<WbCountryMeta[]> | null = null
-
 async function fetchWbCountryMeta(): Promise<WbCountryMeta[]> {
-  if (!wbCountryMetaPromise) {
-    wbCountryMetaPromise = fetch('https://api.worldbank.org/v2/country?format=json&per_page=1000')
-      .then(res => res.json())
-      .then(json => {
-        const data = (json?.[1] || []) as any[]
-        return data.map(d => ({
-          id: d.id as string,
-          name: d.name as string,
-          region: { id: d.region?.id, value: d.region?.value },
-        }))
-      })
-      .catch(err => {
-        wbCountryMetaPromise = null
-        throw err
-      })
-  }
-  return wbCountryMetaPromise
+  const res = await fetch('https://api.worldbank.org/v2/country?format=json&per_page=1000')
+  const json = await res.json()
+  const data = (json?.[1] || []) as any[]
+  return data.map(d => ({
+    id: d.id as string,
+    name: d.name as string,
+    region: { id: d.region?.id, value: d.region?.value },
+  }))
 }
 
 async function latestNonNullValue(iso3: string, indicator: string, years = 20): Promise<number | null> {
@@ -95,11 +75,9 @@ function IndicatorFallback({ label, bundle }: { label: string; bundle?: SeriesBu
 }
 
 export default function CountryExplorer() {
-  const location = useLocation()
   const [input, setInput] = useState('Canada')
   const [suggestions, setSuggestions] = useState<Country[]>([])
   const [selected, setSelected] = useState<Country | null>(null)
-  const [searchFocused, setSearchFocused] = useState(false)
 
   const [series, setSeries] = useState<Record<string, SeriesBundle>>({})
   const [regionalRows, setRegionalRows] = useState<RegionalRow[] | null>(null)
@@ -110,40 +88,27 @@ export default function CountryExplorer() {
 
   const loadIdRef = useRef(0)
   const seriesCacheRef = useRef<Map<string, Record<string, SeriesBundle>>>(new Map())
-  const mountedRef = useRef(true)
-  const blurTimeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
-    mountedRef.current = true
-    const run = debounce(async (q: string) => {
-      if (!q.trim()) {
-        if (mountedRef.current) setSuggestions([])
+    let alive = true
+    const timer = window.setTimeout(async () => {
+      if (!input.trim()) {
+        if (alive) setSuggestions([])
         return
       }
       try {
-        const res = await searchCountryByName(q.trim())
-        if (mountedRef.current) setSuggestions(res.slice(0, 8))
+        const res = await searchCountryByName(input.trim())
+        if (alive) setSuggestions(res.slice(0, 8))
       } catch {
-        if (mountedRef.current) setSuggestions([])
+        if (alive) setSuggestions([])
       }
     }, 250)
 
-    run(input)
-
     return () => {
-      mountedRef.current = false
-      if (blurTimeoutRef.current) window.clearTimeout(blurTimeoutRef.current)
+      alive = false
+      window.clearTimeout(timer)
     }
   }, [input])
-
-  useEffect(() => {
-    setSuggestions([])
-    setSearchFocused(false)
-    if (blurTimeoutRef.current) {
-      window.clearTimeout(blurTimeoutRef.current)
-      blurTimeoutRef.current = null
-    }
-  }, [location.pathname])
 
   useEffect(() => {
     let alive = true
@@ -160,7 +125,6 @@ export default function CountryExplorer() {
     setSelected(c)
     setInput(c.name?.common || c.cca3 || '')
     setSuggestions([])
-    setSearchFocused(false)
     void loadCountry(c)
   }
 
@@ -168,11 +132,6 @@ export default function CountryExplorer() {
     if (e.key === 'Enter') {
       e.preventDefault()
       if (suggestions.length) choose(suggestions[0])
-    }
-    if (e.key === 'Escape') {
-      setSuggestions([])
-      setSearchFocused(false)
-      ;(e.target as HTMLInputElement).blur()
     }
   }
 
@@ -398,16 +357,6 @@ export default function CountryExplorer() {
       .slice(0, 18)
   }, [countrySpecificReports, reports, selected])
 
-  const visibleSuggestions = suggestions.length > 0 && searchFocused
-
-
-  useEffect(() => {
-    return () => {
-      loadIdRef.current += 1
-      if (blurTimeoutRef.current) window.clearTimeout(blurTimeoutRef.current)
-    }
-  }, [])
-
   const countryTrackerCards = useMemo(() => {
     const corruption = countryReports.filter(r => reliefWebCategory(r) === 'Governance/Corruption').length
     const conflict = countryReports.filter(r => reliefWebCategory(r) === 'Conflict/Insecurity').length
@@ -474,21 +423,14 @@ export default function CountryExplorer() {
             <input
               value={input}
               onChange={e => setInput(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => {
-                blurTimeoutRef.current = window.setTimeout(() => {
-                  setSearchFocused(false)
-                  setSuggestions([])
-                }, 120)
-              }}
               onKeyDown={onKeyDown}
               className="rounded-lg border px-3 py-1 text-sm w-72"
               placeholder="Type to search…"
             />
-            {visibleSuggestions && (
+            {suggestions.length > 0 && (
               <ul className="absolute z-10 mt-1 w-72 max-h-64 overflow-auto rounded-lg border bg-white shadow">
                 {suggestions.map(s => (
-                  <li key={s.cca3} className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50" onMouseDown={e => e.preventDefault()} onClick={() => choose(s)}>
+                  <li key={s.cca3} className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50" onClick={() => choose(s)}>
                     {s.name?.common} <span className="text-slate-500">({s.region}{s.subregion ? ` — ${s.subregion}` : ''})</span>
                   </li>
                 ))}
@@ -501,21 +443,14 @@ export default function CountryExplorer() {
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => {
-              blurTimeoutRef.current = window.setTimeout(() => {
-                setSearchFocused(false)
-                setSuggestions([])
-              }, 120)
-            }}
             onKeyDown={onKeyDown}
             className="w-full rounded-lg border px-3 py-2 text-sm"
             placeholder="Search a country…"
           />
-          {visibleSuggestions && (
+          {suggestions.length > 0 && (
             <ul className="absolute z-10 mt-1 w-full max-h-64 overflow-auto rounded-lg border bg-white shadow">
               {suggestions.map(s => (
-                <li key={s.cca3} className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50" onMouseDown={e => e.preventDefault()} onClick={() => choose(s)}>
+                <li key={s.cca3} className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50" onClick={() => choose(s)}>
                   {s.name?.common} <span className="text-slate-500">({s.region}{s.subregion ? ` — ${s.subregion}` : ''})</span>
                 </li>
               ))}
