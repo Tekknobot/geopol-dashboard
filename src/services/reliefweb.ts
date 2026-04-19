@@ -78,7 +78,6 @@ export function reliefWebMatchesAny(item: ReliefWebItem, terms: string[]): boole
 
 async function postReports(body: any): Promise<ReliefWebItem[]> {
   const url = `${RW_BASE}?${new URLSearchParams({
-    profile: 'minimal',
     appname: appName(),
   }).toString()}`
 
@@ -100,7 +99,8 @@ async function postReports(body: any): Promise<ReliefWebItem[]> {
 
       if (!res.ok) {
         const text = await res.text().catch(() => '')
-        throw new Error(`HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ''}`)
+        console.error('RELIEFWEB HTTP ERROR', res.status, text)
+        throw new Error(`HTTP ${res.status}${text ? `: ${text.slice(0, 500)}` : ''}`)
       }
 
       const raw = await res.json()
@@ -129,27 +129,25 @@ export async function getLatestReports(limit = DEFAULT_LIMIT, cacheMs = 1000 * 6
   let emptyFreshPages = 0
 
   while (offset <= 4000 && collected.length < limit && emptyFreshPages < 2) {
-    const body = {
-      limit: pageSize,
-      offset,
-      sort: ['date.created:desc'],
-      filter: {
-        operator: 'AND',
-        conditions: [{ field: 'status', value: 'published' }],
-      },
-      fields: {
-        include: [
-          'title',
-          'url',
-          'date.created',
-          'country.name',
-          'theme.name',
-          'disaster_type.name',
-          'format.name',
-          'source.name',
-        ],
-      },
-    }
+  const body = {
+    limit: pageSize,
+    offset,
+    preset: 'latest',
+    profile: 'minimal',
+    sort: ['date:desc'],
+    fields: {
+      include: [
+        'title',
+        'url',
+        'date.created',
+        'country.name',
+        'theme.name',
+        'disaster_type.name',
+        'format.name',
+        'source.name',
+      ],
+    },
+  }
 
     const data = await postReports(body)
     if (!data.length) break
