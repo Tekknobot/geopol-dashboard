@@ -48,17 +48,33 @@ export default function EventsPage() {
   useEffect(() => {
     let alive = true
     ;(async () => {
-      try {
-        const data = await fetchPins24h()
-        if (!alive) return
-        setRows(data)
-        const sampleCountries = Array.from(new Set(data.map(r => r.countryGuess).filter(Boolean))).slice(0, 8)
-        if (sampleCountries.length) {
-          const snapshot = await buildStructuralSnapshot(sampleCountries)
-          if (alive) setStructural(snapshot)
-        } else if (alive) {
-          setStructural(null)
-        }
+    try {
+      const data = await fetchPins24h()
+
+      console.log('EVENTS RAW ROWS', data)
+      console.log('EVENTS RAW ROW COUNT', data.length)
+      console.log(
+        'EVENTS SAMPLE',
+        data.slice(0, 5).map(r => ({
+          headline: r.headline,
+          category: r.category,
+          country: r.countryGuess,
+          source: r.source,
+          created: r.created,
+          lat: r.lat,
+          lon: r.lon,
+        }))
+      )
+
+      console.log('EVENTS CONFLICT COUNT', data.filter(r => r.category === 'Conflict/Insecurity').length)
+      console.log('EVENTS HEALTH COUNT', data.filter(r => r.category === 'Health/Outbreak').length)
+      console.log('EVENTS DISPLACEMENT COUNT', data.filter(r => r.category === 'Displacement').length)
+      console.log('EVENTS GOV COUNT', data.filter(r => r.category === 'Governance/Corruption').length)
+
+      if (!alive) return
+      setRows(data)
+
+      const sampleCountries = Array.from(new Set(data.map(r => r.countryGuess).filter(Boolean))).slice(0, 8)
       } catch (e: any) {
         if (!alive) return
         setErr(e?.message || 'Failed to load ReliefWeb reports')
