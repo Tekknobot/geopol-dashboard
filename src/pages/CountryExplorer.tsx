@@ -4,7 +4,7 @@ import Card from '../components/Card'
 import Loading from '../components/Loading'
 import { searchCountryByName, Country } from '../services/restCountries'
 import { wbGetCountryIndicator, wbGetCountryIndicatorSeries, wbGetGlobalIndicatorSeries, toSeries, hasNumericPoints, latestNonNull, WbPoint } from '../services/worldBank'
-import { getLatestReports, reliefWebCategory, reliefWebCountry, reliefWebSource, type ReliefWebItem } from '../services/reliefweb'
+import { getCountryReports, getLatestReports, reliefWebCategory, reliefWebCountry, reliefWebSource, type ReliefWebItem } from '../services/reliefweb'
 import { normalizeExternalUrl } from '../utils/links'
 
 const INDICATORS = [
@@ -288,7 +288,31 @@ export default function CountryExplorer() {
   }
   const medPct = pct(comparatorStats.med)
 
+  const [countrySpecificReports, setCountrySpecificReports] = useState<ReliefWebItem[]>([])
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      if (!selected) {
+        setCountrySpecificReports([])
+        return
+      }
+      try {
+        const items = await getCountryReports(selected.name.common, 30, 1000)
+        if (alive) setCountrySpecificReports(items.slice(0, 40))
+      } catch {
+        if (alive) setCountrySpecificReports([])
+      }
+    })()
+    return () => { alive = false }
+  }, [selected?.cca3])
+
   const countryReports = useMemo(() => {
+    if (countrySpecificReports.length) {
+      return countrySpecificReports
+        .sort((a, b) => Date.parse(b.fields.date.created) - Date.parse(a.fields.date.created))
+        .slice(0, 18)
+    }
     if (!selected) return []
     const common = selected.name.common.toLowerCase()
     const official = selected.name.official?.toLowerCase() || ''
@@ -299,7 +323,7 @@ export default function CountryExplorer() {
       })
       .sort((a, b) => Date.parse(b.fields.date.created) - Date.parse(a.fields.date.created))
       .slice(0, 18)
-  }, [reports, selected])
+  }, [countrySpecificReports, reports, selected])
 
   const countryTrackerCards = useMemo(() => {
     const corruption = countryReports.filter(r => reliefWebCategory(r) === 'Governance/Corruption').length

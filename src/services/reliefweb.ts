@@ -1,4 +1,4 @@
-import { setCache } from './cache'
+import { getCache, setCache } from './cache'
 
 export type ReliefWebItem = {
   id: number | string
@@ -16,6 +16,7 @@ export type ReliefWebItem = {
 
 const RW_BASE = (import.meta as any)?.env?.VITE_RELIEFWEB_PROXY_URL || '/api/reliefweb'
 const DEFAULT_LIMIT = 500
+const MAX_AUTOPAGE_ITEMS = 2500
 
 function appName() {
   return (
@@ -112,43 +113,79 @@ async function postReports(body: any): Promise<ReliefWebItem[]> {
   throw lastErr ?? new Error('ReliefWeb request failed')
 }
 
-export async function getLatestReports(limit = DEFAULT_LIMIT, cacheMs = 1000 * 60 * 10) {
-  const body = {
-    limit,
-    sort: ['date.created:desc'],
-    filter: {
-      operator: 'AND',
-      conditions: [{ field: 'status', value: 'published' }],
-    },
-    fields: {
-      include: [
-        'title',
-        'url',
-        'date.created',
-        'country.name',
-        'theme.name',
-        'disaster_type.name',
-        'format.name',
-        'source.name',
-      ],
-    },
+async function getReportsWindow(hours: number, perPage = DEFAULT_LIMIT, maxItems = MAX_AUTOPAGE_ITEMS) {
+  const cacheKey = `rw:window:${hours}h:${perPage}:${maxItems}`
+  const cached = getCache<ReliefWebItem[]>(cacheKey, 1000 * 60 * 10)
+  if (cached) return cached
+
+  const cutoff = Date.now() - hours * 60 * 60 * 1000
+  const all: ReliefWebItem[] = []
+  const seen = new Set<string>()
+
+  for (let offset = 0; offset < maxItems; offset += perPage) {
+    const batch = await postReports({
+      limit: perPage,
+      offset,
+      sort: ['date.created:desc'],
+      filter: {
+        operator: 'AND',
+        conditions: [{ field: 'status', value: 'published' }],
+      },
+      fields: {
+        include: [
+          'title',
+          'url',
+          'date.created',
+          'country.name',
+          'theme.name',
+          'disaster_type.name',
+          'format.name',
+          'source.name',
+        ],
+      },
+    })
+
+    if (!batch.length) break
+
+    let sawOlderThanCutoff = false
+    for (const item of batch) {
+      const created = reliefWebCreatedMs(item)
+      if (created < cutoff) {
+        sawOlderThanCutoff = true
+        continue
+      }
+      const key = String(item.id)
+      if (seen.has(key)) continue
+      seen.add(key)
+      all.push(item)
+    }
+
+    if (batch.length < perPage || sawOlderThanCutoff) break
   }
 
-  const key = `rw:reports:${limit}`
-  const data = await postReports(body)
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000
-  const filtered = data.filter((item) => {
-    const created = reliefWebCreatedMs(item)
-    return created >= cutoff
+  all.sort((a, b) => reliefWebCreatedMs(b) - reliefWebCreatedMs(a))
+  setCache<ReliefWebItem[]>(cacheKey, all)
+  return all
+}
+
+export async function getLatestReports(limit = DEFAULT_LIMIT, _cacheMs = 1000 * 60 * 10) {
+  const data = await getReportsWindow(24, limit)
+  return data
+}
+
+export async function getCountryReports(countryName: string, days = 30, limit = 1000) {
+  const normalized = String(countryName || '').trim().toLowerCase()
+  if (!normalized) return []
+  const reports = await getReportsWindow(days * 24, Math.min(limit, DEFAULT_LIMIT), Math.max(limit, DEFAULT_LIMIT))
+  return reports.filter((item) => {
+    const country = reliefWebCountry(item)?.trim().toLowerCase() || ''
+    return country === normalized || country.includes(normalized) || normalized.includes(country)
   })
-  setCache<ReliefWebItem[]>(key, filtered)
-  return filtered as ReliefWebItem[]
 }
 
 export async function getRecentReports(days = 7, limit = DEFAULT_LIMIT) {
-  const data = await getLatestReports(limit)
-  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
-  return data.filter(item => reliefWebCreatedMs(item) >= cutoff)
+  const data = await getReportsWindow(days * 24, limit, Math.max(limit, DEFAULT_LIMIT))
+  return data
 }
 
 export function buildHourlyBuckets(reports: ReliefWebItem[], hours = 24, predicate?: (item: ReliefWebItem) => boolean) {
