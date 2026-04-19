@@ -23,9 +23,6 @@ export default function App() {
             >
               Geoboard
             </NavLink>
-            <div className="rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-slate-500 shadow-sm">
-              ReliefWeb-first
-            </div>
           </div>
 
           <nav className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/70 bg-white/70 p-1 shadow-sm">
