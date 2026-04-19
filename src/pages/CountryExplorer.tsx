@@ -292,21 +292,52 @@ export default function CountryExplorer() {
 
   useEffect(() => {
     let alive = true
+
     ;(async () => {
       if (!selected) {
         setCountrySpecificReports([])
         return
       }
+
       try {
-        const items = await getCountryReports(selected.name.common, 30, 1000)
-        if (alive) setCountrySpecificReports(items.slice(0, 40))
+        // Use latest global reports
+        const latest = await getLatestReports(1000)
+
+        const common = selected.name.common.toLowerCase()
+        const official = selected.name.official?.toLowerCase() || ''
+
+        const filtered = latest.filter(r => {
+          const country = (reliefWebCountry(r) || '').toLowerCase()
+
+          return (
+            country === common ||
+            country === official ||
+            country.includes(common) ||
+            common.includes(country)
+          )
+        })
+
+        if (alive) {
+          setCountrySpecificReports(
+            filtered
+              .sort(
+                (a, b) =>
+                  Date.parse(b.fields.date.created) -
+                  Date.parse(a.fields.date.created)
+              )
+              .slice(0, 40)
+          )
+        }
+
       } catch {
         if (alive) setCountrySpecificReports([])
       }
     })()
-    return () => { alive = false }
-  }, [selected?.cca3])
 
+    return () => { alive = false }
+
+  }, [selected?.cca3])
+  
   const countryReports = useMemo(() => {
     if (countrySpecificReports.length) {
       return countrySpecificReports
