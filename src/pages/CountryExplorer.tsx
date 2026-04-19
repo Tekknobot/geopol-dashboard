@@ -4,7 +4,7 @@ import Card from '../components/Card'
 import Loading from '../components/Loading'
 import { searchCountryByName, Country } from '../services/restCountries'
 import { wbGetCountryIndicator, wbGetCountryIndicatorSeries, wbGetGlobalIndicatorSeries, toSeries, hasNumericPoints, latestNonNull, WbPoint } from '../services/worldBank'
-import { getCountryReports, getLatestReports, reliefWebCategory, reliefWebCountry, reliefWebSource, type ReliefWebItem } from '../services/reliefweb'
+import { getLatestReports, reliefWebCategory, reliefWebCountry, reliefWebSource, type ReliefWebItem } from '../services/reliefweb'
 import { normalizeExternalUrl } from '../utils/links'
 
 const INDICATORS = [
