@@ -1,4 +1,5 @@
 import { setCache } from './cache'
+import { decodeHtmlEntities } from '../utils/text'
 
 export type ReliefWebItem = {
   id: number | string
@@ -105,7 +106,19 @@ async function postReports(body: any): Promise<ReliefWebItem[]> {
 
       const raw = await res.json()
       const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-      return Array.isArray(parsed?.data) ? (parsed.data as ReliefWebItem[]) : []
+      const rows = Array.isArray(parsed?.data) ? (parsed.data as ReliefWebItem[]) : []
+      return rows.map(item => ({
+        ...item,
+        fields: {
+          ...item.fields,
+          title: decodeHtmlEntities(item.fields?.title),
+          country: (item.fields?.country || []).map(x => ({ ...x, name: decodeHtmlEntities(x?.name) })),
+          theme: (item.fields?.theme || []).map(x => ({ ...x, name: decodeHtmlEntities(x?.name) })),
+          disaster_type: (item.fields?.disaster_type || []).map(x => ({ ...x, name: decodeHtmlEntities(x?.name) })),
+          format: (item.fields?.format || []).map(x => ({ ...x, name: decodeHtmlEntities(x?.name) })),
+          source: (item.fields?.source || []).map(x => ({ ...x, name: decodeHtmlEntities(x?.name) })),
+        },
+      }))
     } catch (e: any) {
       lastErr = e
       if (e?.name === 'AbortError') break

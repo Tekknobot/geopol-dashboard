@@ -1,4 +1,5 @@
 import { fetchJson } from './http'
+import { decodeHtmlEntities } from '../utils/text'
 
 export type WorldNewsItem = {
   id: string
@@ -40,7 +41,13 @@ export async function getLatestWorldNews(cacheMs = 1000 * 60 * 5): Promise<World
     map: (json) => {
       const items = Array.isArray((json as any)?.items) ? ((json as any).items as WorldNewsItem[]) : []
       if (!items.length) throw new Error('No world news items available')
-      return items
+      return items.map(item => ({
+        ...item,
+        title: decodeHtmlEntities(item.title),
+        source: decodeHtmlEntities(item.source),
+        description: decodeHtmlEntities(item.description),
+        tags: (item.tags || []).map(tag => decodeHtmlEntities(tag)),
+      }))
     },
   })
 }

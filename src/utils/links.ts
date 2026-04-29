@@ -6,7 +6,7 @@ export function normalizeExternalUrl(raw?: string | null): string {
   const decoded = value
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
-    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&apos;|&#x27;|&#39;/gi, "'")
     .trim()
 
   // protocol-relative URL
