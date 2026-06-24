@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import Card from '../components/Card'
 import Loading from '../components/Loading'
-import { searchCountryByName, Country } from '../services/restCountries'
+import { getAllCountries, searchCountryByName, Country } from '../services/restCountries'
 import { wbGetCountryIndicator, wbGetCountryIndicatorSeries, wbGetGlobalIndicatorSeries, toSeries, hasNumericPoints, latestNonNull, WbPoint } from '../services/worldBank'
 import { getLatestReports, reliefWebCategory, reliefWebCountry, reliefWebSource, type ReliefWebItem } from '../services/reliefweb'
 import { normalizeExternalUrl } from '../utils/links'
@@ -31,30 +31,59 @@ function countryFlagSrc(country: Country | null) {
   return country?.flags?.svg || country?.flags?.png || ''
 }
 
-function SearchSuggestions({ suggestions, choose }: { suggestions: Country[]; choose: (c: Country) => void }) {
+function countrySearchText(country: Country) {
+  return [
+    country.name?.common,
+    country.name?.official,
+    country.cca2,
+    country.cca3,
+    country.region,
+    country.subregion,
+    ...(country.capital || []),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+}
+
+function filterCountries(countries: Country[], query: string) {
+  const q = query.trim().toLowerCase()
+  if (!q) return countries
+  return countries.filter(country => countrySearchText(country).includes(q))
+}
+
+function SearchSuggestions({ suggestions, choose, allCount, query }: { suggestions: Country[]; choose: (c: Country) => void; allCount: number; query: string }) {
   if (!suggestions.length) return null
+  const showingFullList = !query.trim()
   return (
-    <ul className="absolute z-20 mt-2 w-full max-h-80 overflow-auto rounded-2xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5">
-      {suggestions.map(s => (
-        <li key={s.cca3 || s.name.common}>
-          <button
-            type="button"
-            className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
-            onClick={() => choose(s)}
-          >
-            {countryFlagSrc(s) ? (
-              <img src={countryFlagSrc(s)} alt="" className="h-7 w-10 shrink-0 rounded object-cover ring-1 ring-slate-200" loading="lazy" />
-            ) : (
-              <span className="flex h-7 w-10 shrink-0 items-center justify-center rounded bg-slate-100 text-lg ring-1 ring-slate-200">{flagEmoji(s.cca2)}</span>
-            )}
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-semibold text-slate-900">{s.name?.common}</span>
-              <span className="block truncate text-xs text-slate-500">{s.region || 'Region unavailable'}{s.subregion ? ` · ${s.subregion}` : ''} · {s.cca3}</span>
-            </span>
-          </button>
-        </li>
-      ))}
-    </ul>
+    <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <span>{showingFullList ? 'All countries' : 'Country matches'}</span>
+        <span>{suggestions.length}{allCount ? ` / ${allCount}` : ''}</span>
+      </div>
+      <ul className="max-h-[28rem] overflow-auto py-1">
+        {suggestions.map(s => (
+          <li key={s.cca3 || s.name.common}>
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => choose(s)}
+            >
+              {countryFlagSrc(s) ? (
+                <img src={countryFlagSrc(s)} alt="" className="h-7 w-10 shrink-0 rounded object-cover ring-1 ring-slate-200" loading="lazy" />
+              ) : (
+                <span className="flex h-7 w-10 shrink-0 items-center justify-center rounded bg-slate-100 text-lg ring-1 ring-slate-200">{flagEmoji(s.cca2)}</span>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold text-slate-900">{s.name?.common}</span>
+                <span className="block truncate text-xs text-slate-500">{s.region || 'Region unavailable'}{s.subregion ? ` · ${s.subregion}` : ''} · {s.cca3}</span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -115,9 +144,11 @@ function IndicatorFallback({ label, bundle }: { label: string; bundle?: SeriesBu
 
 export default function CountryExplorer() {
   const [input, setInput] = useState('Canada')
+  const [allCountries, setAllCountries] = useState<Country[]>([])
   const [suggestions, setSuggestions] = useState<Country[]>([])
   const [searchingCountries, setSearchingCountries] = useState(false)
   const [countrySearchTouched, setCountrySearchTouched] = useState(false)
+  const [countryDropdownOpen, setCountryDropdownOpen] = useState(false)
   const [selected, setSelected] = useState<Country | null>(null)
 
   const [series, setSeries] = useState<Record<string, SeriesBundle>>({})
@@ -133,30 +164,56 @@ export default function CountryExplorer() {
 
   useEffect(() => {
     let alive = true
+    ;(async () => {
+      setSearchingCountries(true)
+      try {
+        const countries = await getAllCountries()
+        if (!alive) return
+        setAllCountries(countries)
+        setSuggestions(filterCountries(countries, input))
+      } catch {
+        if (alive) setAllCountries([])
+      } finally {
+        if (alive) setSearchingCountries(false)
+      }
+    })()
+    return () => { alive = false }
+  }, [])
+
+  useEffect(() => {
+    let alive = true
     const timer = window.setTimeout(async () => {
-      if (!input.trim()) {
+      const query = input.trim()
+
+      if (allCountries.length) {
+        if (alive) setSuggestions(filterCountries(allCountries, query))
+        return
+      }
+
+      if (!query) {
         if (alive) {
           setSuggestions([])
           setSearchingCountries(false)
         }
         return
       }
+
       if (alive) setSearchingCountries(true)
       try {
-        const res = await searchCountryByName(input.trim())
-        if (alive) setSuggestions(res.slice(0, 10))
+        const res = await searchCountryByName(query)
+        if (alive) setSuggestions(res)
       } catch {
         if (alive) setSuggestions([])
       } finally {
         if (alive) setSearchingCountries(false)
       }
-    }, 250)
+    }, 150)
 
     return () => {
       alive = false
       window.clearTimeout(timer)
     }
-  }, [input])
+  }, [input, allCountries])
 
   useEffect(() => {
     let alive = true
@@ -177,6 +234,7 @@ export default function CountryExplorer() {
     setSelected(c)
     setInput(c.name?.common || c.cca3 || '')
     setSuggestions([])
+    setCountryDropdownOpen(false)
     void loadCountry(c)
   }
 
@@ -511,18 +569,19 @@ export default function CountryExplorer() {
             <div className="relative">
               <input
                 value={input}
-                onChange={e => { setInput(e.target.value); setCountrySearchTouched(true) }}
-                onFocus={() => setCountrySearchTouched(true)}
+                onChange={e => { setInput(e.target.value); setCountrySearchTouched(true); setCountryDropdownOpen(true) }}
+                onFocus={() => { setCountrySearchTouched(true); setCountryDropdownOpen(true); if (allCountries.length) setSuggestions(filterCountries(allCountries, input)) }}
+                onBlur={() => window.setTimeout(() => setCountryDropdownOpen(false), 120)}
                 onKeyDown={onKeyDown}
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-24 text-sm shadow-sm outline-none ring-slate-300 transition focus:ring-4"
                 placeholder="Search Canada, Ukraine, Sri Lanka, Palestine…"
               />
               <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-2 text-xs text-slate-400">
-                {searchingCountries ? 'Searching…' : 'Enter ↵'}
+                {searchingCountries ? 'Loading…' : countryDropdownOpen ? 'Scroll list' : 'Enter ↵'}
               </div>
             </div>
-            <SearchSuggestions suggestions={suggestions} choose={choose} />
-            {countrySearchTouched && input.trim() && !searchingCountries && suggestions.length === 0 && !selected && (
+            {countryDropdownOpen && <SearchSuggestions suggestions={suggestions} choose={choose} allCount={allCountries.length} query={input} />}
+            {countrySearchTouched && countryDropdownOpen && input.trim() && !searchingCountries && suggestions.length === 0 && (
               <div className="absolute z-20 mt-2 w-full rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow">
                 No country match yet. Try a common name like “United States” or “Congo”.
               </div>

@@ -90,6 +90,11 @@ const FALLBACK_COUNTRIES: Country[] = [
   },
 ]
 
+
+function sortCountries(countries: Country[]): Country[] {
+  return [...countries].sort((a, b) => (a.name?.common || '').localeCompare(b.name?.common || ''))
+}
+
 function fallbackCountrySearch(q: string): Country[] {
   const key = normalizeCountryQuery(q)
   return FALLBACK_COUNTRIES.filter(c => {
@@ -141,6 +146,37 @@ function withManualCoords(country: Country, query: string): Country {
   if (Array.isArray(country.latlng) && country.latlng.length >= 2) return country
   const manual = MANUAL_COUNTRY_COORDS[normalizeCountryQuery(query)]
   return manual ? { ...country, latlng: manual } : country
+}
+
+
+export async function getAllCountries(cacheMs = 1000 * 60 * 60 * 24) {
+  const fields = [
+    "name",
+    "cca2",
+    "cca3",
+    "region",
+    "subregion",
+    "capital",
+    "population",
+    "area",
+    "flags",
+    "latlng",
+    "borders",
+    "currencies",
+    "languages",
+  ];
+
+  try {
+    const data = await fetchJson<Country[]>(proxyUrl("restcountries", `${RC_PATH}/all`, { fields: fields.join(",") }), {
+      maxAgeMs: cacheMs,
+      cacheKey: 'rc:all:countries',
+      retries: 2,
+      timeoutMs: 15000,
+    })
+    if (Array.isArray(data) && data.length) return sortCountries(data)
+  } catch {}
+
+  return sortCountries(FALLBACK_COUNTRIES)
 }
 
 /**
