@@ -244,7 +244,7 @@ function headlineSignal(h: string): number {
   if (!h) return 0
   let s = 0
   if (URGENCY_RX.test(h)) s += 10
-  // penalize shouty clickbait
+  // penalize shouty clickbait stuff
   if (/[A-Z]{6,}/.test(h)) s -= 2
   // slightly reward concise, informative titles
   const len = h.length
