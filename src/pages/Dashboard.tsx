@@ -14,7 +14,7 @@ import type { MapNewsItem } from '../components/MapCore'
 import ReliefWebCarousel from '../components/ReliefWebCarousel'
 import { normalizeExternalUrl } from '../utils/links'
 
-// ---------- Reverse geocode (lat/lon -> country) with caching
+// ----------- Reverse geocode (lat/lon -> country) with caching
 const COORD_CACHE_KEY = 'geo:latlon->country';
 
 function keyForCoord(lat: number, lon: number) {
