@@ -594,7 +594,7 @@ function HeadlineCategoryNavigator({
             </div>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Sort every loaded headline by topic</h2>
             <p className="mt-1 max-w-2xl text-sm text-slate-500">
-              A mobile-friendly category bar for the full headline pool below the front-page carousel.
+              A mobile-friendly category bar for the full headline pool.
             </p>
           </div>
           <select
