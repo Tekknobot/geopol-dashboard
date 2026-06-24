@@ -9,7 +9,7 @@ import { searchCountryByName, type Country } from '../services/restCountries'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, LabelList } from 'recharts'
 import LazyEventMap from '../components/LazyEventMap'
 import { getCache, setCache } from '../services/cache'
-import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pause, Play, Info } from 'lucide-react'
+import { Newspaper, ExternalLink, Tag as TagIcon, ChevronLeft, ChevronRight, Pause, Play, Info, Globe2, Clock3, ArrowRight } from 'lucide-react'
 import type { MapNewsItem } from '../components/MapCore'
 import ReliefWebCarousel from '../components/ReliefWebCarousel'
 import { normalizeExternalUrl } from '../utils/links'
@@ -346,12 +346,13 @@ function NewsCarousel({
     const id = window.setInterval(() => {
       const next = (indexRef.current + 1) % totalRef.current
       onIndexChange(next)
-    }, 6500)
-    return () => clearInterval(id)
+    }, 7000)
+    return () => window.clearInterval(id)
   }, [paused, total, onIndexChange])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!total) return
       if (e.key === 'ArrowRight') onIndexChange((index + 1) % total)
       if (e.key === 'ArrowLeft')  onIndexChange((index - 1 + total) % total)
     }
@@ -361,100 +362,182 @@ function NewsCarousel({
 
   if (!total) return null
   const it = items[index]
-
   const ctxCountry = (getContextCountry?.(it) ?? it.countryName ?? null)
+
+  const sourceLabel = (item: HeadlineItem) => {
+    if (item.source) return item.source
+    try { return new URL(item.url).hostname.replace(/^www\./,'') } catch { return 'source' }
+  }
+
+  const nextItems = Array.from({ length: Math.min(6, Math.max(total - 1, 0)) }, (_, i) => items[(index + i + 1) % total])
+    .filter(Boolean)
+
+  const jump = (item: HeadlineItem) => {
+    const i = items.findIndex(x => x.id === item.id)
+    if (i >= 0) onIndexChange(i)
+  }
 
   return (
     <section
-      className="relative overflow-hidden rounded-2xl border shadow-md"
+      className="overflow-hidden rounded-2xl border bg-white shadow-sm"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       aria-roledescription="carousel"
-      aria-label="Top headlines"
+      aria-label="Editorial front page headlines"
     >
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100" />
-      <div className="relative grid h-[65svh] min-h-[400px] md:h-[70svh] place-items-center px-4 sm:px-6 md:px-10 pt-16 md:pt-18 pb-16 md:pb-18">
-        <div className="max-w-5xl">
-          <div className="mb-3 inline-flex items-center gap-2">
-            <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">Front Page</span>
-            {it.category && (
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
-                {it.category}
-              </span>
-            )}
-            {typeof it.lat === 'number' && typeof it.lon === 'number' && (
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600 ring-1 ring-slate-200">
-                {it.lat.toFixed(2)}, {it.lon.toFixed(2)}
-              </span>
-            )}
+      <div className="border-b bg-white/80 px-4 py-3 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 ring-1 ring-slate-200">
+              <Globe2 className="h-3.5 w-3.5" /> Global Front Page
+            </div>
+            <p className="mt-2 text-sm text-slate-500">A live editorial scan of major global headlines with the carousel preserved.</p>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Previous headline"
+              onClick={() => onIndexChange((index - 1 + total) % total)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              aria-label={paused ? 'Play carousel' : 'Pause carousel'}
+              onClick={() => setPaused(p => !p)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
+            >
+              {paused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
+            </button>
+            <button
+              type="button"
+              aria-label="Next headline"
+              onClick={() => onIndexChange((index + 1) % total)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      </div>
 
-          <a href={normalizeExternalUrl(it.url)} target="_blank" rel="noreferrer" className="block" title={it.headline}>
-            <h2 className="font-extrabold leading-tight tracking-tight text-3xl sm:text-5xl md:text-6xl xl:text-7xl whitespace-normal break-words">
-              {it.headline}
-            </h2>
-          </a>
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
+        <article className="relative overflow-hidden bg-slate-950 text-white">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(148,163,184,0.34),transparent_32%),linear-gradient(135deg,rgba(15,23,42,1),rgba(2,6,23,0.94))]" />
+          <div className="relative flex min-h-[520px] flex-col justify-end px-5 py-7 sm:px-8 lg:px-10">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-950">Lead Story</span>
+              {it.category && (
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white ring-1 ring-white/20">
+                  {it.category}
+                </span>
+              )}
+              <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-200 ring-1 ring-white/20">
+                {index + 1} / {total}
+              </span>
+            </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-600">
-            <span className="inline-flex items-center gap-2">
-              <Newspaper className="h-4 w-4 opacity-70" />
-              {it.source || (() => { try { return new URL(it.url).hostname.replace(/^www\./,'') } catch { return 'source' } })()}
-            </span>
-            <span className="opacity-50">•</span>
-            <a href={normalizeExternalUrl(it.url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500">
-              Read article <ExternalLink className="h-4 w-4 opacity-70" />
+            <a href={normalizeExternalUrl(it.url)} target="_blank" rel="noreferrer" className="block" title={it.headline}>
+              <h2 className="max-w-4xl text-balance font-extrabold leading-[0.96] tracking-tight text-4xl sm:text-5xl md:text-6xl xl:text-7xl">
+                {it.headline}
+              </h2>
             </a>
-            {ctxCountry && (
-              <>
-                <span className="opacity-50">•</span>
+
+            <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-slate-200">
+              <span className="inline-flex items-center gap-2">
+                <Newspaper className="h-4 w-4 opacity-80" />
+                {sourceLabel(it)}
+              </span>
+              {it.created && (
+                <span className="inline-flex items-center gap-1 text-slate-300">
+                  <Clock3 className="h-4 w-4 opacity-80" />
+                  {new Date(it.created).toLocaleString()}
+                </span>
+              )}
+              <a href={normalizeExternalUrl(it.url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-slate-100">
+                Read article <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+              {ctxCountry && (
                 <button
                   type="button"
                   onClick={() => onOpenContext(ctxCountry)}
-                  className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs ring-1 ring-slate-200 hover:bg-slate-200"
+                  className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-white/20 hover:bg-white/15"
                   title="Open geopolitical context"
                 >
-                  <Info className="h-4 w-4" /> Open context: {ctxCountry}
+                  <Info className="h-3.5 w-3.5" /> Open context: {ctxCountry}
                 </button>
-              </>
-            )}
+              )}
+            </div>
+          </div>
+        </article>
+
+        <aside className="grid border-t bg-slate-50 lg:border-l lg:border-t-0">
+          <div className="border-b px-5 py-4">
+            <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">Also developing</h3>
+          </div>
+          <div className="divide-y overflow-y-auto lg:max-h-[520px]">
+            {nextItems.slice(0, 5).map((item, cardIndex) => {
+              const country = getContextCountry?.(item) ?? item.countryName ?? null
+              return (
+                <button
+                  key={`${item.id}-${cardIndex}`}
+                  type="button"
+                  onClick={() => jump(item)}
+                  className="group w-full bg-white px-5 py-4 text-left transition hover:bg-slate-50"
+                >
+                  <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 ring-1 ring-slate-200">
+                      {item.category || 'Update'}
+                    </span>
+                    <span>{sourceLabel(item)}</span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-bold text-white">
+                      {cardIndex + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <h4 className="line-clamp-3 font-semibold leading-snug text-slate-950 group-hover:underline">
+                        {item.headline}
+                      </h4>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span className="inline-flex items-center gap-1">Open in carousel <ArrowRight className="h-3 w-3" /></span>
+                        {country && <span>· {country}</span>}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </aside>
+      </div>
+
+      {nextItems.length > 0 && (
+        <div className="border-t bg-white px-4 py-4 sm:px-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">Headline strip</h3>
+            <span className="text-xs text-slate-500">Click any card to bring it into the carousel</span>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {nextItems.map((item, i) => (
+              <button
+                key={`${item.id}-strip-${i}`}
+                type="button"
+                onClick={() => jump(item)}
+                className="min-w-[240px] max-w-[280px] rounded-xl border bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span className="truncate rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700 ring-1 ring-slate-200">{item.category || 'Update'}</span>
+                  <span className="shrink-0">{((index + i + 2 - 1) % total) + 1}/{total}</span>
+                </div>
+                <p className="line-clamp-3 text-sm font-semibold leading-snug text-slate-950">{item.headline}</p>
+                <p className="mt-2 truncate text-xs text-slate-500">{sourceLabel(item)}</p>
+              </button>
+            ))}
           </div>
         </div>
-      </div>
-
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between p-2 sm:p-4">
-        <button
-          type="button"
-          aria-label="Previous headline"
-          onClick={() => onIndexChange((index - 1 + total) % total)}
-          className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/90 shadow ring-1 ring-black/10 hover:bg-white"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        <div className="pointer-events-auto inline-flex items-center gap-2">
-          <button
-            type="button"
-            aria-label={paused ? 'Play' : 'Pause'}
-            onClick={() => setPaused(p => !p)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/90 shadow ring-1 ring-black/10 hover:bg-white"
-          >
-            {paused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
-          </button>
-        </div>
-        <button
-          type="button"
-          aria-label="Next headline"
-          onClick={() => onIndexChange((index + 1) % total)}
-          className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/90 shadow ring-1 ring-black/10 hover:bg-white"
-        >
-          <ChevronRight className="h-5 w-5" />
-        </button>
-      </div>
-
-      <div className="pointer-events-none absolute bottom-3 md:bottom-4 left-0 right-0 flex items-center justify-center">
-        <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs ring-1 ring-slate-200 shadow-sm">
-          {index + 1} / {total}
-        </span>
-      </div>
+      )}
     </section>
   )
 }
