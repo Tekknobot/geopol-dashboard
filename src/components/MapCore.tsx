@@ -88,6 +88,7 @@ export type MapNewsItem = {
 
 type SocioPoint = { lat: number; lon: number; label: string; category: string; headline: string; source: string; url: string }
 type GroupedPoint = { lat: number; lon: number; label: string; category: string; items: SocioPoint[] }
+type DisplayPoint = GroupedPoint & { displayLat: number; displayLon: number; spreadIndex: number; spreadTotal: number }
 
 function coordKey(lat: number, lon: number) { return `${lat.toFixed(4)},${lon.toFixed(4)}` }
 
@@ -102,6 +103,36 @@ function groupPointsByLocation(points: SocioPoint[]): GroupedPoint[] {
   return Array.from(groups.values())
     .map(group => ({ ...group, items: [...group.items].sort((a, b) => a.headline.localeCompare(b.headline)) }))
     .sort((a, b) => b.items.length - a.items.length)
+}
+
+function spreadGroups(groups: GroupedPoint[]): DisplayPoint[] {
+  const byCoord = new Map<string, GroupedPoint[]>()
+  for (const group of groups) {
+    const key = coordKey(group.lat, group.lon)
+    const bucket = byCoord.get(key) || []
+    bucket.push(group)
+    byCoord.set(key, bucket)
+  }
+
+  const spread: DisplayPoint[] = []
+  for (const bucket of byCoord.values()) {
+    const ordered = [...bucket].sort((a, b) => b.items.length - a.items.length || a.category.localeCompare(b.category))
+    const total = ordered.length
+    ordered.forEach((group, index) => {
+      if (total === 1) {
+        spread.push({ ...group, displayLat: group.lat, displayLon: group.lon, spreadIndex: 0, spreadTotal: 1 })
+        return
+      }
+
+      const angle = (Math.PI * 2 * index) / total - Math.PI / 2
+      const radius = Math.min(2.4, 0.55 + total * 0.12)
+      const lonScale = Math.max(0.45, Math.cos((Math.abs(group.lat) * Math.PI) / 180))
+      const displayLat = group.lat + Math.sin(angle) * radius
+      const displayLon = group.lon + (Math.cos(angle) * radius) / lonScale
+      spread.push({ ...group, displayLat, displayLon, spreadIndex: index + 1, spreadTotal: total })
+    })
+  }
+  return spread.sort((a, b) => b.items.length - a.items.length)
 }
 
 const ALL_CATEGORIES = [
@@ -165,24 +196,24 @@ async function resolveInBatches(places: string[], coordMap: Map<string, [number,
   for (let i = 0; i < places.length; i += batchSize) await Promise.all(places.slice(i, i + batchSize).map((place) => resolveCoords(place, coordMap)))
 }
 
-function FitBounds({ groups, version }: { groups: GroupedPoint[]; version: number }) {
+function FitBounds({ groups, version }: { groups: DisplayPoint[]; version: number }) {
   const map = useMap()
   useEffect(() => {
     if (!groups.length) return
-    const bounds = L.latLngBounds(groups.map(g => [g.lat, g.lon] as [number, number]))
+    const bounds = L.latLngBounds(groups.map(g => [g.displayLat, g.displayLon] as [number, number]))
     if (bounds.isValid()) map.fitBounds(bounds.pad(0.22), { animate: true, maxZoom: groups.length === 1 ? 4 : 5 })
   }, [groups, map, version])
   return null
 }
 
-function ResetMapButton({ groups, onReset }: { groups: GroupedPoint[]; onReset: () => void }) {
+function ResetMapButton({ groups, onReset }: { groups: DisplayPoint[]; onReset: () => void }) {
   const map = useMap()
   return (
     <button
       type="button"
       onClick={() => {
         if (groups.length) {
-          const bounds = L.latLngBounds(groups.map(g => [g.lat, g.lon] as [number, number]))
+          const bounds = L.latLngBounds(groups.map(g => [g.displayLat, g.displayLon] as [number, number]))
           if (bounds.isValid()) map.fitBounds(bounds.pad(0.22), { animate: true, maxZoom: groups.length === 1 ? 4 : 5 })
         } else map.setView([20, 0], 2)
         onReset()
@@ -292,7 +323,7 @@ export default function MapCore({ events: _unused, reports = [], worldNews = [],
     if (!search) return true
     return `${p.label} ${p.category} ${p.headline} ${p.source}`.toLowerCase().includes(search)
   }), [points, activeCats, search])
-  const groupedShownPoints = useMemo(() => groupPointsByLocation(shownPoints), [shownPoints])
+  const groupedShownPoints = useMemo(() => spreadGroups(groupPointsByLocation(shownPoints)), [shownPoints])
   const total = points.length
   const shown = shownPoints.length
   const shownMarkers = groupedShownPoints.length
@@ -315,17 +346,36 @@ export default function MapCore({ events: _unused, reports = [], worldNews = [],
   return (
     <div className="space-y-3">
       <div className="rounded-2xl border border-slate-200 bg-white/80 p-2 shadow-sm">
+        <div className="mb-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-3">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Live map view</div>
+                <div className="mt-1 text-lg font-extrabold leading-none text-slate-950">{shown} of {total} headlines</div>
+              </div>
+              <div className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{shownMarkers} clickable pins</div>
+              <div className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{availableCats.length} topics</div>
+              <div className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{activeCats.size} active</div>
+            </div>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search country, source, headline…"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-400 lg:max-w-[360px]"
+            />
+          </div>
+        </div>
         <div className="relative h-[560px] overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
           <MapContainer center={[20, 0]} zoom={2} minZoom={2} scrollWheelZoom worldCopyJump style={{ height: '100%', width: '100%' }}>
             <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             <FitBounds groups={groupedShownPoints} version={fitVersion} />
-            <div className="leaflet-top leaflet-right">
+            <div className="leaflet-bottom leaflet-right">
               <div className="leaflet-control m-3 flex flex-col gap-2">
                 <ResetMapButton groups={groupedShownPoints} onReset={() => setFitVersion(v => v + 1)} />
               </div>
             </div>
             {groupedShownPoints.map((group, idx) => (
-              <Marker key={`${group.label}-${group.category}-${idx}`} position={[group.lat, group.lon]} icon={iconForCategory(group.category, group.items.length)}>
+              <Marker key={`${group.label}-${group.category}-${idx}`} position={[group.displayLat, group.displayLon]} icon={iconForCategory(group.category, group.items.length)}>
                 <Popup className="geopol-popup">
                   <div className="min-w-[270px] max-w-[360px] space-y-3">
                     <div>
@@ -336,7 +386,7 @@ export default function MapCore({ events: _unused, reports = [], worldNews = [],
                         </div>
                         <div className="rounded-full bg-slate-900 px-2 py-1 text-[11px] font-bold text-white">{group.items.length}</div>
                       </div>
-                      <div className="mt-1 text-[11px] text-slate-500">Grouped headlines at this mapped location</div>
+                      <div className="mt-1 text-[11px] text-slate-500">{group.spreadTotal > 1 ? `Spread marker ${group.spreadIndex} of ${group.spreadTotal} for this location` : 'Grouped headlines at this mapped location'}</div>
                     </div>
                     <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
                       {group.items.map((item, itemIdx) => (
@@ -352,28 +402,6 @@ export default function MapCore({ events: _unused, reports = [], worldNews = [],
             ))}
           </MapContainer>
 
-          <div className="pointer-events-none absolute left-3 top-3 z-[500] max-w-[calc(100%-1.5rem)]">
-            <div className="pointer-events-auto rounded-2xl border border-white/70 bg-white/95 p-3 shadow-lg backdrop-blur md:w-[360px]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Live map view</div>
-                  <div className="mt-1 text-lg font-extrabold leading-none text-slate-950">{shown} of {total} headlines</div>
-                </div>
-                <div className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{shownMarkers} pins</div>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="rounded-xl bg-slate-50 px-2 py-2 ring-1 ring-slate-200"><div className="font-bold text-slate-950">{availableCats.length}</div><div className="text-slate-500">topics</div></div>
-                <div className="rounded-xl bg-slate-50 px-2 py-2 ring-1 ring-slate-200"><div className="font-bold text-slate-950">{topLocations.length ? topLocations[0][0] : '—'}</div><div className="text-slate-500">top place</div></div>
-                <div className="rounded-xl bg-slate-50 px-2 py-2 ring-1 ring-slate-200"><div className="font-bold text-slate-950">{activeCats.size}</div><div className="text-slate-500">active</div></div>
-              </div>
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search country, source, headline…"
-                className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-400"
-              />
-            </div>
-          </div>
 
           {topLocations.length > 0 && (
             <div className="pointer-events-none absolute bottom-3 left-3 z-[500] hidden max-w-[calc(100%-1.5rem)] md:block">
