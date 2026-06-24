@@ -20,6 +20,44 @@ type SeriesBundle = { country: WbPoint[]; world: WbPoint[] }
 type WbCountryMeta = { id: string; name: string; region: { id: string; value: string } }
 type RegionalRow = { name: string; value: number | null; iso3: string; isFocus?: boolean }
 
+function flagEmoji(cca2?: string) {
+  if (!cca2 || cca2.length !== 2) return '🏳️'
+  return cca2
+    .toUpperCase()
+    .replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt(0)))
+}
+
+function countryFlagSrc(country: Country | null) {
+  return country?.flags?.svg || country?.flags?.png || ''
+}
+
+function SearchSuggestions({ suggestions, choose }: { suggestions: Country[]; choose: (c: Country) => void }) {
+  if (!suggestions.length) return null
+  return (
+    <ul className="absolute z-20 mt-2 w-full max-h-80 overflow-auto rounded-2xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5">
+      {suggestions.map(s => (
+        <li key={s.cca3 || s.name.common}>
+          <button
+            type="button"
+            className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+            onClick={() => choose(s)}
+          >
+            {countryFlagSrc(s) ? (
+              <img src={countryFlagSrc(s)} alt="" className="h-7 w-10 shrink-0 rounded object-cover ring-1 ring-slate-200" loading="lazy" />
+            ) : (
+              <span className="flex h-7 w-10 shrink-0 items-center justify-center rounded bg-slate-100 text-lg ring-1 ring-slate-200">{flagEmoji(s.cca2)}</span>
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold text-slate-900">{s.name?.common}</span>
+              <span className="block truncate text-xs text-slate-500">{s.region || 'Region unavailable'}{s.subregion ? ` · ${s.subregion}` : ''} · {s.cca3}</span>
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function mapRestRegionToWb(region: string): string[] {
   switch (region) {
     case 'Africa': return ['SSF']
@@ -78,6 +116,8 @@ function IndicatorFallback({ label, bundle }: { label: string; bundle?: SeriesBu
 export default function CountryExplorer() {
   const [input, setInput] = useState('Canada')
   const [suggestions, setSuggestions] = useState<Country[]>([])
+  const [searchingCountries, setSearchingCountries] = useState(false)
+  const [countrySearchTouched, setCountrySearchTouched] = useState(false)
   const [selected, setSelected] = useState<Country | null>(null)
 
   const [series, setSeries] = useState<Record<string, SeriesBundle>>({})
@@ -95,14 +135,20 @@ export default function CountryExplorer() {
     let alive = true
     const timer = window.setTimeout(async () => {
       if (!input.trim()) {
-        if (alive) setSuggestions([])
+        if (alive) {
+          setSuggestions([])
+          setSearchingCountries(false)
+        }
         return
       }
+      if (alive) setSearchingCountries(true)
       try {
         const res = await searchCountryByName(input.trim())
-        if (alive) setSuggestions(res.slice(0, 8))
+        if (alive) setSuggestions(res.slice(0, 10))
       } catch {
         if (alive) setSuggestions([])
+      } finally {
+        if (alive) setSearchingCountries(false)
       }
     }, 250)
 
@@ -457,43 +503,46 @@ export default function CountryExplorer() {
     <div className="space-y-6">
       <Card
         title="Country search"
-        right={
-          <div className="hidden md:block relative">
-            <input
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              className="rounded-lg border px-3 py-1 text-sm w-72"
-              placeholder="Type to search…"
-            />
-            {suggestions.length > 0 && (
-              <ul className="absolute z-10 mt-1 w-72 max-h-64 overflow-auto rounded-lg border bg-white shadow">
-                {suggestions.map(s => (
-                  <li key={s.cca3} className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50" onClick={() => choose(s)}>
-                    {s.name?.common} <span className="text-slate-500">({s.region}{s.subregion ? ` — ${s.subregion}` : ''})</span>
-                  </li>
-                ))}
-              </ul>
+        right={selected ? <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200 md:inline-flex">{flagEmoji(selected.cca2)} {selected.cca3}</span> : undefined}
+      >
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+          <div className="relative">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Explore a country</label>
+            <div className="relative">
+              <input
+                value={input}
+                onChange={e => { setInput(e.target.value); setCountrySearchTouched(true) }}
+                onFocus={() => setCountrySearchTouched(true)}
+                onKeyDown={onKeyDown}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-24 text-sm shadow-sm outline-none ring-slate-300 transition focus:ring-4"
+                placeholder="Search Canada, Ukraine, Sri Lanka, Palestine…"
+              />
+              <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-2 text-xs text-slate-400">
+                {searchingCountries ? 'Searching…' : 'Enter ↵'}
+              </div>
+            </div>
+            <SearchSuggestions suggestions={suggestions} choose={choose} />
+            {countrySearchTouched && input.trim() && !searchingCountries && suggestions.length === 0 && !selected && (
+              <div className="absolute z-20 mt-2 w-full rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow">
+                No country match yet. Try a common name like “United States” or “Congo”.
+              </div>
             )}
           </div>
-        }
-      >
-        <div className="md:hidden mb-3 relative">
-          <input
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            className="w-full rounded-lg border px-3 py-2 text-sm"
-            placeholder="Search a country…"
-          />
-          {suggestions.length > 0 && (
-            <ul className="absolute z-10 mt-1 w-full max-h-64 overflow-auto rounded-lg border bg-white shadow">
-              {suggestions.map(s => (
-                <li key={s.cca3} className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50" onClick={() => choose(s)}>
-                  {s.name?.common} <span className="text-slate-500">({s.region}{s.subregion ? ` — ${s.subregion}` : ''})</span>
-                </li>
-              ))}
-            </ul>
+
+          {selected && (
+            <div className="hidden min-w-[220px] rounded-2xl border border-slate-200 bg-slate-50 p-3 lg:block">
+              <div className="flex items-center gap-3">
+                {countryFlagSrc(selected) ? (
+                  <img src={countryFlagSrc(selected)} className="h-11 w-16 rounded object-cover ring-1 ring-slate-200" alt={`${selected.name.common} flag`} loading="lazy" />
+                ) : (
+                  <span className="text-3xl">{flagEmoji(selected.cca2)}</span>
+                )}
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-slate-900">{selected.name.common}</div>
+                  <div className="truncate text-xs text-slate-500">{selected.region}{selected.subregion ? ` · ${selected.subregion}` : ''}</div>
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
@@ -501,8 +550,10 @@ export default function CountryExplorer() {
 
         {selected && (
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center min-w-0">
-            {selected.flags?.png && (
-              <img src={selected.flags.png} className="w-20 h-12 sm:w-24 sm:h-16 object-cover rounded-md border shrink-0" alt="flag" loading="lazy" />
+            {countryFlagSrc(selected) ? (
+              <img src={countryFlagSrc(selected)} className="w-24 h-16 sm:w-28 sm:h-20 object-cover rounded-xl border shadow-sm shrink-0" alt={`${selected.name.common} flag`} loading="lazy" />
+            ) : (
+              <div className="flex h-16 w-24 shrink-0 items-center justify-center rounded-xl border bg-slate-50 text-4xl shadow-sm">{flagEmoji(selected.cca2)}</div>
             )}
             <div className="min-w-0 w-full">
               <div className="text-lg sm:text-xl font-semibold break-words">{selected.name.common}</div>

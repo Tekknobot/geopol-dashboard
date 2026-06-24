@@ -543,6 +543,7 @@ function ContextSidebar({ countryName, onClose }: { countryName: string | null; 
   const [series, setSeries] = useState<Record<string, WbPoint[]>>({})
   const [world, setWorld] = useState<Record<string, WbPoint[]>>({})
   const [loading, setLoading] = useState(false)
+  const [contextError, setContextError] = useState<string | null>(null)
 
   const INDICATORS = [
     { code: 'PV.EST', label: 'Political Stability (WGI)' },
@@ -589,7 +590,7 @@ function ContextSidebar({ countryName, onClose }: { countryName: string | null; 
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-4 p-4 pb-[env(safe-area-inset-bottom)]">
         <Card title="Country facts">
-          {!country ? <div className="text-sm text-slate-500">Loading…</div> :
+          {contextError ? <div className="text-sm text-amber-700">{contextError}</div> : !country ? <div className="text-sm text-slate-500">Loading…</div> :
             <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
               <li><span className="text-slate-500">Region:</span> {country.region}</li>
               <li><span className="text-slate-500">Capital:</span> {country.capital?.[0] ?? '—'}</li>
@@ -1113,6 +1114,11 @@ export default function Dashboard() {
     return normalizeCountryName(item.countryName)
   }, [urlToCountry, recentCountryNames, coordCountry])
 
+  const openContext = useCallback((country: string | null | undefined) => {
+    const normalized = normalizeCountryName(country)
+    if (normalized) setContextCountry(normalized)
+  }, [])
+
   console.log('[Dashboard] reports length =', reports?.length)
   
   return (
@@ -1121,7 +1127,7 @@ export default function Dashboard() {
       {carouselItems.length > 0 && (
         <NewsCarousel
           items={carouselItems}
-          onOpenContext={(c) => setContextCountry(c)}
+          onOpenContext={openContext}
           index={carouselIndex}
           onIndexChange={setCarouselIndex}
           getContextCountry={getContextCountry}
@@ -1132,7 +1138,7 @@ export default function Dashboard() {
       <Card title="Humanitarian Headlines (ReliefWeb)">
         <ReliefWebCarousel
           reports={reports || []} // always pass an array; component hides itself if empty
-          onOpenContext={(c) => setContextCountry(c)}
+          onOpenContext={openContext}
         />
       </Card>
 
@@ -1489,7 +1495,7 @@ export default function Dashboard() {
                               <span className="opacity-60">·</span>
                               <button
                                 type="button"
-                                onClick={() => setContextCountry(countryName)}
+                                onClick={() => openContext(countryName)}
                                 className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 ring-1 ring-slate-200 hover:bg-slate-200"
                                 title="Open geopolitical context"
                               >
@@ -1536,6 +1542,19 @@ export default function Dashboard() {
                       </span>
                       <span className="opacity-60 shrink-0">·</span>
                       <span className="shrink-0">Lat/Lon: {item.lat.toFixed(2)}, {item.lon.toFixed(2)}</span>
+                      {getContextCountry(item) && (
+                        <>
+                          <span className="opacity-60 shrink-0">·</span>
+                          <button
+                            type="button"
+                            onClick={() => openContext(getContextCountry(item))}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200 hover:bg-slate-200"
+                            title="Open geopolitical context"
+                          >
+                            <Info className="h-3 w-3" /> Open context
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   <a href={normalizeExternalUrl(item.url)} target="_blank" rel="noreferrer" aria-label="Open link" className="mt-0.5 shrink-0">
