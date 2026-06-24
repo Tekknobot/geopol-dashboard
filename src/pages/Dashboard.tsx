@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Card from '../components/Card'
 import Loading from '../components/Loading'
 import ErrorState from '../components/ErrorState'
-import { getLatestReports, ReliefWebItem } from '../services/reliefweb'
+import { getLatestReports, ReliefWebItem, reliefWebCategory } from '../services/reliefweb'
 import { getLatestWorldNews, type WorldNewsItem, worldNewsCategory, worldNewsCreatedMs } from '../services/worldNews'
 import { wbGetGlobalIndicator, toSeries, WbPoint, wbGetCountryIndicator, wbGetGlobalIndicator as wbGlobal } from '../services/worldBank'
 import { searchCountryByName, type Country } from '../services/restCountries'
@@ -864,6 +864,45 @@ export default function Dashboard() {
     return out;
   }, [mapNews]);
 
+  const [headlineCategory, setHeadlineCategory] = useState<string>('All')
+
+  const headlineCategoryOptions = useMemo(() => {
+    const counts = new Map<string, number>()
+    if (uniqueMapNews.length) {
+      for (const item of uniqueMapNews) {
+        const category = item.category || 'Other'
+        counts.set(category, (counts.get(category) || 0) + 1)
+      }
+    } else if (reports?.length) {
+      for (const item of reports) {
+        const category = reliefWebCategory(item) || 'Humanitarian'
+        counts.set(category, (counts.get(category) || 0) + 1)
+      }
+    }
+
+    const entries = Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    const total = entries.reduce((sum, [, count]) => sum + count, 0)
+    return [['All', total] as [string, number], ...entries]
+  }, [uniqueMapNews, reports])
+
+  useEffect(() => {
+    if (headlineCategory === 'All') return
+    const stillExists = headlineCategoryOptions.some(([category]) => category === headlineCategory)
+    if (!stillExists) setHeadlineCategory('All')
+  }, [headlineCategory, headlineCategoryOptions])
+
+  const filteredMapNews = useMemo(() => {
+    const ranked = sortByReputation(uniqueMapNews)
+    if (headlineCategory === 'All') return ranked
+    return ranked.filter(item => (item.category || 'Other') === headlineCategory)
+  }, [uniqueMapNews, headlineCategory])
+
+  const filteredReports = useMemo(() => {
+    const rows = reports || []
+    if (headlineCategory === 'All') return rows
+    return rows.filter(item => (reliefWebCategory(item) || 'Humanitarian') === headlineCategory)
+  }, [reports, headlineCategory])
+
   // Cached "front page" carousel so we can show headlines immediately
   const CAROUSEL_CACHE_KEY = 'carousel:world:last'
   const CAROUSEL_MAX = 100; // keep the top carousel concise and stable
@@ -1636,19 +1675,61 @@ export default function Dashboard() {
 
       {/* Headlines list */}
       <CollapsibleSection
-        title={uniqueMapNews.length ? 'Latest Headlines (from Map)' : 'Latest Humanitarian Updates (ReliefWeb)'}
+        title={uniqueMapNews.length ? 'Latest Headlines by Category' : 'Latest Humanitarian Updates by Category'}
         storageKey="news:list"
         defaultOpen={false}
         rightHint={
           uniqueMapNews.length
-            ? `${Math.min(uniqueMapNews.length, NEWS_VISIBLE)} of ${uniqueMapNews.length}`
-            : (reports ? `${reports.length} items` : undefined)
+            ? `${Math.min(filteredMapNews.length, NEWS_VISIBLE)} of ${uniqueMapNews.length}`
+            : (reports ? `${filteredReports.length} of ${reports.length} items` : undefined)
         }
       >
+        {headlineCategoryOptions.length > 1 && (
+          <div className="mb-4 rounded-2xl border bg-slate-50 p-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                <TagIcon className="h-3.5 w-3.5" /> Headline category navigation
+              </div>
+              {headlineCategory !== 'All' && (
+                <button
+                  type="button"
+                  onClick={() => setHeadlineCategory('All')}
+                  className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
+                >
+                  Clear filter
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {headlineCategoryOptions.map(([category, count]) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setHeadlineCategory(category)}
+                  className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition ${
+                    headlineCategory === category
+                      ? 'bg-slate-950 text-white ring-slate-950'
+                      : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-100'
+                  }`}
+                  aria-pressed={headlineCategory === category}
+                >
+                  <span>{category}</span>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${headlineCategory === category ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    {count}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Sort the headline feed by category without leaving the overview. The list below updates instantly.
+            </p>
+          </div>
+        )}
+
         {!mapNews.length ? (
           !reports ? <Loading/> : (
             <ul className="divide-y">
-              {reports.map(item => {
+              {filteredReports.slice(0, NEWS_VISIBLE).map(item => {
                 const countryName = normalizeCountryName(item.fields.country?.[0]?.name)
                 return (
                   <li key={item.id} className="py-3">
@@ -1695,7 +1776,7 @@ export default function Dashboard() {
           )
         ) : (
           <ul className="divide-y">
-            {sortByReputation(uniqueMapNews).slice(0, NEWS_VISIBLE).map(item => (
+            {filteredMapNews.slice(0, NEWS_VISIBLE).map(item => (
               <li key={item.id} className="py-3">
                 <div className="flex items-start gap-2">
                   <Newspaper className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
