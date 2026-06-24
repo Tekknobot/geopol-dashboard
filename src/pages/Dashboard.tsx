@@ -425,7 +425,7 @@ function NewsCarousel({
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
         <article className="relative overflow-hidden bg-slate-950 text-white">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(148,163,184,0.34),transparent_32%),linear-gradient(135deg,rgba(15,23,42,1),rgba(2,6,23,0.94))]" />
-          <div className="relative flex min-h-[520px] flex-col justify-end px-5 py-7 sm:px-8 lg:px-10">
+          <div className="relative flex min-h-[520px] flex-col justify-start px-5 py-7 sm:px-8 lg:px-10">
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-950">Lead Story</span>
               {it.category && (
