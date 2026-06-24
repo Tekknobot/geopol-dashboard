@@ -391,7 +391,7 @@ function NewsCarousel({
             <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 ring-1 ring-slate-200">
               <Globe2 className="h-3.5 w-3.5" /> Global Front Page
             </div>
-            <p className="mt-2 text-sm text-slate-500">A live editorial scan of major global headlines with the carousel preserved.</p>
+            <p className="mt-2 text-sm text-slate-500">A live editorial scan of major global headlines.</p>
           </div>
           <div className="flex items-center gap-2">
             <button
