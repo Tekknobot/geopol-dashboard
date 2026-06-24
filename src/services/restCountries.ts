@@ -56,6 +56,49 @@ const COUNTRY_ALIASES: Record<string, string> = {
   'kosovo (under security council resolution 1244 (1999))': 'kosovo',
 }
 
+
+const FALLBACK_COUNTRIES: Country[] = [
+  {
+    name: { common: 'Canada', official: 'Canada' },
+    cca2: 'CA', cca3: 'CAN', region: 'Americas', subregion: 'North America',
+    capital: ['Ottawa'], population: 40000000, area: 9984670, latlng: [56.1304, -106.3468],
+    borders: ['USA'], currencies: { CAD: { name: 'Canadian dollar', symbol: '$' } }, languages: { eng: 'English', fra: 'French' },
+  },
+  {
+    name: { common: 'United States', official: 'United States of America' },
+    cca2: 'US', cca3: 'USA', region: 'Americas', subregion: 'North America',
+    capital: ['Washington, D.C.'], population: 335000000, area: 9372610, latlng: [37.0902, -95.7129],
+    borders: ['CAN', 'MEX'], currencies: { USD: { name: 'United States dollar', symbol: '$' } }, languages: { eng: 'English' },
+  },
+  {
+    name: { common: 'United Kingdom', official: 'United Kingdom of Great Britain and Northern Ireland' },
+    cca2: 'GB', cca3: 'GBR', region: 'Europe', subregion: 'Northern Europe',
+    capital: ['London'], population: 68000000, area: 242900, latlng: [55.3781, -3.4360],
+    currencies: { GBP: { name: 'British pound', symbol: '£' } }, languages: { eng: 'English' },
+  },
+  {
+    name: { common: 'Ukraine', official: 'Ukraine' },
+    cca2: 'UA', cca3: 'UKR', region: 'Europe', subregion: 'Eastern Europe',
+    capital: ['Kyiv'], population: 37000000, area: 603500, latlng: [48.3794, 31.1656],
+    borders: ['BLR', 'HUN', 'MDA', 'POL', 'ROU', 'RUS', 'SVK'], currencies: { UAH: { name: 'Ukrainian hryvnia', symbol: '₴' } }, languages: { ukr: 'Ukrainian' },
+  },
+  {
+    name: { common: 'India', official: 'Republic of India' },
+    cca2: 'IN', cca3: 'IND', region: 'Asia', subregion: 'Southern Asia',
+    capital: ['New Delhi'], population: 1420000000, area: 3287590, latlng: [20.5937, 78.9629],
+    borders: ['BGD', 'BTN', 'MMR', 'CHN', 'NPL', 'PAK'], currencies: { INR: { name: 'Indian rupee', symbol: '₹' } }, languages: { hin: 'Hindi', eng: 'English' },
+  },
+]
+
+function fallbackCountrySearch(q: string): Country[] {
+  const key = normalizeCountryQuery(q)
+  return FALLBACK_COUNTRIES.filter(c => {
+    const common = c.name.common.toLowerCase()
+    const official = c.name.official.toLowerCase()
+    return common.includes(key) || official.includes(key) || c.cca3.toLowerCase() === key || c.cca2.toLowerCase() === key
+  })
+}
+
 const MANUAL_COUNTRY_COORDS: Record<string, [number, number]> = {
   'palestine': [31.95, 35.23],
   'occupied palestinian territory': [31.95, 35.23],
@@ -120,6 +163,9 @@ export async function searchCountryByName(q: string, cacheMs = 1000 * 60 * 60) {
       if (alias.length) return alias.map(country => withManualCoords(country, raw))
     } catch {}
   }
+
+  const fallback = fallbackCountrySearch(raw)
+  if (fallback.length) return fallback
 
   const manual = MANUAL_COUNTRY_COORDS[normalized]
   if (manual) {
