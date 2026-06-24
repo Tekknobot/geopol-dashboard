@@ -699,6 +699,98 @@ function ContextSidebar({ countryName, onClose }: { countryName: string | null; 
 }
 
 // ---------- Main Dashboard
+
+const SOURCE_TIERS = [
+  {
+    title: 'Breaking News',
+    purpose: 'Fast global headline awareness from major public newsrooms.',
+    sources: ['BBC', 'AP News', 'Al Jazeera', 'NPR', 'CBC'],
+  },
+  {
+    title: 'Regional Perspectives',
+    purpose: 'Adds non-identical viewpoints from Europe, Asia, Africa, the Pacific, and the Middle East.',
+    sources: ['DW', 'France 24', 'Guardian', 'ABC Australia', 'RNZ', 'NHK World', 'AllAfrica', 'The Hindu', 'SCMP', 'Nikkei Asia', 'Times of Israel'],
+  },
+  {
+    title: 'Primary / Institutional',
+    purpose: 'Original signal from public institutions and humanitarian organizations.',
+    sources: ['ReliefWeb', 'UN News', 'WHO', 'World Bank', 'GDELT'],
+  },
+  {
+    title: 'Specialist Signals',
+    purpose: 'Climate, cyber, maritime, space, and science signals that often matter before they become political stories.',
+    sources: ['Carbon Brief', 'Mongabay', 'BleepingComputer', 'The Hacker News', 'Maritime Executive', 'NASA', 'ESA'],
+  },
+]
+
+function SourceIntelligenceCard({ worldNews }: { worldNews: WorldNewsItem[] }) {
+  const activeSources = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const item of worldNews || []) {
+      const key = item.source || 'Unknown source'
+      counts.set(key, (counts.get(key) || 0) + 1)
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1])
+  }, [worldNews])
+
+  return (
+    <Card title="Source Intelligence Layer">
+      <div className="space-y-4 text-sm text-slate-700">
+        <div className="rounded-xl border bg-slate-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold text-slate-950">Expanded free headline network</p>
+              <p className="mt-1 max-w-3xl text-slate-600">
+                The feed now blends major outlets with regional, institutional, climate, cyber, maritime, and space sources so Geoboard can surface more than only the biggest global headlines.
+              </p>
+            </div>
+            <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+              {activeSources.length || 'Live'} active sources
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {SOURCE_TIERS.map((tier) => (
+            <div key={tier.title} className="rounded-xl border bg-white p-4 shadow-sm">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h3 className="font-semibold text-slate-950">{tier.title}</h3>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
+                  {tier.sources.length} sources
+                </span>
+              </div>
+              <p className="mb-3 text-xs leading-relaxed text-slate-500">{tier.purpose}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {tier.sources.map((source) => (
+                  <span key={source} className="rounded-full bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 ring-1 ring-slate-200">
+                    {source}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {activeSources.length > 0 && (
+          <div className="rounded-xl border bg-white p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="font-semibold text-slate-950">Currently represented in the live feed</h3>
+              <span className="text-xs text-slate-500">Top sources by loaded headlines</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {activeSources.slice(0, 18).map(([source, count]) => (
+                <span key={source} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
+                  {source} <span className="text-slate-500">{count}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 export default function Dashboard() {
   const [reports, setReports] = useState<ReliefWebItem[] | null>(null)
   const [eventsLoading, setEventsLoading] = useState(true)
@@ -1289,6 +1381,9 @@ export default function Dashboard() {
         </div>
       </CollapsibleSection>
 
+      {/* Source Intelligence */}
+      <SourceIntelligenceCard worldNews={worldNews} />
+
       {/* Map */}
       <Card title="Global Headline Map">
         {showHeavyOverview ? (
@@ -1663,6 +1758,7 @@ export default function Dashboard() {
             <li><span className="font-medium">Macro backdrop:</span> GDP growth trends (World Bank, WLD series).</li>
             <li><span className="font-medium">Inflation data:</span> Year-over-year CPI (World Bank, WLD series).</li>
             <li><span className="font-medium">Humanitarian feed:</span> Latest situation reports (ReliefWeb API).</li>
+            <li><span className="font-medium">Expanded news layer:</span> RSS headlines from major, regional, institutional, and specialist free sources.</li>
             <li><span className="font-medium">Country context:</span> Governance & macro vs. world, on demand.</li>
           </ul>
 

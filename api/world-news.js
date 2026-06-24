@@ -1,12 +1,39 @@
 const FEEDS = [
-  { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
-  { name: 'NPR', url: 'https://feeds.npr.org/1004/rss.xml' },
-  { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml' },
-  { name: 'CBC', url: 'https://www.cbc.ca/webfeed/rss/rss-world' },
-]
+  // Core international headlines
+  { name: 'BBC', tier: 'Breaking News', region: 'Global', url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
+  { name: 'NPR', tier: 'Breaking News', region: 'United States / Global', url: 'https://feeds.npr.org/1004/rss.xml' },
+  { name: 'Al Jazeera', tier: 'Breaking News', region: 'Middle East / Global', url: 'https://www.aljazeera.com/xml/rss/all.xml' },
+  { name: 'CBC', tier: 'Regional Perspective', region: 'Canada / Global', url: 'https://www.cbc.ca/webfeed/rss/rss-world' },
+  { name: 'AP News', tier: 'Breaking News', region: 'Global', url: 'https://apnews.com/hub/ap-top-news?output=1' },
+  { name: 'DW', tier: 'Regional Perspective', region: 'Europe / Global', url: 'https://rss.dw.com/xml/rss-en-all' },
+  { name: 'France 24', tier: 'Regional Perspective', region: 'Europe / Africa / Global', url: 'https://www.france24.com/en/rss' },
+  { name: 'The Guardian', tier: 'Regional Perspective', region: 'Global / UK', url: 'https://www.theguardian.com/world/rss' },
+  { name: 'ABC Australia', tier: 'Regional Perspective', region: 'Indo-Pacific', url: 'https://www.abc.net.au/news/feed/51120/rss.xml' },
+  { name: 'RNZ', tier: 'Regional Perspective', region: 'Pacific', url: 'https://www.rnz.co.nz/rss/world.xml' },
+  { name: 'NHK World', tier: 'Regional Perspective', region: 'Japan / Asia', url: 'https://www3.nhk.or.jp/nhkworld/en/news/rss.xml' },
 
-const MAX_PER_FEED = 20
-const MAX_TOTAL = 100
+  // Regional sources that help surface stories outside the main Western wire cycle
+  { name: 'AllAfrica', tier: 'Regional Perspective', region: 'Africa', url: 'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf' },
+  { name: 'The Hindu', tier: 'Regional Perspective', region: 'South Asia', url: 'https://www.thehindu.com/news/international/feeder/default.rss' },
+  { name: 'South China Morning Post', tier: 'Regional Perspective', region: 'Asia', url: 'https://www.scmp.com/rss/91/feed' },
+  { name: 'Nikkei Asia', tier: 'Regional Perspective', region: 'Asia / Business', url: 'https://asia.nikkei.com/rss/feed/nar' },
+  { name: 'Times of Israel', tier: 'Regional Perspective', region: 'Middle East', url: 'https://www.timesofisrael.com/feed/' },
+
+  // Institutions and primary-signal sources
+  { name: 'UN News', tier: 'Institutional / Primary', region: 'Global', url: 'https://news.un.org/feed/subscribe/en/news/all/rss.xml' },
+  { name: 'WHO', tier: 'Institutional / Primary', region: 'Global Health', url: 'https://www.who.int/rss-feeds/news-english.xml' },
+
+  // Specialist signals
+  { name: 'Carbon Brief', tier: 'Climate / Environment', region: 'Global', url: 'https://www.carbonbrief.org/feed/' },
+  { name: 'Mongabay', tier: 'Climate / Environment', region: 'Global', url: 'https://news.mongabay.com/feed/' },
+  { name: 'BleepingComputer', tier: 'Technology / Cyber', region: 'Global', url: 'https://www.bleepingcomputer.com/feed/' },
+  { name: 'The Hacker News', tier: 'Technology / Cyber', region: 'Global', url: 'https://feeds.feedburner.com/TheHackersNews' },
+  { name: 'Maritime Executive', tier: 'Logistics / Maritime', region: 'Global', url: 'https://maritime-executive.com/rss' },
+  { name: 'NASA', tier: 'Space / Science', region: 'Global', url: 'https://www.nasa.gov/rss/dyn/breaking_news.rss' },
+  { name: 'ESA', tier: 'Space / Science', region: 'Europe / Space', url: 'https://www.esa.int/rssfeed/Our_Activities' },
+]
+const MAX_PER_FEED = 12
+const MAX_TOTAL = 180
 
 function decodeXml(str = '') {
   return String(str)
@@ -39,7 +66,8 @@ function absoluteLink(link = '') {
   return ''
 }
 
-function parseRss(xml, feedName) {
+function parseRss(xml, feed) {
+  const feedName = typeof feed === 'string' ? feed : feed.name
   const items = [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)]
   return items.slice(0, MAX_PER_FEED).map((m, idx) => {
     const item = m[0]
@@ -57,7 +85,37 @@ function parseRss(xml, feedName) {
       source,
       publishedAt: pubDate,
       description,
-      tags: categories,
+      tags: [...categories, feed.tier, feed.region].filter(Boolean),
+      tier: feed.tier,
+      region: feed.region,
+    }
+  }).filter(x => x.title && x.url)
+}
+
+function pickAtomLink(entry) {
+  const m = entry.match(/<link\b[^>]*href=["']([^"']+)["'][^>]*>/i)
+  return absoluteLink(decodeXml(m?.[1] || ''))
+}
+
+function parseAtom(xml, feed) {
+  const entries = [...xml.matchAll(/<entry\b[\s\S]*?<\/entry>/gi)]
+  return entries.slice(0, MAX_PER_FEED).map((m, idx) => {
+    const entry = m[0]
+    const title = pick('title', entry)
+    const link = pickAtomLink(entry) || absoluteLink(pick('link', entry))
+    const updated = pick('updated', entry) || pick('published', entry)
+    const description = pick('summary', entry) || pick('content', entry)
+    const id = pick('id', entry) || `${feed.name}:${idx}:${link || title}`
+    return {
+      id,
+      title,
+      url: link,
+      source: feed.name,
+      publishedAt: updated,
+      description,
+      tags: [feed.tier, feed.region].filter(Boolean),
+      tier: feed.tier,
+      region: feed.region,
     }
   }).filter(x => x.title && x.url)
 }
@@ -92,7 +150,8 @@ export default async function handler(_req, res) {
       })
       if (!upstream.ok) throw new Error(`${feed.name} HTTP ${upstream.status}`)
       const xml = await upstream.text()
-      return parseRss(xml, feed.name)
+      const parsed = parseRss(xml, feed)
+      return parsed.length ? parsed : parseAtom(xml, feed)
     }))
 
     const items = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
@@ -113,6 +172,7 @@ export default async function handler(_req, res) {
       return res.send(JSON.stringify({
         error: 'World news feeds temporarily unavailable',
         warnings,
+        sources: FEEDS.map(({ name, tier, region }) => ({ name, tier, region })),
       }))
     }
 
@@ -120,7 +180,7 @@ export default async function handler(_req, res) {
     res.setHeader('content-type', 'application/json; charset=utf-8')
     res.setHeader('cache-control', 's-maxage=300, stale-while-revalidate=900')
     res.setHeader('access-control-allow-origin', '*')
-    res.send(JSON.stringify({ items: sorted, warnings }))
+    res.send(JSON.stringify({ items: sorted, warnings, sources: FEEDS.map(({ name, tier, region }) => ({ name, tier, region })) }))
   } catch (err) {
     res.status(500).json({
       error: 'World news RSS proxy failed',

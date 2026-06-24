@@ -10,6 +10,8 @@ export type WorldNewsItem = {
   publishedAt?: string
   description?: string
   tags?: string[]
+  tier?: string
+  region?: string
 }
 
 const WORLD_NEWS_BASE = apiPath('/api/world-news')
