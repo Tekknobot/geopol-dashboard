@@ -543,6 +543,162 @@ function NewsCarousel({
 }
 
 
+
+function HeadlineCategoryNavigator({
+  items,
+  onOpenContext,
+  getContextCountry,
+}: {
+  items: HeadlineItem[]
+  onOpenContext: (country: string) => void
+  getContextCountry?: (item: HeadlineItem) => string | null
+}) {
+  const [activeCategory, setActiveCategory] = useState('All')
+
+  const sourceLabel = (item: HeadlineItem) => {
+    if (item.source) return item.source
+    try { return new URL(item.url).hostname.replace(/^www\./,'') } catch { return 'source' }
+  }
+
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const item of items) {
+      const category = item.category || 'Other'
+      counts.set(category, (counts.get(category) || 0) + 1)
+    }
+    const entries = Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    const total = entries.reduce((sum, [, count]) => sum + count, 0)
+    return [['All', total] as [string, number], ...entries]
+  }, [items])
+
+  useEffect(() => {
+    if (activeCategory === 'All') return
+    if (!categories.some(([category]) => category === activeCategory)) setActiveCategory('All')
+  }, [activeCategory, categories])
+
+  const filtered = useMemo(() => {
+    const ranked = sortByRelevance(items)
+    if (activeCategory === 'All') return ranked
+    return ranked.filter(item => (item.category || 'Other') === activeCategory)
+  }, [items, activeCategory])
+
+  if (!items.length) return null
+
+  return (
+    <section className="overflow-hidden rounded-2xl border bg-white shadow-sm" aria-label="Headline category navigator">
+      <div className="border-b bg-slate-50 px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-600 ring-1 ring-slate-200">
+              <TagIcon className="h-3.5 w-3.5" /> Headline Category Navigator
+            </div>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Sort every loaded headline by topic</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-500">
+              A mobile-friendly category bar for the full headline pool below the front-page carousel.
+            </p>
+          </div>
+          <select
+            value={activeCategory}
+            onChange={(e) => setActiveCategory(e.target.value)}
+            className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm md:min-w-[240px]"
+            aria-label="Select headline category"
+          >
+            {categories.map(([category, count]) => (
+              <option key={category} value={category}>{category} ({count})</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mt-4 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-5 sm:px-5" role="tablist" aria-label="Headline categories">
+          {categories.map(([category, count]) => (
+            <button
+              key={category}
+              type="button"
+              onClick={() => setActiveCategory(category)}
+              className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-bold ring-1 transition ${
+                activeCategory === category
+                  ? 'bg-slate-950 text-white ring-slate-950 shadow-sm'
+                  : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-100'
+              }`}
+              aria-pressed={activeCategory === category}
+              role="tab"
+            >
+              <span>{category}</span>
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${activeCategory === category ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="border-b bg-slate-50 p-4 lg:border-b-0 lg:border-r">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Active sort</p>
+          <div className="mt-2 rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+            <p className="text-lg font-black text-slate-950">{activeCategory}</p>
+            <p className="mt-1 text-sm text-slate-500">Showing {filtered.length} of {items.length} loaded headlines.</p>
+            {activeCategory !== 'All' && (
+              <button
+                type="button"
+                onClick={() => setActiveCategory('All')}
+                className="mt-3 rounded-full bg-slate-950 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800"
+              >
+                Clear filter
+              </button>
+            )}
+          </div>
+        </aside>
+
+        <div className="divide-y">
+          {filtered.slice(0, 60).map((item, i) => {
+            const country = getContextCountry?.(item) ?? item.countryName ?? null
+            return (
+              <article key={`${item.id}-${i}`} className="p-4 transition hover:bg-slate-50 sm:p-5">
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-black text-slate-500 ring-1 ring-slate-200 sm:flex">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                      <span className="rounded-full bg-slate-950 px-2 py-0.5 font-bold text-white">{item.category || 'Other'}</span>
+                      <span>{sourceLabel(item)}</span>
+                      {item.created && <span>· {new Date(item.created).toLocaleString()}</span>}
+                    </div>
+                    <a
+                      href={normalizeExternalUrl(item.url)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={item.headline}
+                      className="block text-base font-bold leading-snug text-slate-950 hover:underline sm:text-lg"
+                    >
+                      {item.headline}
+                    </a>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                      <a href={normalizeExternalUrl(item.url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">
+                        Read source <ExternalLink className="h-3 w-3" />
+                      </a>
+                      {country && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenContext(country)}
+                          className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
+                        >
+                          <Info className="h-3 w-3" /> Open context: {country}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+
+
 // ---------- Lightweight geopolitics helpers
 
 function EventContextChips({ countryName }: { countryName: string }) {
@@ -1333,6 +1489,65 @@ export default function Dashboard() {
     if (normalized) setContextCountry(normalized)
   }, [])
 
+  const allHeadlineItems = useMemo<HeadlineItem[]>(() => {
+    const byKey = new Map<string, HeadlineItem>()
+    const add = (item: HeadlineItem) => {
+      const key = item.url || item.id
+      if (!key) return
+      const existing = byKey.get(key)
+      if (existing) {
+        byKey.set(key, {
+          ...existing,
+          ...item,
+          headline: existing.headline || item.headline,
+          source: existing.source || item.source,
+          category: existing.category || item.category,
+          created: existing.created || item.created,
+          countryName: existing.countryName || item.countryName,
+        })
+      } else {
+        byKey.set(key, item)
+      }
+    }
+
+    for (const item of carouselItems) add(item)
+    for (const item of uniqueMapNews) {
+      add({
+        id: `map-${item.id}`,
+        headline: item.headline,
+        url: item.url,
+        source: item.source,
+        category: item.category || 'Other',
+        lat: item.lat,
+        lon: item.lon,
+        countryName: getContextCountry(item) || undefined,
+      })
+    }
+    for (const item of worldNews) {
+      add({
+        id: `world-${item.id}`,
+        headline: item.title,
+        url: item.url,
+        source: item.source,
+        category: worldNewsCategory(item),
+        created: worldNewsCreatedMs(item),
+      })
+    }
+    for (const item of reports || []) {
+      add({
+        id: `rw-${item.id}`,
+        headline: item.fields.title,
+        url: item.fields.url,
+        source: item.fields.source?.[0]?.name || domainFromUrl(item.fields.url) || 'reliefweb.int',
+        category: reliefWebCategory(item) || 'Humanitarian',
+        created: Date.parse(item.fields.date.created || '') || undefined,
+        countryName: normalizeCountryName(item.fields.country?.[0]?.name) || undefined,
+      })
+    }
+
+    return sortByRelevance(Array.from(byKey.values()))
+  }, [carouselItems, uniqueMapNews, worldNews, reports, getContextCountry])
+
   console.log('[Dashboard] reports length =', reports?.length)
   
   return (
@@ -1347,6 +1562,12 @@ export default function Dashboard() {
           getContextCountry={getContextCountry}
         />
       )}
+
+      <HeadlineCategoryNavigator
+        items={allHeadlineItems}
+        onOpenContext={openContext}
+        getContextCountry={getContextCountry}
+      />
 
       {/* NEW: compact ReliefWeb carousel (smaller) */}
       <Card title="Humanitarian Headlines (ReliefWeb)">
