@@ -56,33 +56,36 @@ function SearchSuggestions({ suggestions, choose, allCount, query }: { suggestio
   if (!suggestions.length) return null
   const showingFullList = !query.trim()
   return (
-    <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5">
-      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-        <span>{showingFullList ? 'All countries' : 'Country matches'}</span>
+    <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <span>{showingFullList ? 'Flag navigator' : 'Flag matches'}</span>
         <span>{suggestions.length}{allCount ? ` / ${allCount}` : ''}</span>
       </div>
-      <ul className="max-h-[28rem] overflow-auto py-1">
-        {suggestions.map(s => (
-          <li key={s.cca3 || s.name.common}>
+      <div className="max-h-[22rem] overflow-y-auto p-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+          {suggestions.map(s => (
             <button
+              key={s.cca3 || s.name.common}
               type="button"
-              className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+              title={`${s.name?.common || s.cca3} · ${s.region || 'Region unavailable'}${s.subregion ? ` · ${s.subregion}` : ''}`}
+              className="group flex min-h-[96px] flex-col items-center justify-between rounded-2xl border border-slate-200 bg-white p-2 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-slate-200"
               onMouseDown={e => e.preventDefault()}
               onClick={() => choose(s)}
             >
               {countryFlagSrc(s) ? (
-                <img src={countryFlagSrc(s)} alt="" className="h-7 w-10 shrink-0 rounded object-cover ring-1 ring-slate-200" loading="lazy" />
+                <img src={countryFlagSrc(s)} alt="" className="h-9 w-14 rounded-md object-cover ring-1 ring-slate-200" loading="lazy" />
               ) : (
-                <span className="flex h-7 w-10 shrink-0 items-center justify-center rounded bg-slate-100 text-lg ring-1 ring-slate-200">{flagEmoji(s.cca2)}</span>
+                <span className="flex h-9 w-14 items-center justify-center rounded-md bg-slate-100 text-2xl ring-1 ring-slate-200">{flagEmoji(s.cca2)}</span>
               )}
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold text-slate-900">{s.name?.common}</span>
-                <span className="block truncate text-xs text-slate-500">{s.region || 'Region unavailable'}{s.subregion ? ` · ${s.subregion}` : ''} · {s.cca3}</span>
-              </span>
+              <span className="mt-2 line-clamp-2 min-h-[2rem] text-xs font-semibold leading-tight text-slate-900">{s.name?.common}</span>
+              <span className="mt-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">{s.cca3}</span>
             </button>
-          </li>
-        ))}
-      </ul>
+          ))}
+        </div>
+      </div>
+      <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-[11px] text-slate-500">
+        Scroll the flag grid, or keep typing to narrow the country list.
+      </div>
     </div>
   )
 }

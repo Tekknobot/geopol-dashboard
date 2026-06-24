@@ -3,6 +3,7 @@
 
 import { fetchJson } from "./http";
 import { proxyUrl } from "./apiBases";
+import { ISO_FALLBACK_COUNTRIES } from "../data/isoCountries";
 
 export type Country = {
   name: { common: string; official: string };
@@ -57,7 +58,7 @@ const COUNTRY_ALIASES: Record<string, string> = {
 }
 
 
-const FALLBACK_COUNTRIES: Country[] = [
+const CORE_FALLBACK_COUNTRIES: Country[] = [
   {
     name: { common: 'Canada', official: 'Canada' },
     cca2: 'CA', cca3: 'CAN', region: 'Americas', subregion: 'North America',
@@ -90,6 +91,12 @@ const FALLBACK_COUNTRIES: Country[] = [
   },
 ]
 
+const FALLBACK_COUNTRIES: Country[] = (() => {
+  const byIso3 = new Map<string, Country>()
+  for (const country of ISO_FALLBACK_COUNTRIES) byIso3.set(country.cca3, country)
+  for (const country of CORE_FALLBACK_COUNTRIES) byIso3.set(country.cca3, country)
+  return Array.from(byIso3.values())
+})()
 
 function sortCountries(countries: Country[]): Country[] {
   return [...countries].sort((a, b) => (a.name?.common || '').localeCompare(b.name?.common || ''))
