@@ -84,6 +84,7 @@ export default function CountryExplorer() {
   const [regionalRows, setRegionalRows] = useState<RegionalRow[] | null>(null)
   const [neighbors, setNeighbors] = useState<string[] | null>(null)
   const [reports, setReports] = useState<ReliefWebItem[]>([])
+  const [reportsLoaded, setReportsLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -117,7 +118,11 @@ export default function CountryExplorer() {
       try {
         const latest = await getLatestReports(500)
         if (alive) setReports(latest)
-      } catch {}
+      } catch {
+        if (alive) setReports([])
+      } finally {
+        if (alive) setReportsLoaded(true)
+      }
     })()
     return () => { alive = false }
   }, [])
@@ -136,6 +141,56 @@ export default function CountryExplorer() {
     }
   }
 
+  const loadRegionalRows = async (c: Country, myLoadId: number) => {
+    const selISO3 = c.cca3
+    if (!c.region) {
+      if (myLoadId === loadIdRef.current) setRegionalRows([])
+      return
+    }
+
+    try {
+      const wbCountries = await fetchWbCountryMeta()
+      const selMeta = wbCountries.find(x => x.id === selISO3)
+      const regionId = selMeta?.region?.id
+      const regionIds = regionId ? [regionId] : mapRestRegionToWb(c.region)
+
+      const allCandidates = wbCountries
+        .filter(cc => regionIds.includes(cc.region.id))
+        .map(cc => ({ name: cc.name, iso3: cc.id }))
+        .filter(cc => /^[A-Z]{3}$/.test(cc.iso3))
+
+      // Keep the comparator responsive. The old page waited on every country in a region,
+      // which could leave Explorer looking like it was loading forever on slower API responses.
+      const focus = allCandidates.find(x => x.iso3 === selISO3) || { name: c.name?.common || selISO3, iso3: selISO3 }
+      const candidates = [
+        focus,
+        ...allCandidates.filter(x => x.iso3 !== selISO3).slice(0, 23),
+      ]
+
+      const settled = await Promise.allSettled(
+        candidates.map(async cand => {
+          const v = await latestNonNullValue(cand.iso3, 'PV.EST', 20)
+          return { name: cand.name, iso3: cand.iso3, value: v, isFocus: cand.iso3 === selISO3 } as RegionalRow
+        })
+      )
+
+      const rows = settled
+        .filter((x): x is PromiseFulfilledResult<RegionalRow> => x.status === 'fulfilled')
+        .map(x => x.value)
+
+      const withData = rows.filter(r => r.value !== null)
+      withData.sort((a, b) => (b.value as number) - (a.value as number))
+      let top = withData.slice(0, 20)
+      if (!top.some(r => r.iso3 === selISO3)) {
+        const me = rows.find(r => r.iso3 === selISO3)
+        if (me) top = [...top, me]
+      }
+      if (myLoadId === loadIdRef.current) setRegionalRows(top)
+    } catch {
+      if (myLoadId === loadIdRef.current) setRegionalRows([])
+    }
+  }
+
   const loadCountry = async (c: Country) => {
     const iso3 = c.cca3
     setError(null)
@@ -150,19 +205,39 @@ export default function CountryExplorer() {
       let mapped: Record<string, SeriesBundle> | null = cached || null
 
       if (!mapped) {
-        const [countrySets, worldSets] = await Promise.all([
-          Promise.all(INDICATORS.map(ind => wbGetCountryIndicatorSeries(iso3, ind.code))),
-          Promise.all(INDICATORS.map(ind => wbGetGlobalIndicatorSeries(ind.code))),
-        ])
+        const indicatorResults = await Promise.allSettled(
+          INDICATORS.map(async ind => {
+            const [country, world] = await Promise.allSettled([
+              wbGetCountryIndicatorSeries(iso3, ind.code),
+              wbGetGlobalIndicatorSeries(ind.code),
+            ])
+            return {
+              code: ind.code,
+              country: country.status === 'fulfilled' ? country.value : [],
+              world: world.status === 'fulfilled' ? world.value : [],
+            }
+          })
+        )
+
         const m: Record<string, SeriesBundle> = {}
-        for (let i = 0; i < INDICATORS.length; i++) {
-          m[INDICATORS[i].code] = {
-            country: countrySets[i],
-            world: worldSets[i],
+        for (const result of indicatorResults) {
+          if (result.status === 'fulfilled') {
+            m[result.value.code] = {
+              country: result.value.country,
+              world: result.value.world,
+            }
           }
+        }
+        for (const ind of INDICATORS) {
+          if (!m[ind.code]) m[ind.code] = { country: [], world: [] }
         }
         mapped = m
         seriesCacheRef.current.set(iso3, m)
+      }
+
+      if (myLoadId === loadIdRef.current) {
+        setSeries(mapped)
+        setLoading(false)
       }
 
       const borderCodes = ((c as any)?.borders as string[] | undefined) || []
@@ -176,49 +251,12 @@ export default function CountryExplorer() {
         if (myLoadId === loadIdRef.current) setNeighbors([])
       }
 
-      if (c.region) {
-        try {
-          const wbCountries = await fetchWbCountryMeta()
-          const selISO3 = c.cca3
-          const selMeta = wbCountries.find(x => x.id === selISO3)
-          const regionId = selMeta?.region?.id
-          const regionIds = regionId ? [regionId] : mapRestRegionToWb(c.region)
-
-          let candidates = wbCountries
-            .filter(cc => regionIds.includes(cc.region.id))
-            .map(cc => ({ name: cc.name, iso3: cc.id }))
-
-          if (!candidates.some(x => x.iso3 === selISO3)) {
-            candidates.push({ name: c.name?.common || selISO3, iso3: selISO3 })
-          }
-
-          const rows = await Promise.all(
-            candidates.map(async cand => {
-              const v = await latestNonNullValue(cand.iso3, 'PV.EST', 20)
-              return { name: cand.name, iso3: cand.iso3, value: v, isFocus: cand.iso3 === selISO3 } as RegionalRow
-            })
-          )
-
-          const withData = rows.filter(r => r.value !== null) as RegionalRow[]
-          withData.sort((a, b) => (b.value as number) - (a.value as number))
-          let top = withData.slice(0, 20)
-          if (!top.some(r => r.iso3 === selISO3)) {
-            const me = rows.find(r => r.iso3 === selISO3)
-            if (me) top = [...top, me]
-          }
-          if (myLoadId === loadIdRef.current) setRegionalRows(top)
-        } catch {
-          if (myLoadId === loadIdRef.current) setRegionalRows([])
-        }
-      } else {
-        if (myLoadId === loadIdRef.current) setRegionalRows([])
-      }
-
-      if (myLoadId === loadIdRef.current) setSeries(mapped!)
+      void loadRegionalRows(c, myLoadId)
     } catch (e: any) {
-      if (myLoadId === loadIdRef.current) setError(e?.message || 'Lookup failed')
-    } finally {
-      if (myLoadId === loadIdRef.current) setLoading(false)
+      if (myLoadId === loadIdRef.current) {
+        setError(e?.message || 'Lookup failed')
+        setLoading(false)
+      }
     }
   }
 
@@ -598,7 +636,7 @@ export default function CountryExplorer() {
 
       {selected && (
         <Card title={`ReliefWeb reports · ${selected.name.common}`} right={<span className="text-xs text-slate-500">Links open the source article</span>}>
-          {!reports.length ? <Loading label="Loading recent reports…" /> : countryReports.length === 0 ? (
+          {!reportsLoaded ? <Loading label="Loading recent reports…" /> : countryReports.length === 0 ? (
             <div className="text-sm text-slate-600">No mapped ReliefWeb reports were found for this country in the current 24-hour report window.</div>
           ) : (
             <ul className="divide-y">
