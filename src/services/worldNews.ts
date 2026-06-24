@@ -1,5 +1,6 @@
 import { fetchJson } from './http'
 import { decodeHtmlEntities } from '../utils/text'
+import { apiPath } from './apiBases'
 
 export type WorldNewsItem = {
   id: string
@@ -11,7 +12,7 @@ export type WorldNewsItem = {
   tags?: string[]
 }
 
-const WORLD_NEWS_BASE = '/api/world-news'
+const WORLD_NEWS_BASE = apiPath('/api/world-news')
 
 export function worldNewsCreatedMs(item: WorldNewsItem): number {
   const t = Date.parse(item?.publishedAt || '')

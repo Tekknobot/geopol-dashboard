@@ -2,6 +2,7 @@
 // REST Countries v3.1
 
 import { fetchJson } from "./http";
+import { proxyUrl } from "./apiBases";
 
 export type Country = {
   name: { common: string; official: string };
@@ -19,7 +20,7 @@ export type Country = {
   languages?: Record<string, string>;
 };
 
-const RC = "https://restcountries.com/v3.1";
+const RC_PATH = "/v3.1";
 
 const COUNTRY_ALIASES: Record<string, string> = {
   'syrian arab republic': 'syria',
@@ -83,7 +84,7 @@ async function fetchByName(q: string, cacheMs: number) {
     "currencies",
     "languages",
   ];
-  const url = `${RC}/name/${encodeURIComponent(q)}?fields=${fields.join(",")}`;
+  const url = proxyUrl("restcountries", `${RC_PATH}/name/${encodeURIComponent(q)}`, { fields: fields.join(",") });
   const data = await fetchJson<Country[]>(url, {
     maxAgeMs: cacheMs,
     cacheKey: `rc:name:${q.toLowerCase()}`,

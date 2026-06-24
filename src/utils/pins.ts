@@ -7,6 +7,7 @@ import {
   type ReliefWebItem,
 } from '../services/reliefweb'
 import { normalizeExternalUrl } from './links'
+import { proxyUrl } from '../services/apiBases'
 
 export type PinRow = {
   id: string
@@ -78,7 +79,7 @@ async function loadAllCountryLookup(): Promise<Map<string, [number, number]>> {
   if (allCountryLookupPromise) return allCountryLookupPromise
 
   allCountryLookupPromise = (async () => {
-    const url = 'https://restcountries.com/v3.1/all?fields=name,cca3,latlng'
+    const url = proxyUrl('restcountries', '/v3.1/all', { fields: 'name,cca3,latlng' })
     const data = await fetchJson<RestCountryLite[]>(url, {
       cacheKey: 'rc:all-lite',
       maxAgeMs: 1000 * 60 * 60 * 24,

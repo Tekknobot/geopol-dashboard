@@ -2,6 +2,7 @@
 // World Bank API helpers with caching + retries via fetchJson.
 
 import { fetchJson } from "./http";
+import { proxyUrl } from "./apiBases";
 
 export type WbRawPoint = {
   indicator?: { id: string; value: string };
@@ -30,7 +31,7 @@ export function hasNumericPoints(points: WbPoint[] = []) {
   return points.some((p) => typeof p.value === 'number' && Number.isFinite(p.value))
 }
 
-const WB_BASE = "https://api.worldbank.org/v2";
+const WB_PATH = "/v2";
 
 /** Country series for a single indicator (e.g., GE.EST, NY.GDP.MKTP.KD.ZG) */
 export async function wbGetCountryIndicator(
@@ -39,11 +40,7 @@ export async function wbGetCountryIndicator(
   perPage = 60,
   cacheMs = 1000 * 60 * 60 // 1h
 ) {
-  const url = `${WB_BASE}/country/${encodeURIComponent(
-    iso3
-  )}/indicator/${encodeURIComponent(
-    indicator
-  )}?format=json&per_page=${perPage}`;
+  const url = proxyUrl("worldbank", `${WB_PATH}/country/${encodeURIComponent(iso3)}/indicator/${encodeURIComponent(indicator)}`, { format: "json", per_page: perPage });
   const data = await fetchJson<[any, WbRawPoint[]]>(url, {
     maxAgeMs: cacheMs,
     cacheKey: `wb:${iso3}:${indicator}:${perPage}`,
@@ -90,9 +87,7 @@ export async function wbGetGlobalIndicator(
   perPage = 60,
   cacheMs = 1000 * 60 * 60
 ) {
-  const url = `${WB_BASE}/country/WLD/indicator/${encodeURIComponent(
-    indicator
-  )}?format=json&per_page=${perPage}`;
+  const url = proxyUrl("worldbank", `${WB_PATH}/country/WLD/indicator/${encodeURIComponent(indicator)}`, { format: "json", per_page: perPage });
   const data = await fetchJson<[any, WbRawPoint[]]>(url, {
     maxAgeMs: cacheMs,
     cacheKey: `wb:WLD:${indicator}:${perPage}`,

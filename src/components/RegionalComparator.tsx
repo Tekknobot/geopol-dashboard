@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { searchCountryByName } from '../services/restCountries'
 import { wbGetCountryIndicator, toSeries } from '../services/worldBank'
+import { proxyUrl } from '../services/apiBases'
 
 type Row = { name: string; value: number | null; iso3: string; isFocus?: boolean }
 
@@ -39,7 +40,7 @@ export default function RegionalComparator({
 
         // Region peers (REST Countries). Swap to WB-region if you prefer.
         const mates = (await fetch(
-          `https://restcountries.com/v3.1/region/${encodeURIComponent(region)}?fields=name,cca3`
+          proxyUrl('restcountries', `/v3.1/region/${encodeURIComponent(region)}`, { fields: 'name,cca3' })
         ).then(r => r.json())) as { name: { common: string }; cca3: string }[]
 
         const data = await Promise.all(

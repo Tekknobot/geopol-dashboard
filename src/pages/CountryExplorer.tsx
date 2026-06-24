@@ -6,6 +6,7 @@ import { searchCountryByName, Country } from '../services/restCountries'
 import { wbGetCountryIndicator, wbGetCountryIndicatorSeries, wbGetGlobalIndicatorSeries, toSeries, hasNumericPoints, latestNonNull, WbPoint } from '../services/worldBank'
 import { getLatestReports, reliefWebCategory, reliefWebCountry, reliefWebSource, type ReliefWebItem } from '../services/reliefweb'
 import { normalizeExternalUrl } from '../utils/links'
+import { proxyUrl } from '../services/apiBases'
 
 const INDICATORS = [
   { code: 'PV.EST', label: 'Political Stability (WGI, est.)' },
@@ -31,7 +32,7 @@ function mapRestRegionToWb(region: string): string[] {
 }
 
 async function fetchWbCountryMeta(): Promise<WbCountryMeta[]> {
-  const res = await fetch('https://api.worldbank.org/v2/country?format=json&per_page=1000')
+  const res = await fetch(proxyUrl('worldbank', '/v2/country', { format: 'json', per_page: 1000 }))
   const json = await res.json()
   const data = (json?.[1] || []) as any[]
   return data.map(d => ({
@@ -167,7 +168,7 @@ export default function CountryExplorer() {
       const borderCodes = ((c as any)?.borders as string[] | undefined) || []
       if (borderCodes.length) {
         try {
-          const res = await fetch(`https://restcountries.com/v3.1/alpha?fields=name,cca3&codes=${encodeURIComponent(borderCodes.join(','))}`)
+          const res = await fetch(proxyUrl('restcountries', '/v3.1/alpha', { fields: 'name,cca3', codes: borderCodes.join(',') }))
           const js = await res.json() as { name: { common: string }, cca3: string }[]
           if (myLoadId === loadIdRef.current) setNeighbors(js.map(x => x.name.common).sort())
         } catch { if (myLoadId === loadIdRef.current) setNeighbors([]) }

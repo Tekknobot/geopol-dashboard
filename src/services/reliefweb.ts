@@ -1,5 +1,6 @@
 import { setCache } from './cache'
 import { decodeHtmlEntities } from '../utils/text'
+import { apiPath } from './apiBases'
 
 export type ReliefWebItem = {
   id: number | string
@@ -15,7 +16,7 @@ export type ReliefWebItem = {
   }
 }
 
-const RW_BASE = (import.meta as any)?.env?.VITE_RELIEFWEB_PROXY_URL || '/api/reliefweb'
+const RW_BASE = (import.meta as any)?.env?.VITE_RELIEFWEB_PROXY_URL || apiPath('/api/reliefweb')
 const DEFAULT_LIMIT = 500
 const MAX_RW_PAGE = 1000
 

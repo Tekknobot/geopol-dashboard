@@ -75,6 +75,11 @@ export default function EventsPage() {
       setRows(data)
 
       const sampleCountries = Array.from(new Set(data.map(r => r.countryGuess).filter(Boolean))).slice(0, 8)
+      if (sampleCountries.length) {
+        buildStructuralSnapshot(sampleCountries).then(snapshot => {
+          if (alive) setStructural(snapshot)
+        }).catch(() => {})
+      }
       } catch (e: any) {
         if (!alive) return
         setErr(e?.message || 'Failed to load ReliefWeb reports')
