@@ -52,14 +52,35 @@ const text = (value: unknown): string => {
   if (value && typeof value === "object" && "#text" in value) return text((value as {"#text": unknown})["#text"]);
   return "";
 };
-const decodeEntities = (value: string) => value
-  .replaceAll("&nbsp;", " ")
-  .replaceAll("&amp;", "&")
-  .replaceAll("&quot;", "\"")
-  .replaceAll("&#39;", "'")
-  .replaceAll("&lt;", "<")
-  .replaceAll("&gt;", ">");
-const clean = (value: unknown) => decodeEntities(text(value).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+const namedEntities: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  nbsp: " ",
+  quot: "\"",
+};
+const decodeEntityPass = (value: string) => value
+  .replace(/&#(x[\da-f]+|\d+);?/gi, (entity, code: string) => {
+    const point = code[0].toLowerCase() === "x" ? Number.parseInt(code.slice(1), 16) : Number.parseInt(code, 10);
+    return Number.isInteger(point) && point > 0 && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff)
+      ? String.fromCodePoint(point)
+      : entity;
+  })
+  .replace(/&(amp|apos|gt|lt|nbsp|quot);/gi, (entity, name: string) => namedEntities[name.toLowerCase()] ?? entity);
+const decodeEntities = (value: string) => {
+  let decoded = value;
+  for (let pass = 0; pass < 3; pass += 1) {
+    const next = decodeEntityPass(decoded);
+    if (next === decoded) break;
+    decoded = next;
+  }
+  return decoded;
+};
+const clean = (value: unknown) => decodeEntities(text(value).replace(/<[^>]+>/g, " "))
+  .replace(/\s+/g, " ")
+  .replace(/^#{1,6}\s+/, "")
+  .trim();
 const firstImage = (html: string) => html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1];
 const validHttpUrl = (value: string) => {
   try {
