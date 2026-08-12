@@ -142,6 +142,16 @@ export default function Home(){
       <footer><span>ATLAS Intelligence</span><span>Demonstration data · Map © OpenStreetMap · Image public domain</span><span>12 Aug 2026 · 14:32 UTC</span></footer>
     </section>
 
+    <nav className="mobile-nav" aria-label="Mobile navigation">
+      {[
+        {label:"Home",view:"Overview",glyph:"⌂"},
+        {label:"News",view:"Briefings",glyph:"▤"},
+        {label:"Map",view:"Live events",glyph:"⌁"},
+        {label:"Topics",view:"Countries",glyph:"◎"},
+        {label:"Saved",view:"Watchlist",glyph:"◇"},
+      ].map((item)=><button key={item.label} className={activeView===item.view?"active":""} onClick={()=>navigateTo(item.view)} aria-label={item.label}><span aria-hidden>{item.glyph}</span><small>{item.label}</small>{item.view==="Watchlist"&&savedIds.length>0&&<i>{savedIds.length}</i>}</button>)}
+    </nav>
+
     {selectedStory&&<div className="story-modal-backdrop" role="presentation" onMouseDown={()=>setSelectedStory(null)}><article className="story-modal" role="dialog" aria-modal="true" aria-labelledby="story-modal-title" onMouseDown={(event)=>event.stopPropagation()}><button className="modal-close" onClick={()=>setSelectedStory(null)} aria-label="Close briefing">×</button><p>{selectedStory.category} · {selectedStory.region}</p><h2 id="story-modal-title">{selectedStory.title}</h2><div className="modal-meta"><span className={`status-dot ${selectedStory.level}`}/>{selectedStory.source} · {selectedStory.time} ago · {selectedStory.read} read</div><p className="modal-summary">{selectedStory.summary}</p><div className="modal-tags">{selectedStory.tags.map((tag)=><button key={tag} onClick={()=>{setQuery(tag);setAppliedQuery(tag);setSelectedStory(null);setShowAll(true);requestAnimationFrame(()=>navigateTo("Briefings"));}}>#{tag}</button>)}</div><div className="modal-actions"><button className="primary-action" onClick={()=>toggleSaved(selectedStory.id)}>{savedIds.includes(selectedStory.id)?"◆ Remove from watchlist":"◇ Save to watchlist"}</button><button onClick={()=>setSelectedStory(null)}>Close</button></div><small className="demo-note">This is a demonstration briefing assembled from sample dashboard data.</small></article></div>}
   </main>;
 }
