@@ -23,7 +23,8 @@
     "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6",
-    "react-leaflet": "^5.0.0"
+    "react-leaflet": "^5.0.0",
+    "world-countries": "5.1.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",

@@ -1,4 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
+import countries from "world-countries";
 
 export const runtime = "edge";
 
@@ -20,6 +21,12 @@ type FeedStory = {
   tags: string[];
   articleUrl: string;
   imageUrl?: string;
+  location?: {
+    name: string;
+    lat: number;
+    lng: number;
+    precision: "country" | "hotspot";
+  };
 };
 
 const feeds: FeedDefinition[] = [
@@ -44,6 +51,56 @@ const parser = new XMLParser({
   trimValues: true,
   parseTagValue: false,
 });
+
+type LocationMatch = NonNullable<FeedStory["location"]> & { aliases: string[] };
+const hotspotLocations: LocationMatch[] = [
+  {name:"Gaza Strip",lat:31.45,lng:34.4,precision:"hotspot",aliases:["Gaza Strip","Gaza"]},
+  {name:"West Bank",lat:31.95,lng:35.2,precision:"hotspot",aliases:["West Bank"]},
+  {name:"Strait of Hormuz",lat:26.56,lng:56.25,precision:"hotspot",aliases:["Strait of Hormuz","Hormuz"]},
+  {name:"Red Sea",lat:20,lng:38,precision:"hotspot",aliases:["Red Sea"]},
+  {name:"Black Sea",lat:43,lng:34,precision:"hotspot",aliases:["Black Sea"]},
+  {name:"South China Sea",lat:13,lng:114,precision:"hotspot",aliases:["South China Sea"]},
+  {name:"Taiwan Strait",lat:24,lng:119.5,precision:"hotspot",aliases:["Taiwan Strait"]},
+  {name:"Panama Canal",lat:9.08,lng:-79.68,precision:"hotspot",aliases:["Panama Canal"]},
+  {name:"Suez Canal",lat:30.45,lng:32.35,precision:"hotspot",aliases:["Suez Canal"]},
+  {name:"Strait of Malacca",lat:3.2,lng:101.3,precision:"hotspot",aliases:["Strait of Malacca","Malacca Strait"]},
+  {name:"Persian Gulf",lat:26.5,lng:52.5,precision:"hotspot",aliases:["Persian Gulf","Arabian Gulf"]},
+  {name:"Gulf of Aden",lat:12.5,lng:47,precision:"hotspot",aliases:["Gulf of Aden"]},
+  {name:"Horn of Africa",lat:8.7,lng:46.2,precision:"hotspot",aliases:["Horn of Africa"]},
+  {name:"Sahel",lat:15,lng:2,precision:"hotspot",aliases:["the Sahel","Sahel"]},
+  {name:"South Caucasus",lat:41.8,lng:44.5,precision:"hotspot",aliases:["South Caucasus"]},
+  {name:"Korean Peninsula",lat:38,lng:127.5,precision:"hotspot",aliases:["Korean Peninsula"]},
+  {name:"Arctic",lat:75,lng:0,precision:"hotspot",aliases:["Arctic Circle","the Arctic","Arctic"]},
+  {name:"Baltic Sea",lat:58,lng:20,precision:"hotspot",aliases:["Baltic Sea"]},
+  {name:"Mediterranean Sea",lat:35,lng:18,precision:"hotspot",aliases:["Mediterranean Sea","Mediterranean"]},
+  {name:"Caribbean",lat:18,lng:-75,precision:"hotspot",aliases:["Caribbean Sea","the Caribbean","Caribbean"]},
+  {name:"Amazon Basin",lat:-4,lng:-62,precision:"hotspot",aliases:["Amazon Basin","the Amazon","Amazon"]},
+  {name:"Pacific Islands",lat:-10,lng:-165,precision:"hotspot",aliases:["Pacific Islands","Pacific states"]},
+];
+const countryLocations: LocationMatch[] = countries.flatMap((country) => {
+  if (country.latlng.length < 2) return [];
+  const aliases = [country.name.common,country.name.official,...country.altSpellings]
+    .filter((alias) => alias.length >= 4 && !/^[A-Z]{2,3}$/.test(alias));
+  if (country.cca3 === "COD") aliases.push("DR Congo","DRC");
+  if (country.cca3 === "COG") aliases.push("Republic of Congo");
+  if (country.cca3 === "USA") aliases.push("United States","U.S.","USA");
+  if (country.cca3 === "GBR") aliases.push("United Kingdom","Britain","UK");
+  if (country.cca3 === "KOR") aliases.push("South Korea");
+  if (country.cca3 === "PRK") aliases.push("North Korea");
+  if (country.cca3 === "TUR") aliases.push("Turkey");
+  if (country.cca3 === "CIV") aliases.push("Ivory Coast");
+  return [{name:country.name.common,lat:country.latlng[0],lng:country.latlng[1],precision:"country" as const,aliases}];
+});
+const locationMatches = [...hotspotLocations,...countryLocations]
+  .flatMap((location) => location.aliases.map((alias) => ({location,alias})))
+  .sort((left,right) => right.alias.length-left.alias.length);
+const escapePattern = (value:string) => value.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+const locationFor = (value:string):FeedStory["location"] => {
+  const match = locationMatches.find(({alias}) => new RegExp(`(^|[^\\p{L}])${escapePattern(alias)}(?=$|[^\\p{L}])`,"iu").test(value));
+  if (!match) return undefined;
+  const {name,lat,lng,precision} = match.location;
+  return {name,lat,lng,precision};
+};
 
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" ? value as Record<string, unknown> : {};
 const list = <T,>(value: T | T[] | undefined): T[] => value === undefined ? [] : Array.isArray(value) ? value : [value];
@@ -187,6 +244,7 @@ export function parseFeed(xml: string, feed: FeedDefinition): FeedStory[] {
       tags: tagsFor(title, category, region),
       articleUrl,
       imageUrl: imageLink(item, rawDescription),
+      location: locationFor(combined),
     }];
   });
 }
