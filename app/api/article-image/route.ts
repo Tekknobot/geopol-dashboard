@@ -20,7 +20,7 @@ const decodeHtml = (value:string) => value
   })
   .replaceAll("&amp;","&").replaceAll("&quot;","\"").replaceAll("&apos;","'");
 
-const attributes = (tag:string) => Object.fromEntries([...tag.matchAll(/([\w:-]+)\s*=\s*(["'])(.*?)\2/gs)].map((match)=>[match[1].toLowerCase(),decodeHtml(match[3].trim())]));
+const attributes = (tag:string) => Object.fromEntries([...tag.matchAll(/([\w:-]+)\s*=\s*(["'])([\s\S]*?)\2/g)].map((match)=>[match[1].toLowerCase(),decodeHtml(match[3].trim())]));
 
 export function publisherImageFromHtml(html:string,articleUrl:string){
   const priorities=["og:image:secure_url","og:image","twitter:image","twitter:image:src"];
