@@ -195,7 +195,8 @@ function articleLink(item: Record<string, unknown>) {
 }
 
 function imageLink(item: Record<string, unknown>, rawDescription: string) {
-  const candidates = [item.thumbnail, item.content, item.enclosure]
+  const group = record(item.group);
+  const candidates = [item.thumbnail, item.content, item.enclosure, item.image, group.thumbnail, group.content]
     .flatMap((entry) => list(entry as unknown))
     .flatMap((entry) => {
       if (!entry || typeof entry !== "object") return [];
@@ -205,7 +206,8 @@ function imageLink(item: Record<string, unknown>, rawDescription: string) {
       const url = text(record["@url"] ?? record["@href"]);
       return (!type || type.startsWith("image/") || medium === "image") ? [url] : [];
     });
-  return [...candidates, firstImage(rawDescription) ?? ""].find(validHttpUrl);
+  const directImage=typeof item.image==="string"?item.image:"";
+  return [...candidates,directImage,firstImage(rawDescription)??""].find(validHttpUrl);
 }
 
 export function parseFeed(xml: string, feed: FeedDefinition): FeedStory[] {
