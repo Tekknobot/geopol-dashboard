@@ -75,51 +75,57 @@ const commonsFile = (file:string) => `https://commons.wikimedia.org/wiki/File:${
 type HeroMedia = {image:string;credit:string;label:string};
 const media = (file:string,label:string):HeroMedia => ({image:commonsImage(file),credit:commonsFile(file),label:`${label} · Commons`});
 const heroMedia:Record<number,HeroMedia> = {
-  1:{image:commonsImage("CG 56 transits the Strait of Hormuz (28465394986).jpg"),credit:commonsFile("CG 56 transits the Strait of Hormuz (28465394986).jpg"),label:"Strait of Hormuz transit · Wikimedia Commons"},
+  1:{image:commonsImage("CG 56 transits the Strait of Hormuz (28465394986).jpg"),credit:commonsFile("CG 56 transits the Strait of Hormuz (28465394986).jpg"),label:"U.S. Coast Guard · public domain"},
   2:{image:commonsImage("IMO welcomes maritime humanitarian corridor in Black Sea 08.jpg"),credit:commonsFile("IMO welcomes maritime humanitarian corridor in Black Sea 08.jpg"),label:"Black Sea maritime corridor · CC BY 2.0"},
   3:{image:commonsImage("Taipei 101 with NTUTS landscape.jpg"),credit:commonsFile("Taipei 101 with NTUTS landscape.jpg"),label:"Taipei skyline · Wikimedia Commons"},
-  4:{image:commonsImage("Container ship entering the new Cocoli locks of the Panama Canal.jpg"),credit:commonsFile("Container ship entering the new Cocoli locks of the Panama Canal.jpg"),label:"Panama Canal container ship · Wikimedia Commons"},
+  4:{image:commonsImage("Container ship entering the new Cocoli locks of the Panama Canal.jpg"),credit:commonsFile("Container ship entering the new Cocoli locks of the Panama Canal.jpg"),label:"Panama Canal container ship · Commons license"},
 };
-const locationMedia:[string,HeroMedia][] = [
-  ["Baltic Sea",media("Lielupe Baltic Sea aerial.jpg","Baltic Sea aerial")],
-  ["Western Balkans",media("Montenegro (10349359213).jpg","Western Balkans landscape")],
-  ["Arctic Circle",media("Canadian Arctic.jpg","Arctic satellite view")],
-  ["Eastern Mediterranean",media("Eastern Mediterranean Sea Satellite View.jpg","Eastern Mediterranean")],
-  ["South Caucasus",media("Middle Asia satellite.jpg","Caucasus and Central Asia")],
-  ["Central Asia",media("Middle Asia satellite.jpg","Central Asia satellite view")],
-  ["Korean Peninsula",media("Korean Peninsula at night from space.jpg","Korean Peninsula at night")],
-  ["Mekong Basin",media("MekongKampongCham.jpg","Mekong River aerial")],
-  ["Bay of Bengal",media("Sundarbans web ESA362980.jpg","Bay of Bengal and Sundarbans")],
-  ["Indonesia",media("Indonesian islands.jpg","Indonesian islands")],
-  ["Gulf of Guinea",media("ISS-59 Terminator above the Gulf of Guinea.jpg","Gulf of Guinea from orbit")],
-  ["Great Lakes region",media("The Great Lakes of Africa.jpg","African Great Lakes")],
-  ["Southern Africa",media("2002 Satellite Image of Southern Africa.jpg","Southern Africa satellite view")],
-  ["Andean region",media("ISS-58 Argentina, Chile and the Andes mountains.jpg","Andes from orbit")],
-  ["Mexico",media("Mexico City ESA412648.jpg","Mexico City satellite view")],
-  ["Canadian Arctic",media("Ice Stars -- satellite view of Canadian Arctic.jpg","Canadian Arctic satellite view")],
-  ["Southern Cone",media("ISS-58 Argentina, Chile and the Andes mountains.jpg","Southern Cone from orbit")],
-];
-const fallbackMediaById:Record<number,HeroMedia> = {
-  5:media("Africa satellite.jpg","Africa satellite view"),
-  6:media("The Great Lakes of Africa.jpg","East Africa satellite view"),
-  7:media("South America satellite.jpg","Americas satellite view"),
-  8:media("Eastern Mediterranean Sea Satellite View.jpg","Red Sea region"),
-  9:media("Indonesian islands.jpg","Southeast Asian maritime routes"),
-  10:media("Lielupe Baltic Sea aerial.jpg","European infrastructure"),
-  11:media("Mexico City ESA412648.jpg","Connected cities in the Americas"),
-  12:media("Indonesian islands.jpg","Pacific island region"),
-  13:media("Montenegro (10349359213).jpg","European regional economy"),
-  14:media("The Great Lakes of Africa.jpg","East African power region"),
-  15:media("Mexico satellite.png","Caribbean and North America"),
-  16:heroMedia[1],
-  17:media("Indonesian islands.jpg","ASEAN maritime region"),
-  18:media("South America satellite.jpg","Amazon and South America"),
+
+// Related editorial/file photography. Each source page carries the full creator,
+// license and reuse terms. Sample headlines are deliberately not presented as
+// photographs of a specific event that may not have occurred.
+const editorialMedia:Record<string,HeroMedia[]> = {
+  Security:[
+    media("160319-N-QF605-064 (25373590653).jpg","Amanda Dunford / U.S. Navy · public domain"),
+    media("InsideTheJointSecurityArea1.jpg","U.S. Army Korea · public domain"),
+    media("Arctic patrol DVIDS1089591.jpg","Blaize Potts / U.S. Coast Guard · public domain"),
+  ],
+  Diplomacy:[
+    media("EU - Western Balkans Summit.jpg","Adnan Beci / European Union · CC BY 4.0"),
+    media("Olivier Lebas and Russell Caldwell 160924-N-FP878-178 (29312554204).jpg","U.S. Naval Forces Europe-Africa · public domain"),
+    media("Secretary Blinken Participates in a Freedom of Expression Roundtable (52369610016).jpg","U.S. Department of State · public domain"),
+  ],
+  Economy:[
+    media("2ES7-030 with freight train.jpg","Kazakhstan freight rail · CC BY 4.0"),
+    media("President Joko Widodo Reviewed Port Infrastructure, May 2018.jpg","Indonesian Presidential Secretariat · Commons license"),
+    media("Cargo-In-Cargo-Out DVIDS171686.jpg","U.S. Air Force · public domain"),
+  ],
+  Energy:[
+    media("TVA Linemen.jpg","Alfred T. Palmer / Library of Congress · public domain"),
+    media("Solar panels at a White Wing Ranch construction site (53166029462).jpg","Michelle Ailport / BLM · public domain"),
+    media("Lineman changing transformer.jpg","Dave Pape · public domain"),
+  ],
+  Technology:[
+    media("Adriatic cyber exercise enables multinational cooperation to mitigate, defend threats (8518874).jpg","Benjamin Hughes / U.S. Air National Guard · public domain"),
+    media("US, Tanzania hunt for cyber threats during JA26 cyber defense training (9560563).jpg","Alva Gonzalez / U.S. Army · public domain"),
+    media("RD24 - III MEF CG Visits Command Operations Center at JGSDF Camp Ishigaki (8572158).jpg","Alyssa Chuluda / U.S. Marine Corps · public domain"),
+  ],
+  Climate:[
+    media("Tien Giang Farmers (237758059).jpeg","Mekong Delta farmers · CC BY 3.0"),
+    media("USAID in Madagascar Building Water Catchments (40954412781).jpg","USAID Madagascar · public domain"),
+    media("World Water Monitoring Day (4049999633).jpg","U.S. EPA · public domain"),
+  ],
+  Trade:[
+    heroMedia[4],
+    media("This truck is adapted to lift and transport shipping containers.jpg","U.S. Army logistics crew · public domain"),
+    media("US Navy 051010-M-0596N-001 A tractor moves a quadcon container at Kin Red Port in Okinawa.jpg","C. Nuntavong / U.S. Marine Corps · public domain"),
+  ],
 };
 const mediaForStory = (story:Story):HeroMedia => {
   if(heroMedia[story.id]) return heroMedia[story.id];
-  if(fallbackMediaById[story.id]) return fallbackMediaById[story.id];
-  const match=locationMedia.find(([place])=>story.title.includes(place)||story.tags.some((tag)=>tag.includes(place.toLowerCase())));
-  return match?.[1] ?? media("Africa and Europe from a Million Miles Away.png","Global view from orbit");
+  const pool=editorialMedia[story.category] ?? editorialMedia.Diplomacy;
+  const regionOffset=regions.indexOf(story.region);
+  return pool[(story.id+Math.max(regionOffset,0))%pool.length];
 };
 const risks = [{label:"Energy security",value:86,delta:"+12",tone:"red"},{label:"Maritime trade",value:78,delta:"+08",tone:"orange"},{label:"Cyber activity",value:64,delta:"+05",tone:"amber"},{label:"Food systems",value:41,delta:"−03",tone:"blue"}];
 
@@ -166,7 +172,7 @@ export default function Home(){
       <section className="category-strip" id="categories-section" aria-label="News categories"><div><p>EXPLORE THE DESK</p><h2>Topics</h2></div><div className="category-buttons">{categories.map((item)=><button key={item} className={category===item?"active":""} onClick={()=>chooseCategory(item)}>{item}<span>{item==="All"?stories.length:stories.filter((story)=>story.category===item).length}</span></button>)}</div></section>
 
       <div className="dashboard-grid">
-        <section className="hero-card" id="overview-section"><div key={hero.id} className="hero-image-wrap hero-image-change"><img className="hero-photo" src={heroVisual.image} alt="" onError={(event)=>{event.currentTarget.src=heroMedia[1].image;}}/><div className="hero-image-overlay"/><div className="hero-label"><span/> HEADLINE {heroIndex+1} / {heroStories.length}</div><div className="hero-caption"><p>{hero.category.toUpperCase()} · {hero.region.toUpperCase()}</p><h2>{hero.title}</h2><div className="story-meta"><span>{hero.source}</span><span>{hero.time} ago</span><span>{hero.read} read</span></div></div><button className="carousel-arrow previous" aria-label="Previous headline" onClick={()=>setHeroIndex((heroIndex-1+heroStories.length)%heroStories.length)}>‹</button><button className="carousel-arrow next" aria-label="Next headline" onClick={()=>setHeroIndex((heroIndex+1)%heroStories.length)}>›</button><a className="image-credit" href={heroVisual.credit} target="_blank" rel="noreferrer">{heroVisual.label} · license ↗</a></div><div className="hero-summary"><p>{hero.summary}</p><div className="hero-summary-actions"><button className="primary-action" onClick={()=>setSelectedStory(hero)}>Open briefing</button><button onClick={()=>toggleSaved(hero.id)} className={savedIds.includes(hero.id)?"saved":""}>{savedIds.includes(hero.id)?"◆ Saved":"◇ Save"}</button></div></div><div className="carousel-navigator"><div className="carousel-progress" aria-label={`Headline ${heroIndex+1} of ${heroStories.length}`}><i style={{width:`${((heroIndex+1)/heroStories.length)*100}%`}}/></div><span>{String(heroIndex+1).padStart(3,"0")} / {heroStories.length}</span><label>Jump to<select value={heroIndex} onChange={(event)=>setHeroIndex(Number(event.target.value))} aria-label="Jump to a headline">{heroStories.map((story,index)=><option value={index} key={story.id}>{String(index+1).padStart(3,"0")} · {story.title}</option>)}</select></label></div></section>
+        <section className="hero-card" id="overview-section"><div key={hero.id} className="hero-image-wrap hero-image-change"><img className="hero-photo" src={heroVisual.image} alt={`Related file photo: ${heroVisual.label}`} onError={(event)=>{event.currentTarget.src=heroMedia[1].image;}}/><div className="hero-image-overlay"/><div className="hero-label"><span/> FILE PHOTO · HEADLINE {heroIndex+1} / {heroStories.length}</div><div className="hero-caption"><p>{hero.category.toUpperCase()} · {hero.region.toUpperCase()}</p><h2>{hero.title}</h2><div className="story-meta"><span>{hero.source}</span><span>{hero.time} ago</span><span>{hero.read} read</span></div></div><button className="carousel-arrow previous" aria-label="Previous headline" onClick={()=>setHeroIndex((heroIndex-1+heroStories.length)%heroStories.length)}>‹</button><button className="carousel-arrow next" aria-label="Next headline" onClick={()=>setHeroIndex((heroIndex+1)%heroStories.length)}>›</button><a className="image-credit" href={heroVisual.credit} target="_blank" rel="noreferrer">{heroVisual.label} · license ↗</a></div><div className="hero-summary"><p>{hero.summary}</p><div className="hero-summary-actions"><button className="primary-action" onClick={()=>setSelectedStory(hero)}>Open briefing</button><button onClick={()=>toggleSaved(hero.id)} className={savedIds.includes(hero.id)?"saved":""}>{savedIds.includes(hero.id)?"◆ Saved":"◇ Save"}</button></div></div><div className="carousel-navigator"><div className="carousel-progress" aria-label={`Headline ${heroIndex+1} of ${heroStories.length}`}><i style={{width:`${((heroIndex+1)/heroStories.length)*100}%`}}/></div><span>{String(heroIndex+1).padStart(3,"0")} / {heroStories.length}</span><label>Jump to<select value={heroIndex} onChange={(event)=>setHeroIndex(Number(event.target.value))} aria-label="Jump to a headline">{heroStories.map((story,index)=><option value={index} key={story.id}>{String(index+1).padStart(3,"0")} · {story.title}</option>)}</select></label></div></section>
 
         <aside className="risk-panel panel" id="risk-section"><div className="panel-heading"><div><p>RISK PULSE</p><h3>Global pressure index</h3></div><button aria-label="Explain risk index" onClick={()=>setRiskOpen((open)=>!open)}>ⓘ</button></div><div className="risk-score"><strong>72</strong><div><span>↗ 8 pts</span><small>Elevated</small></div></div><div className="sparkline" aria-label="Risk index trend over 12 hours">{[24,30,27,38,42,39,58,54,68,63,77,72].map((height,index)=><i key={index} style={{height:`${height}%`}}/>)}</div><p className="axis-label"><span>12H AGO</span><span>NOW</span></p><div className="risk-list">{risks.map((risk)=><div key={risk.label}><div className="risk-row"><span><i className={risk.tone}/>{risk.label}</span><strong>{risk.value}<em>{risk.delta}</em></strong></div><div className="risk-track"><i className={risk.tone} style={{width:`${risk.value}%`}}/></div></div>)}</div>{riskOpen&&<div className="method-note"><strong>How it works</strong><p>A sample composite of security, trade, cyber and food-system signals. Values illustrate the dashboard experience and are not live analysis.</p></div>}</aside>
 
@@ -182,7 +188,7 @@ export default function Home(){
 
         <section className="saved-panel panel" id="saved-section"><div className="panel-heading"><div><p>YOUR WATCHLIST</p><h3>Saved briefings</h3></div><span className="saved-total">{savedIds.length}</span></div>{savedIds.length?<div className="saved-grid">{stories.filter((story)=>savedIds.includes(story.id)).map((story)=><button key={story.id} onClick={()=>setSelectedStory(story)}><span>{story.category}</span><strong>{story.title}</strong><small>{story.time} ago →</small></button>)}</div>:<div className="saved-empty"><span>◇</span><p>Save any headline or top story and it will appear here.</p></div>}</section>
       </div>
-      <footer><span>ATLAS Intelligence</span><span>Demonstration data · Map © OpenStreetMap · Image public domain</span><span>12 Aug 2026 · 14:32 UTC</span></footer>
+      <footer><span>ATLAS Intelligence</span><span>Demonstration data · Map © OpenStreetMap · File-photo attribution on every slide</span><span>12 Aug 2026 · 14:32 UTC</span></footer>
     </section>
 
     <nav className="mobile-nav" aria-label="Mobile navigation">
