@@ -16,11 +16,11 @@ const relativeTime = (publishedAt:string,now:number) => {
   const elapsed=Math.max(0,now-Date.parse(publishedAt));
   const minutes=Math.floor(elapsed/60000);
   if(minutes<1)return "just now";
-  if(minutes<60)return `${minutes}m ago `;
+  if(minutes<60)return `${minutes}m ago`;
   const hours=Math.floor(minutes/60);
-  if(hours<24)return `${hours}h ago `;
+  if(hours<24)return `${hours}h ago`;
   const days=Math.floor(hours/24);
-  if(days<7)return `${days}d ago `;
+  if(days<7)return `${days}d ago`;
   return new Intl.DateTimeFormat(undefined,{month:"short",day:"numeric"}).format(new Date(publishedAt));
 };
 const exactTime = (publishedAt:string) => new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(publishedAt));
@@ -80,6 +80,21 @@ export default function Home(){
 
   const categoryCounts=useMemo(()=>{const counts=new Map<string,number>();for(const story of stories)counts.set(story.category,(counts.get(story.category)??0)+1);return counts;},[stories]);
   const visibleCategories=useMemo(()=>["All",...NEWS_CATEGORIES.filter((item)=>(categoryCounts.get(item)??0)>0)],[categoryCounts]);
+  const coverageSnapshot=useMemo(()=>{
+    const regionCounts=new Map<string,number>();
+    const sourceNames=new Set<string>();
+    let urgent=0;
+    let recent=0;
+    for(const story of stories){
+      regionCounts.set(story.region,(regionCounts.get(story.region)??0)+1);
+      sourceNames.add(story.source);
+      if(story.level==="critical"||story.level==="elevated")urgent+=1;
+      if(clock-Date.parse(story.publishedAt)<=6*60*60*1000)recent+=1;
+    }
+    const topRegions=[...regionCounts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,4);
+    const topCategory=[...categoryCounts.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]??"—";
+    return {regions:regionCounts.size,sources:sourceNames.size,urgent,recent,topRegions,topCategory};
+  },[categoryCounts,clock,stories]);
   const filteredStories=useMemo(()=>{const needle=appliedQuery.trim().toLowerCase();return stories.filter((story)=>{const inCategory=category==="All"||story.category===category;const inRegion=region==="All regions"||story.region===region;const haystack=[story.title,story.summary,story.category,story.region,story.source,...story.tags].join(" ").toLowerCase();return inCategory&&inRegion&&(!needle||haystack.includes(needle));});},[appliedQuery,category,region,stories]);
   const sectionFor:Record<string,string>={Overview:"overview-section","Live events":"events-section",Countries:"categories-section",Watchlist:"saved-section","Risk monitor":"risk-section",Indicators:"indicators-section",Briefings:"stories-section"};
   const navigateTo=(item:string)=>{setActiveView(item);document.getElementById(sectionFor[item])?.scrollIntoView({behavior:"smooth",block:"start"});};
@@ -111,6 +126,8 @@ export default function Home(){
         <aside className="risk-panel panel" id="risk-section"><div className="panel-heading"><div><p>RISK PULSE</p><h3>Global pressure index</h3></div><button aria-label="Explain risk index" onClick={()=>setRiskOpen((open)=>!open)}>ⓘ</button></div><div className="risk-score"><strong>72</strong><div><span>↗ 8 pts</span><small>Elevated</small></div></div><div className="sparkline" aria-label="Risk index trend over 12 hours">{[24,30,27,38,42,39,58,54,68,63,77,72].map((height,index)=><i key={index} style={{height:`${height}%`}}/>)}</div><p className="axis-label"><span>12H AGO</span><span>NOW</span></p><div className="risk-list">{risks.map((risk)=><div key={risk.label}><div className="risk-row"><span><i className={risk.tone}/>{risk.label}</span><strong>{risk.value}<em>{risk.delta}</em></strong></div><div className="risk-track"><i className={risk.tone} style={{width:`${risk.value}%`}}/></div></div>)}</div>{riskOpen&&<div className="method-note"><strong>How it works</strong><p>A sample composite of security, trade, cyber and food-system signals. Values illustrate the dashboard experience and are not live analysis.</p></div>}</aside>
 
         <section className="map-panel panel" id="events-section"><div className="panel-heading map-heading"><div><p>LIVE SITUATION MAP</p><h3>{mapMode==="Events"?"Located publisher headlines":mapMode==="Risk"?"Elevated headline hotspots":"Trade & energy headlines"}</h3></div><div className="map-controls">{(["Events","Risk","Trade"] as MapMode[]).map((mode)=><button key={mode} className={mapMode===mode?"active":""} onClick={()=>setMapMode(mode)} aria-pressed={mapMode===mode}>{mode}</button>)}</div></div><WorldEventMap mode={mapMode} stories={stories} filter={[appliedQuery,category==="All"?"":category,region==="All regions"?"":region].filter(Boolean).join(" ")}/></section>
+
+        <aside className="coverage-panel panel" aria-label="Live news coverage snapshot"><div className="panel-heading"><div><p>DESK COVERAGE</p><h3>Live coverage snapshot</h3></div><span className={`coverage-state ${feedStatus}`}><i/>{feedStatus==="live"?"LIVE":feedStatus==="partial"?"PARTIAL":feedStatus==="error"?"OFFLINE":"SYNCING"}</span></div><div className="coverage-metrics"><div><span>FRESH · 6H</span><strong>{coverageSnapshot.recent}</strong><small>of {stories.length} stories</small></div><div><span>URGENT</span><strong>{coverageSnapshot.urgent}</strong><small>critical + elevated</small></div><div><span>REGIONS</span><strong>{coverageSnapshot.regions}</strong><small>represented now</small></div><div><span>SOURCES</span><strong>{coverageSnapshot.sources}</strong><small>in current wire</small></div></div><div className="coverage-breakdown"><div className="coverage-subhead"><span>REGIONAL MIX</span><small>{stories.length?"Current wire":"Waiting for feeds"}</small></div>{coverageSnapshot.topRegions.map(([name,count])=><button key={name} onClick={()=>{setRegion(name);setShowAll(true);navigateTo("Briefings");}} aria-label={`Show ${count} ${name} stories`}><span>{name}</span><i><b style={{width:`${stories.length?(count/stories.length)*100:0}%`}}/></i><strong>{count}</strong></button>)}</div>{stories.length>0&&<button className="coverage-topic" onClick={()=>chooseCategory(coverageSnapshot.topCategory)}><span>LEADING TOPIC</span><strong>{coverageSnapshot.topCategory}</strong><em>View stories →</em></button>}</aside>
 
         <section className="headline-panel panel" id="stories-section"><div className="panel-heading feed-heading"><div><p>HEADLINE WIRE</p><h3>{appliedQuery?`Search: “${appliedQuery}”`:category==="All"?"Latest world headlines":`${category} headlines`}</h3><span className="result-count">{feedStatus==="loading"&&!stories.length?"Loading publisher feeds…":`${filteredStories.length} verified result${filteredStories.length===1?"":"s"} from ${feedSourceCount} publisher${feedSourceCount===1?"":"s"}`}</span></div><select value={region} onChange={(event)=>{setRegion(event.target.value);setShowAll(true);}} aria-label="Filter by region">{regions.map((item)=><option key={item}>{item}</option>)}</select></div>
           {feedStatus==="partial"&&<div className="feed-notice"><strong>Live feed partially available.</strong> Available publisher stories are shown with their original links and reported publication times.</div>}
