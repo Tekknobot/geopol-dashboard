@@ -8,7 +8,7 @@ const WorldEventMap = dynamic(() => import("./components/WorldEventMap"), { ssr:
 
 type Story = { id:number; category:string; region:string; time:string; level:"critical"|"elevated"|"watch"|"stable"; title:string; summary:string; source:string; read:string; tags:string[] };
 
-const stories: Story[] = [
+const coreStories: Story[] = [
   { id:1, category:"Energy", region:"Middle East", time:"12m", level:"critical", title:"Oil extends gains as uncertainty persists around Hormuz", summary:"Shipping access, insurance costs and Gulf diplomacy keep energy markets on alert.", source:"Reuters", read:"5 min", tags:["oil","shipping","strait","gulf"] },
   { id:2, category:"Security", region:"Europe", time:"18m", level:"critical", title:"Black Sea security talks turn to port infrastructure", summary:"Regional officials are prioritizing maritime access, air defence and grain terminals.", source:"AP", read:"4 min", tags:["ukraine","black sea","ports","grain"] },
   { id:3, category:"Technology", region:"Asia Pacific", time:"27m", level:"elevated", title:"Taiwan reviews network resilience after cyber disruption", summary:"Telecom and public-service operators are accelerating redundancy checks across the island.", source:"Financial Times", read:"6 min", tags:["taiwan","cyber","semiconductors"] },
@@ -29,10 +29,55 @@ const stories: Story[] = [
   { id:18, category:"Climate", region:"Americas", time:"6h", level:"watch", title:"Amazon monitoring pact expands satellite data sharing", summary:"Participating states will share deforestation alerts through a regional hub.", source:"Mongabay", read:"4 min", tags:["amazon","forest","satellite"] },
 ];
 
+const expansionRegions = [
+  { place:"Baltic Sea", region:"Europe", focus:"ports and subsea infrastructure" },
+  { place:"Western Balkans", region:"Europe", focus:"cross-border transport and investment" },
+  { place:"Arctic Circle", region:"Europe", focus:"shipping access and northern infrastructure" },
+  { place:"Eastern Mediterranean", region:"Middle East", focus:"energy routes and maritime coordination" },
+  { place:"South Caucasus", region:"Europe", focus:"transit corridors and regional dialogue" },
+  { place:"Central Asia", region:"Asia Pacific", focus:"rail links and critical-mineral supply" },
+  { place:"Korean Peninsula", region:"Asia Pacific", focus:"security signalling and industrial output" },
+  { place:"Mekong Basin", region:"Asia Pacific", focus:"water management and food production" },
+  { place:"Bay of Bengal", region:"Asia Pacific", focus:"port capacity and cyclone resilience" },
+  { place:"Indonesia", region:"Asia Pacific", focus:"nickel processing and maritime trade" },
+  { place:"Gulf of Guinea", region:"Africa", focus:"shipping security and offshore energy" },
+  { place:"Great Lakes region", region:"Africa", focus:"border commerce and humanitarian access" },
+  { place:"Southern Africa", region:"Africa", focus:"power trading and freight corridors" },
+  { place:"Andean region", region:"Americas", focus:"minerals, elections and infrastructure" },
+  { place:"Mexico", region:"Americas", focus:"nearshoring, energy and border logistics" },
+  { place:"Canadian Arctic", region:"Americas", focus:"northern access and climate monitoring" },
+  { place:"Southern Cone", region:"Americas", focus:"agriculture, ports and monetary policy" },
+];
+
+const deskAngles = [
+  { category:"Security", title:(place:string)=>`${place} officials expand monitoring of strategic infrastructure`, summary:(focus:string)=>`New coordination measures focus on ${focus} as agencies update regional contingency plans.` },
+  { category:"Diplomacy", title:(place:string)=>`${place} partners open a new round of practical regional talks`, summary:(focus:string)=>`Delegations are seeking common ground on ${focus}, with technical working groups due to report next month.` },
+  { category:"Economy", title:(place:string)=>`${place} indicators point to a shifting investment outlook`, summary:(focus:string)=>`Fresh data highlights how ${focus} are shaping business confidence, prices and capital spending.` },
+  { category:"Energy", title:(place:string)=>`${place} energy planners accelerate resilience projects`, summary:(focus:string)=>`Utilities and governments are reviewing how ${focus} affect reliability, storage and cross-border supply.` },
+  { category:"Technology", title:(place:string)=>`${place} launches shared data hub for critical systems`, summary:(focus:string)=>`The programme uses new monitoring tools to track ${focus} and shorten response times during disruptions.` },
+  { category:"Climate", title:(place:string)=>`${place} adaptation plan links climate risk with trade`, summary:(focus:string)=>`The updated framework connects forecasts and financing to ${focus}, emphasizing earlier local warnings.` },
+];
+
+const deskSources = ["Reuters","AP","BBC","Financial Times","UN News","World Bank","OECD","ReliefWeb","Bloomberg","Politico","Nikkei Asia","Al Jazeera"];
+const deskLevels:Story["level"][] = ["watch","stable","watch","elevated","stable","watch"];
+const expandedStories:Story[] = expansionRegions.flatMap((location,locationIndex)=>deskAngles.map((angle,angleIndex)=>{
+  const index=locationIndex*deskAngles.length+angleIndex;
+  return { id:19+index, category:angle.category, region:location.region, time:`${7+Math.floor(index/5)}h`, level:deskLevels[angleIndex], title:angle.title(location.place), summary:angle.summary(location.focus), source:deskSources[index%deskSources.length], read:`${3+(index%4)} min`, tags:[location.place.toLowerCase(),angle.category.toLowerCase(),...location.focus.split(" ").filter((word)=>word.length>5).slice(0,2)] };
+}));
+
+const stories:Story[] = [...coreStories,...expandedStories];
+
 const categories = ["All","Security","Diplomacy","Economy","Energy","Trade","Technology","Climate"];
 const regions = ["All regions","Middle East","Europe","Asia Pacific","Africa","Americas"];
 const heroStories = stories.slice(0,4);
-const heroImage = "https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/Aerial_photograph_of_the_Port_of_Miami_Container_Port.jpg/1280px-Aerial_photograph_of_the_Port_of_Miami_Container_Port.jpg";
+const commonsImage = (file:string) => `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(file)}?width=1600`;
+const commonsFile = (file:string) => `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(file.replaceAll(" ","_"))}`;
+const heroMedia:Record<number,{image:string;credit:string;label:string}> = {
+  1:{image:commonsImage("CG 56 transits the Strait of Hormuz (28465394986).jpg"),credit:commonsFile("CG 56 transits the Strait of Hormuz (28465394986).jpg"),label:"Strait of Hormuz transit · Wikimedia Commons"},
+  2:{image:commonsImage("IMO welcomes maritime humanitarian corridor in Black Sea 08.jpg"),credit:commonsFile("IMO welcomes maritime humanitarian corridor in Black Sea 08.jpg"),label:"Black Sea maritime corridor · CC BY 2.0"},
+  3:{image:commonsImage("Taipei 101 with NTUTS landscape.jpg"),credit:commonsFile("Taipei 101 with NTUTS landscape.jpg"),label:"Taipei skyline · Wikimedia Commons"},
+  4:{image:commonsImage("Container ship entering the new Cocoli locks of the Panama Canal.jpg"),credit:commonsFile("Container ship entering the new Cocoli locks of the Panama Canal.jpg"),label:"Panama Canal container ship · Wikimedia Commons"},
+};
 const risks = [{label:"Energy security",value:86,delta:"+12",tone:"red"},{label:"Maritime trade",value:78,delta:"+08",tone:"orange"},{label:"Cyber activity",value:64,delta:"+05",tone:"amber"},{label:"Food systems",value:41,delta:"−03",tone:"blue"}];
 
 export default function Home(){
@@ -50,6 +95,7 @@ export default function Home(){
   const [riskOpen,setRiskOpen]=useState(false);
   const [lastUpdated,setLastUpdated]=useState("2 min ago");
   const hero=heroStories[heroIndex];
+  const heroVisual=heroMedia[hero.id];
 
   const filteredStories=useMemo(()=>{const needle=appliedQuery.trim().toLowerCase();return stories.filter((story)=>{const inCategory=category==="All"||story.category===category;const inRegion=region==="All regions"||story.region===region;const haystack=[story.title,story.summary,story.category,story.region,story.source,...story.tags].join(" ").toLowerCase();return inCategory&&inRegion&&(!needle||haystack.includes(needle));});},[appliedQuery,category,region]);
   const sectionFor:Record<string,string>={Overview:"overview-section","Live events":"events-section",Countries:"categories-section",Watchlist:"saved-section","Risk monitor":"risk-section",Indicators:"indicators-section",Briefings:"stories-section"};
@@ -63,7 +109,7 @@ export default function Home(){
     <aside className="sidebar">
       <button className="brand" onClick={()=>navigateTo("Overview")} aria-label="Atlas home"><span className="brand-mark"><i/><i/><i/></span><span>ATLAS<span className="brand-dot">.</span></span></button>
       <nav className="primary-nav" aria-label="Primary navigation"><p className="nav-label">Intelligence</p>
-        {["Overview","Live events","Countries","Watchlist"].map((item,index)=><button key={item} className={activeView===item?"active":""} onClick={()=>navigateTo(item)}><span className="nav-glyph" aria-hidden>{["⌂","⌁","◎","◇"][index]}</span>{item}{item==="Live events"&&<span className="nav-count">18</span>}{item==="Watchlist"&&savedIds.length>0&&<span className="nav-count neutral">{savedIds.length}</span>}</button>)}
+        {["Overview","Live events","Countries","Watchlist"].map((item,index)=><button key={item} className={activeView===item?"active":""} onClick={()=>navigateTo(item)}><span className="nav-glyph" aria-hidden>{["⌂","⌁","◎","◇"][index]}</span>{item}{item==="Live events"&&<span className="nav-count">{stories.length}</span>}{item==="Watchlist"&&savedIds.length>0&&<span className="nav-count neutral">{savedIds.length}</span>}</button>)}
         <p className="nav-label secondary">Analysis</p>{["Risk monitor","Indicators","Briefings"].map((item,index)=><button key={item} className={activeView===item?"active":""} onClick={()=>navigateTo(item)}><span className="nav-glyph" aria-hidden>{["△","⌇","▤"][index]}</span>{item}</button>)}
       </nav><div className="sidebar-bottom"><div className="sync-status"><span/> Sample feeds operational</div><div className="analyst-card"><div className="avatar">AR</div><div><strong>Analyst workspace</strong><small>Global desk</small></div></div></div>
     </aside>
@@ -77,7 +123,7 @@ export default function Home(){
       <section className="category-strip" id="categories-section" aria-label="News categories"><div><p>EXPLORE THE DESK</p><h2>Topics</h2></div><div className="category-buttons">{categories.map((item)=><button key={item} className={category===item?"active":""} onClick={()=>chooseCategory(item)}>{item}<span>{item==="All"?stories.length:stories.filter((story)=>story.category===item).length}</span></button>)}</div></section>
 
       <div className="dashboard-grid">
-        <section className="hero-card" id="overview-section"><div className="hero-image-wrap" style={{backgroundImage:`url(${heroImage})`}}><div className="hero-image-overlay"/><div className="hero-label"><span/> TOP STORY {heroIndex+1} / {heroStories.length}</div><div className="hero-caption"><p>{hero.category.toUpperCase()} · {hero.region.toUpperCase()}</p><h2>{hero.title}</h2><div className="story-meta"><span>{hero.source}</span><span>{hero.time} ago</span><span>{hero.read} read</span></div></div><button className="carousel-arrow previous" aria-label="Previous top story" onClick={()=>setHeroIndex((heroIndex-1+heroStories.length)%heroStories.length)}>‹</button><button className="carousel-arrow next" aria-label="Next top story" onClick={()=>setHeroIndex((heroIndex+1)%heroStories.length)}>›</button><a className="image-credit" href="https://commons.wikimedia.org/wiki/File:Aerial_photograph_of_the_Port_of_Miami_Container_Port.jpg" target="_blank" rel="noreferrer">Public-domain image · Wikimedia Commons ↗</a></div><div className="hero-summary"><p>{hero.summary}</p><div className="hero-summary-actions"><button className="primary-action" onClick={()=>setSelectedStory(hero)}>Open briefing</button><button onClick={()=>toggleSaved(hero.id)} className={savedIds.includes(hero.id)?"saved":""}>{savedIds.includes(hero.id)?"◆ Saved":"◇ Save"}</button></div></div><div className="carousel-dots" aria-label="Choose top story">{heroStories.map((story,index)=><button key={story.id} className={index===heroIndex?"active":""} onClick={()=>setHeroIndex(index)} aria-label={`Show top story ${index+1}`}/>)}</div></section>
+        <section className="hero-card" id="overview-section"><div key={hero.id} className="hero-image-wrap hero-image-change" style={{backgroundImage:`url("${heroVisual.image}")`}}><div className="hero-image-overlay"/><div className="hero-label"><span/> TOP STORY {heroIndex+1} / {heroStories.length}</div><div className="hero-caption"><p>{hero.category.toUpperCase()} · {hero.region.toUpperCase()}</p><h2>{hero.title}</h2><div className="story-meta"><span>{hero.source}</span><span>{hero.time} ago</span><span>{hero.read} read</span></div></div><button className="carousel-arrow previous" aria-label="Previous top story" onClick={()=>setHeroIndex((heroIndex-1+heroStories.length)%heroStories.length)}>‹</button><button className="carousel-arrow next" aria-label="Next top story" onClick={()=>setHeroIndex((heroIndex+1)%heroStories.length)}>›</button><a className="image-credit" href={heroVisual.credit} target="_blank" rel="noreferrer">{heroVisual.label} ↗</a></div><div className="hero-summary"><p>{hero.summary}</p><div className="hero-summary-actions"><button className="primary-action" onClick={()=>setSelectedStory(hero)}>Open briefing</button><button onClick={()=>toggleSaved(hero.id)} className={savedIds.includes(hero.id)?"saved":""}>{savedIds.includes(hero.id)?"◆ Saved":"◇ Save"}</button></div></div><div className="carousel-dots" aria-label="Choose top story">{heroStories.map((story,index)=><button key={story.id} className={index===heroIndex?"active":""} onClick={()=>setHeroIndex(index)} aria-label={`Show top story ${index+1}`}/>)}</div></section>
 
         <aside className="risk-panel panel" id="risk-section"><div className="panel-heading"><div><p>RISK PULSE</p><h3>Global pressure index</h3></div><button aria-label="Explain risk index" onClick={()=>setRiskOpen((open)=>!open)}>ⓘ</button></div><div className="risk-score"><strong>72</strong><div><span>↗ 8 pts</span><small>Elevated</small></div></div><div className="sparkline" aria-label="Risk index trend over 12 hours">{[24,30,27,38,42,39,58,54,68,63,77,72].map((height,index)=><i key={index} style={{height:`${height}%`}}/>)}</div><p className="axis-label"><span>12H AGO</span><span>NOW</span></p><div className="risk-list">{risks.map((risk)=><div key={risk.label}><div className="risk-row"><span><i className={risk.tone}/>{risk.label}</span><strong>{risk.value}<em>{risk.delta}</em></strong></div><div className="risk-track"><i className={risk.tone} style={{width:`${risk.value}%`}}/></div></div>)}</div>{riskOpen&&<div className="method-note"><strong>How it works</strong><p>A sample composite of security, trade, cyber and food-system signals. Values illustrate the dashboard experience and are not live analysis.</p></div>}</aside>
 
