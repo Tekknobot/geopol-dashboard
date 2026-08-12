@@ -1,5 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 import countries from "world-countries";
+import { categoryFor } from "../../news-taxonomy";
 
 export const runtime = "edge";
 
@@ -156,15 +157,6 @@ const hash = (value: string) => {
   return result >>> 0;
 };
 
-const categoryRules: Array<[FeedStory["category"], RegExp]> = [
-  ["Security", /war|military|missile|defen[cs]e|security|attack|conflict|troops|weapon|navy|army|ceasefire/i],
-  ["Diplomacy", /summit|minister|president|election|diplomat|talks|negotiat|sanction|treaty|government|parliament/i],
-  ["Energy", /oil|gas|energy|power|electric|nuclear|solar|wind|pipeline|opec/i],
-  ["Trade", /trade|tariff|shipping|port|export|import|supply chain|freight|canal/i],
-  ["Technology", /technology|cyber|chip|semiconductor|ai\b|internet|telecom|satellite|digital/i],
-  ["Climate", /climate|flood|storm|drought|wildfire|weather|emission|environment|earthquake|hurricane/i],
-  ["Economy", /econom|market|inflation|rate|bank|finance|currency|jobs|gdp|business/i],
-];
 const regionRules: Array<[FeedStory["region"], RegExp]> = [
   ["Middle East", /iran|iraq|israel|gaza|lebanon|syria|yemen|saudi|qatar|emirates|jordan|hormuz|red sea|middle east/i],
   ["Europe", /europe|ukraine|russia|britain|uk\b|france|germany|italy|spain|poland|nato|eu\b|balkan|black sea/i],
@@ -172,7 +164,6 @@ const regionRules: Array<[FeedStory["region"], RegExp]> = [
   ["Africa", /africa|sudan|congo|sahel|ethiopia|somalia|kenya|nigeria|south africa|libya|egypt/i],
   ["Americas", /united states|u\.s\.|usa|canada|mexico|brazil|argentina|colombia|venezuela|caribbean|america/i],
 ];
-const categoryFor = (value: string) => categoryRules.find(([, rule]) => rule.test(value))?.[0] ?? "Diplomacy";
 const regionFor = (value: string) => regionRules.find(([, rule]) => rule.test(value))?.[0] ?? "Global";
 const levelFor = (value: string): FeedStory["level"] => /war|attack|missile|killed|earthquake|emergency|invasion/i.test(value) ? "critical" : /sanction|military|conflict|crisis|flood|wildfire|tariff/i.test(value) ? "elevated" : /talks|election|trade|market|climate|security/i.test(value) ? "watch" : "stable";
 const tagsFor = (value: string, category: string, region: string) => {

@@ -23,7 +23,8 @@ type StoryCluster = {key:string;position:[number,number];stories:MappedStory[];t
 
 const colors:Record<MapStory["level"],string>={critical:"#d92b36",elevated:"#e66b35",watch:"#dfa927",stable:"#4b9a78"};
 const toneFor=(stories:MappedStory[]):MapStory["level"]=>stories.some((story)=>story.level==="critical")?"critical":stories.some((story)=>story.level==="elevated")?"elevated":stories.some((story)=>story.level==="watch")?"watch":"stable";
-const isTradeStory=(story:MappedStory)=>story.category==="Trade"||story.category==="Energy"||/trade|tariff|shipping|freight|port|canal|oil|gas|pipeline/i.test([story.title,...story.tags].join(" "));
+const tradeCategories=new Set(["Trade","Energy","Supply Chains","Maritime","Transport","Critical Minerals"]);
+const isTradeStory=(story:MappedStory)=>tradeCategories.has(story.category)||/trade|tariff|shipping|freight|port|canal|oil|gas|pipeline/i.test([story.title,...story.tags].join(" "));
 
 function ZoomObserver({onZoom}:{onZoom:(zoom:number)=>void}){
   useMapEvents({zoomend:(event)=>onZoom(event.target.getZoom())});
