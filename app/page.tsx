@@ -25,7 +25,6 @@ const relativeTime = (publishedAt:string,now:number) => {
 };
 const exactTime = (publishedAt:string) => new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(publishedAt));
 
-const categories = ["All",...NEWS_CATEGORIES];
 const regions = ["All regions","Global","Middle East","Europe","Asia Pacific","Africa","Americas"];
 type HeroMedia = {image:string;credit:string;label:string};
 const mediaForStory = (story:Story):HeroMedia => ({
@@ -61,6 +60,7 @@ export default function Home(){
       const data=await response.json() as NewsResponse;
       if(!data.stories.length)throw new Error("No current publisher stories");
       setStories(data.stories);
+      setCategory((current)=>current==="All"||data.stories.some((story)=>story.category===current)?current:"All");
       setFeedSourceCount(data.sources.length);
       setLastFetchedAt(data.fetchedAt);
       setFeedStatus(data.failedFeeds>0?"partial":"live");
@@ -78,6 +78,8 @@ export default function Home(){
   const hero=stories[heroIndex]??null;
   const heroVisual=hero?mediaForStory(hero):null;
 
+  const categoryCounts=useMemo(()=>{const counts=new Map<string,number>();for(const story of stories)counts.set(story.category,(counts.get(story.category)??0)+1);return counts;},[stories]);
+  const visibleCategories=useMemo(()=>["All",...NEWS_CATEGORIES.filter((item)=>(categoryCounts.get(item)??0)>0)],[categoryCounts]);
   const filteredStories=useMemo(()=>{const needle=appliedQuery.trim().toLowerCase();return stories.filter((story)=>{const inCategory=category==="All"||story.category===category;const inRegion=region==="All regions"||story.region===region;const haystack=[story.title,story.summary,story.category,story.region,story.source,...story.tags].join(" ").toLowerCase();return inCategory&&inRegion&&(!needle||haystack.includes(needle));});},[appliedQuery,category,region,stories]);
   const sectionFor:Record<string,string>={Overview:"overview-section","Live events":"events-section",Countries:"categories-section",Watchlist:"saved-section","Risk monitor":"risk-section",Indicators:"indicators-section",Briefings:"stories-section"};
   const navigateTo=(item:string)=>{setActiveView(item);document.getElementById(sectionFor[item])?.scrollIntoView({behavior:"smooth",block:"start"});};
@@ -101,7 +103,7 @@ export default function Home(){
         {notificationsOpen&&<div className="notifications-popover"><strong>Latest publisher headlines</strong>{stories.slice(0,3).map((story)=><button key={story.id} onClick={()=>{setSelectedStory(story);setNotificationsOpen(false);}}>{story.title}<span><time dateTime={story.publishedAt} title={exactTime(story.publishedAt)}>{relativeTime(story.publishedAt,clock)}</time></span></button>)}{!stories.length&&<p className="feed-popover-status">Waiting for publisher feeds…</p>}</div>}
       </div></header>
 
-      <section className="category-strip" id="categories-section" aria-label="News categories"><div><p>EXPLORE THE DESK</p><h2>Topics <span>{NEWS_CATEGORIES.length} desks</span></h2></div><div className="category-buttons">{categories.map((item)=><button key={item} className={category===item?"active":""} onClick={()=>chooseCategory(item)} aria-pressed={category===item}>{item}<span>{item==="All"?stories.length:stories.filter((story)=>story.category===item).length}</span></button>)}</div></section>
+      <section className="category-strip" id="categories-section" aria-label="News categories"><div><p>EXPLORE THE DESK</p><h2>Topics <span>{visibleCategories.length-1} active</span></h2></div><div className="category-buttons">{visibleCategories.map((item)=><button key={item} className={category===item?"active":""} onClick={()=>chooseCategory(item)} aria-pressed={category===item}>{item}<span>{item==="All"?stories.length:categoryCounts.get(item)??0}</span></button>)}</div></section>
 
       <div className="dashboard-grid">
         <section className="hero-card" id="overview-section">{hero&&heroVisual?<><div key={hero.id} className="hero-image-wrap hero-image-change"><div className="publisher-image-empty"><span>▧</span><strong>Publisher image unavailable</strong><small>{hero.source} did not expose an article image.</small></div><img className="hero-photo" src={heroVisual.image} alt={`${hero.source} image for: ${hero.title}`} referrerPolicy="no-referrer" onError={(event)=>{event.currentTarget.style.display="none";}}/><div className="hero-image-overlay"/><div className="hero-label"><span/> LIVE HEADLINE {heroIndex+1} / {stories.length}</div><div className="hero-caption"><p>{hero.category.toUpperCase()} · {hero.region.toUpperCase()}</p><h2>{hero.title}</h2><div className="story-meta"><span>{hero.source}</span><time dateTime={hero.publishedAt} title={`Published ${exactTime(hero.publishedAt)}`}>{relativeTime(hero.publishedAt,clock)}</time><span>{hero.read} read</span></div></div><button className="carousel-arrow previous" aria-label="Previous headline" onClick={()=>setHeroIndex((heroIndex-1+stories.length)%stories.length)}>‹</button><button className="carousel-arrow next" aria-label="Next headline" onClick={()=>setHeroIndex((heroIndex+1)%stories.length)}>›</button><a className="image-credit" href={heroVisual.credit} target="_blank" rel="noreferrer">{heroVisual.label} ↗</a></div><div className="hero-summary"><p>{hero.summary}</p><div className="hero-summary-actions"><a className="primary-action" href={sourceUrlForStory(hero)} target="_blank" rel="noreferrer" title={`Open the original ${hero.source} article`}>{sourceActionForStory()} ↗</a><button onClick={()=>setSelectedStory(hero)}>Briefing</button><button onClick={()=>toggleSaved(hero.id)} className={savedIds.includes(hero.id)?"saved":""}>{savedIds.includes(hero.id)?"◆ Saved":"◇ Save"}</button></div></div><div className="carousel-navigator"><div className="carousel-progress" aria-label={`Headline ${heroIndex+1} of ${stories.length}`}><i style={{width:`${((heroIndex+1)/stories.length)*100}%`}}/></div><span>{String(heroIndex+1).padStart(3,"0")} / {stories.length}</span><label>Jump to<select value={heroIndex} onChange={(event)=>setHeroIndex(Number(event.target.value))} aria-label="Jump to a headline">{stories.map((story,index)=><option value={index} key={story.id}>{String(index+1).padStart(3,"0")} · {story.title}</option>)}</select></label></div></>:<div className="hero-feed-state"><span className="feed-spinner"/><h2>{feedStatus==="error"?"Publisher feeds are temporarily unavailable":"Loading verified headlines…"}</h2><p>{feedStatus==="error"?"No placeholder headlines or ages are being shown. Try refreshing in a moment.":"Connecting directly to publisher feeds for original URLs and publication times."}</p>{feedStatus==="error"&&<button onClick={()=>void loadNews()}>Retry feeds</button>}</div>}</section>
