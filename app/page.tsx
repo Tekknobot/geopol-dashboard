@@ -16,11 +16,11 @@ const relativeTime = (publishedAt:string,now:number) => {
   const elapsed=Math.max(0,now-Date.parse(publishedAt));
   const minutes=Math.floor(elapsed/60000);
   if(minutes<1)return "just now";
-  if(minutes<60)return `${minutes}m ago`;
+  if(minutes<60)return `${minutes}m ago `;
   const hours=Math.floor(minutes/60);
-  if(hours<24)return `${hours}h ago`;
+  if(hours<24)return `${hours}h ago `;
   const days=Math.floor(hours/24);
-  if(days<7)return `${days}d ago`;
+  if(days<7)return `${days}d ago `;
   return new Intl.DateTimeFormat(undefined,{month:"short",day:"numeric"}).format(new Date(publishedAt));
 };
 const exactTime = (publishedAt:string) => new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(publishedAt));
