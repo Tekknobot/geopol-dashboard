@@ -9,6 +9,9 @@ const WorldEventMap = dynamic(() => import("./components/WorldEventMap"), { ssr:
 
 type Story = { id:number; category:string; region:string; publishedAt:string; level:"critical"|"elevated"|"watch"|"stable"; title:string; summary:string; source:string; read:string; tags:string[]; articleUrl:string; imageUrl?:string; location?:{name:string;lat:number;lng:number;precision:"country"|"hotspot"} };
 type NewsResponse = { stories:Story[]; sources:string[]; fetchedAt:string; failedFeeds:number; totalFeeds:number };
+type MarketQuote = { id:string; label:string; value:number; display:string; change:number|null; changeDisplay:string; asOf:string; source:string; sourceUrl:string; cadence:string };
+type MarketSource = { id:string; label:string; cadence:string; status:"live"|"available"|"unavailable"; asOf:string|null; sourceUrl:string };
+type MarketResponse = { fetchedAt:string; status:"live"|"partial"|"unavailable"; crypto:MarketQuote[]; fx:MarketQuote[]; treasury:MarketQuote[]; curve:{twoTen:number|null;threeMonthTen:number|null}; positioning:null|{label:string;leveragedNet:number;assetManagerNet:number;openInterest:number;asOf:string;source:string;sourceUrl:string;cadence:string}; sources:MarketSource[] };
 
 const sourceUrlForStory = (story:Story) => story.articleUrl;
 const sourceActionForStory = () => "Read original";
@@ -24,6 +27,8 @@ const relativeTime = (publishedAt:string,now:number) => {
   return new Intl.DateTimeFormat(undefined,{month:"short",day:"numeric"}).format(new Date(publishedAt));
 };
 const exactTime = (publishedAt:string) => new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(publishedAt));
+const sourceAge = (asOf:string|null,now:number) => asOf ? relativeTime(asOf,now) : "unavailable";
+const compactNumber = (value:number) => new Intl.NumberFormat(undefined,{notation:"compact",maximumFractionDigits:1,signDisplay:"always"}).format(value);
 
 const regions = ["All regions","Global","Middle East","Europe","Asia Pacific","Africa","Americas"];
 type HeroMedia = {image:string;credit:string;label:string};
@@ -34,25 +39,9 @@ const mediaForStory = (story:Story):HeroMedia => ({
 });
 const risks = [{label:"Energy security",value:86,delta:"+12",tone:"red"},{label:"Maritime trade",value:78,delta:"+08",tone:"orange"},{label:"Cyber activity",value:64,delta:"+05",tone:"amber"},{label:"Food systems",value:41,delta:"−03",tone:"blue"}];
 
-type MarketHorizon = "1D"|"1W"|"3M"|"1Y";
-const horizonData:Record<MarketHorizon,{regime:string;score:number;breadth:string;trend:string;vol:string;liquidity:string}>={
-  "1D":{regime:"Cautious risk-on",score:58,breadth:"61% advancing",trend:"Above session VWAP",vol:"Front vol firm",liquidity:"Normal depth"},
-  "1W":{regime:"Selective risk-on",score:64,breadth:"54% above 20D",trend:"Uptrend intact",vol:"Curve flattening",liquidity:"Slightly thinner"},
-  "3M":{regime:"Expansion",score:71,breadth:"68% above 50D",trend:"Broad participation",vol:"Contained",liquidity:"Supportive"},
-  "1Y":{regime:"Late expansion",score:62,breadth:"59% above 200D",trend:"Positive, narrowing",vol:"Below median",liquidity:"Neutral"},
-};
-const crossAssets=[
-  {asset:"S&P 500",move:"+0.42%",tone:"positive",spark:[32,42,38,51,55,61,58,69]},
-  {asset:"US 10Y",move:"+4 bp",tone:"warning",spark:[28,31,34,38,45,49,52,57]},
-  {asset:"DXY",move:"−0.28%",tone:"negative",spark:[62,58,61,53,50,46,42,39]},
-  {asset:"Gold",move:"+0.84%",tone:"positive",spark:[35,33,42,47,44,56,63,67]},
-  {asset:"Brent",move:"+1.12%",tone:"warning",spark:[29,37,35,48,55,52,64,73]},
-];
-const eventRisks=[
-  {time:"08:30",event:"US CPI",impact:"HIGH",asset:"Rates · USD"},
-  {time:"10:30",event:"EIA inventories",impact:"MED",asset:"Energy"},
-  {time:"14:00",event:"Treasury auction",impact:"MED",asset:"Rates"},
-];
+function WidgetSource({source,url,asOf,cadence,now,status="available"}:{source:string;url?:string;asOf:string|null;cadence:string;now:number;status?:"available"|"unavailable"}){
+  return <div className={`widget-source ${status}`}><i/><span><b>{status==="unavailable"?"UNAVAILABLE":"PUBLIC DATA"}</b> · {url?<a href={url} target="_blank" rel="noreferrer">{source} ↗</a>:source} · {cadence} · <time dateTime={asOf??undefined} title={asOf?exactTime(asOf):cadence}>{asOf?sourceAge(asOf,now):"No observation"}</time></span></div>;
+}
 
 export default function Home(){
   const [stories,setStories]=useState<Story[]>([]);
@@ -72,7 +61,8 @@ export default function Home(){
   const [selectedStory,setSelectedStory]=useState<Story|null>(null);
   const [notificationsOpen,setNotificationsOpen]=useState(false);
   const [riskOpen,setRiskOpen]=useState(false);
-  const [marketHorizon,setMarketHorizon]=useState<MarketHorizon>("1D");
+  const [marketData,setMarketData]=useState<MarketResponse|null>(null);
+  const [marketStatus,setMarketStatus]=useState<"loading"|"live"|"partial"|"unavailable">("loading");
   const loadNews=useCallback(async()=>{
     setFeedStatus((status)=>status==="error"?"loading":status);
     try{
@@ -90,12 +80,25 @@ export default function Home(){
       setFeedStatus("error");
     }
   },[]);
+  const loadMarkets=useCallback(async()=>{
+    try{
+      const response=await fetch("/api/markets",{cache:"no-store"});
+      if(!response.ok)throw new Error("Public market feeds unavailable");
+      const data=await response.json() as MarketResponse;
+      setMarketData(data);
+      setMarketStatus(data.status);
+    }catch{
+      setMarketStatus("unavailable");
+    }
+  },[]);
   useEffect(()=>{
     const initialTimer=window.setTimeout(()=>void loadNews(),0);
+    const marketInitialTimer=window.setTimeout(()=>void loadMarkets(),0);
     const newsTimer=window.setInterval(()=>void loadNews(),300000);
+    const marketTimer=window.setInterval(()=>void loadMarkets(),30000);
     const clockTimer=window.setInterval(()=>setClock(Date.now()),60000);
-    return ()=>{window.clearTimeout(initialTimer);window.clearInterval(newsTimer);window.clearInterval(clockTimer);};
-  },[loadNews]);
+    return ()=>{window.clearTimeout(initialTimer);window.clearTimeout(marketInitialTimer);window.clearInterval(newsTimer);window.clearInterval(marketTimer);window.clearInterval(clockTimer);};
+  },[loadMarkets,loadNews]);
   const hero=stories[heroIndex]??null;
   const heroVisual=hero?mediaForStory(hero):null;
 
@@ -117,6 +120,9 @@ export default function Home(){
     return {regions:regionCounts.size,sources:sourceNames.size,urgent,recent,topRegions,topCategory};
   },[categoryCounts,clock,stories]);
   const filteredStories=useMemo(()=>{const needle=appliedQuery.trim().toLowerCase();return stories.filter((story)=>{const inCategory=category==="All"||story.category===category;const inRegion=region==="All regions"||story.region===region;const haystack=[story.title,story.summary,story.category,story.region,story.source,...story.tags].join(" ").toLowerCase();return inCategory&&inRegion&&(!needle||haystack.includes(needle));});},[appliedQuery,category,region,stories]);
+  const publicQuotes=useMemo(()=>marketData?[...marketData.crypto,...marketData.fx,...marketData.treasury]:[],[marketData]);
+  const quoteFor=(id:string)=>publicQuotes.find((quote)=>quote.id===id);
+  const signalQuotes=[quoteFor("BTC-USD"),quoteFor("ETH-USD"),quoteFor("EUR-USD"),quoteFor("US-10Y")];
   const sectionFor:Record<string,string>={Overview:"overview-section","Live events":"events-section",Countries:"categories-section",Watchlist:"saved-section","Risk monitor":"risk-section",Markets:"market-section",Indicators:"indicators-section",Briefings:"stories-section"};
   const navigateTo=(item:string)=>{setActiveView(item);document.getElementById(sectionFor[item])?.scrollIntoView({behavior:"smooth",block:"start"});};
   const submitSearch=(event?:FormEvent)=>{event?.preventDefault();setAppliedQuery(query.trim());setShowAll(true);navigateTo("Briefings");};
@@ -158,24 +164,24 @@ export default function Home(){
           {!filteredStories.length&&feedStatus!=="loading"&&feedStatus!=="error"&&<div className="no-results"><span>⌕</span><h4>No matching headlines</h4><p>Try another country, topic, source or region.</p><button onClick={clearFilters}>Reset search</button></div>}{filteredStories.length>7&&<button className="all-briefings" onClick={()=>setShowAll((value)=>!value)}>{showAll?"Show fewer headlines":`View all ${filteredStories.length} headlines`} <span>{showAll?"↑":"↓"}</span></button>}
         </section>
 
-        <section className="signals-panel panel" id="indicators-section"><div className="panel-heading"><div><p>GLOBAL SIGNALS</p><h3>Markets & movement</h3></div><span className="live-indicator"><i/> SAMPLE</span></div><div className="signal-grid">{[{k:"BRENT",v:"$89.49",d:"+0.6%",up:true},{k:"GOLD",v:"$2,482",d:"+1.2%",up:true},{k:"USD IDX",v:"103.8",d:"−0.3%",up:false},{k:"FREIGHT",v:"1,947",d:"+4.8%",up:true}].map((item)=><div key={item.k}><p>{item.k}</p><strong>{item.v}</strong><span className={item.up?"up":"down"}>{item.d}</span></div>)}</div><div className="ticker"><span>WATCH</span><p>Strait transit volume remains below its recent baseline</p></div></section>
+        <section className="signals-panel panel" id="indicators-section"><div className="panel-heading"><div><p>PUBLIC MARKET SIGNALS</p><h3>Markets & movement</h3></div><button className={`market-feed-state ${marketStatus}`} onClick={()=>void loadMarkets()}>{marketStatus==="loading"?"SYNCING":marketStatus.toUpperCase()} · REFRESH</button></div><div className="signal-grid">{signalQuotes.map((quote,index)=>quote?<div key={quote.id}><p>{quote.label}</p><strong>{quote.display}</strong><span className={(quote.change??0)>=0?"up":"down"}>{quote.changeDisplay}</span><small><a href={quote.sourceUrl} target="_blank" rel="noreferrer">{quote.source}</a> · {quote.cadence} · {sourceAge(quote.asOf,clock)}</small></div>:<div className="signal-unavailable" key={index}><p>{["BITCOIN","ETHEREUM","EUR / USD","US 10Y"][index]}</p><strong>—</strong><span>Unavailable</span><small>Source unavailable · freshness unknown</small></div>)}</div><div className="ticker"><span>FRESHNESS</span><p>Crypto refreshes every 30 seconds; official FX and Treasury observations retain their published dates.</p></div></section>
 
         <section className="market-cockpit panel" id="market-section">
           <div className="market-cockpit-head">
-            <div><p>MARKET COCKPIT</p><h3>Signal stack, not a single signal</h3><span>Read price, participation, volatility and catalysts together.</span></div>
-            <div className="horizon-switch" aria-label="Market analysis horizon">{(["1D","1W","3M","1Y"] as MarketHorizon[]).map((period)=><button key={period} className={marketHorizon===period?"active":""} onClick={()=>setMarketHorizon(period)} aria-pressed={marketHorizon===period}>{period}</button>)}</div>
+            <div><p>MARKET COCKPIT</p><h3>Public data, with provenance</h3><span>No keys or accounts. Every card shows its source and native publication cadence.</span></div>
+            <button className={`market-refresh ${marketStatus}`} onClick={()=>void loadMarkets()}>{marketStatus==="loading"?"Connecting public feeds":marketStatus==="live"?"All public feeds available":marketStatus==="partial"?"Some feeds unavailable":"Feeds unavailable"}<span>Refresh now ↻</span></button>
           </div>
           <div className="market-widget-grid">
-            <article className="market-widget regime-widget"><div className="widget-label"><span>REGIME</span><em>COMPOSITE</em></div><div className="regime-score"><strong>{horizonData[marketHorizon].score}</strong><span>/100</span></div><h4>{horizonData[marketHorizon].regime}</h4><div className="regime-meter"><i style={{width:`${horizonData[marketHorizon].score}%`}}/></div><div className="regime-legend"><span>Defensive</span><span>Balanced</span><span>Risk-on</span></div><p>Combines breadth, volatility, rates and credit into one contextual read.</p></article>
-            <article className="market-widget"><div className="widget-label"><span>BREADTH & TREND</span><em>{marketHorizon}</em></div><div className="breadth-ring" style={{"--breadth":61} as React.CSSProperties}><strong>61%</strong><span>advancing</span></div><div className="widget-facts"><p><span>Participation</span><strong>{horizonData[marketHorizon].breadth}</strong></p><p><span>Trend quality</span><strong>{horizonData[marketHorizon].trend}</strong></p><p><span>New highs / lows</span><strong>92 / 31</strong></p></div></article>
-            <article className="market-widget vol-widget"><div className="widget-label"><span>VOLATILITY STRUCTURE</span><em>OPTIONS</em></div><div className="vol-curve" aria-label="Illustrative volatility term structure"><span>22.4<i style={{height:"78%"}}/></span><span>20.8<i style={{height:"64%"}}/></span><span>19.6<i style={{height:"52%"}}/></span><span>19.1<i style={{height:"47%"}}/></span><span>18.7<i style={{height:"42%"}}/></span></div><div className="curve-axis"><span>1W</span><span>1M</span><span>2M</span><span>3M</span><span>6M</span></div><div className="widget-facts compact"><p><span>Structure</span><strong>{horizonData[marketHorizon].vol}</strong></p><p><span>Liquidity</span><strong>{horizonData[marketHorizon].liquidity}</strong></p></div></article>
-            <article className="market-widget cross-widget"><div className="widget-label"><span>CROSS-ASSET TAPE</span><em>RELATIVE</em></div><div className="cross-list">{crossAssets.map((item)=><div key={item.asset}><span>{item.asset}</span><div className="micro-spark">{item.spark.map((height,index)=><i key={index} style={{height:`${height}%`}}/>)}</div><strong className={item.tone}>{item.move}</strong></div>)}</div><p>Divergences—like equities and gold rising together—can expose uncertainty beneath the index.</p></article>
-            <article className="market-widget flow-widget"><div className="widget-label"><span>FLOW & POSITIONING</span><em>INTRADAY</em></div><div className="flow-bars"><div><span>Buy volume</span><i><b style={{width:"64%"}}/></i><strong>64%</strong></div><div><span>Sell volume</span><i><b className="sell" style={{width:"36%"}}/></i><strong>36%</strong></div><div><span>Dark volume</span><i><b className="neutral" style={{width:"42%"}}/></i><strong>42%</strong></div></div><div className="position-callout"><span>Dealer gamma</span><strong>Moderately positive</strong><small>Potentially dampens index swings</small></div><p>Participation helps distinguish a durable move from a thin headline reaction.</p></article>
-            <article className="market-widget calendar-widget"><div className="widget-label"><span>CATALYST CLOCK</span><em>ET</em></div><div className="event-list">{eventRisks.map((item)=><div key={item.time+item.event}><time>{item.time}</time><span><strong>{item.event}</strong><small>{item.asset}</small></span><em className={item.impact.toLowerCase()}>{item.impact}</em></div>)}</div><p>Use scheduled catalysts to separate information risk from ordinary market noise.</p></article>
-            <article className="market-widget long-widget"><div className="widget-label"><span>LONG-HORIZON HEALTH</span><em>12M</em></div><div className="health-grid"><div><strong>59%</strong><span>Above 200D MA</span></div><div><strong>+6.2%</strong><span>EPS revision breadth</span></div><div><strong>1.74</strong><span>Equity / bond trend</span></div><div><strong>−8.4%</strong><span>Peak drawdown</span></div></div><p>Trend durability improves when earnings, breadth and credit confirm the headline index.</p></article>
-            <article className="market-widget scenario-widget"><div className="widget-label"><span>GEOPOL → MARKET</span><em>SCENARIOS</em></div><div className="scenario-list"><div><i className="amber"/><span><strong>Energy route disruption</strong><small>Watch Brent · freight · inflation breakevens</small></span></div><div><i className="blue"/><span><strong>Growth shock</strong><small>Watch credit spreads · copper · defensives</small></span></div><div><i className="red"/><span><strong>Funding stress</strong><small>Watch USD · swap spreads · market depth</small></span></div></div><p>Scenario links are observation prompts, not trade recommendations.</p></article>
+            <article className="market-widget unavailable-widget"><div className="widget-label"><span>REGIME COMPOSITE</span><em>HELD BACK</em></div><div className="unavailable-value">—</div><h4>Not calculated</h4><p>A defensible regime score needs breadth, volatility and credit data that the no-login sources do not provide.</p><WidgetSource source="No qualifying public feed" asOf={null} cadence="Awaiting licensed inputs" now={clock} status="unavailable"/></article>
+            <article className="market-widget unavailable-widget"><div className="widget-label"><span>BREADTH & TREND</span><em>EQUITIES</em></div><div className="unavailable-value">—</div><h4>Exchange breadth unavailable</h4><p>Advancers, new highs and moving-average participation are intentionally blank instead of estimated.</p><WidgetSource source="No qualifying public feed" asOf={null} cadence="Awaiting exchange breadth" now={clock} status="unavailable"/></article>
+            <article className="market-widget unavailable-widget"><div className="widget-label"><span>VOLATILITY STRUCTURE</span><em>OPTIONS</em></div><div className="unavailable-value">—</div><h4>Options curve unavailable</h4><p>Term structure and dealer gamma require licensed derivatives data, so no synthetic values are shown.</p><WidgetSource source="No qualifying public feed" asOf={null} cadence="Awaiting options data" now={clock} status="unavailable"/></article>
+            <article className="market-widget cross-widget"><div className="widget-label"><span>CROSS-ASSET TAPE</span><em>PUBLIC</em></div><div className="cross-list">{publicQuotes.slice(0,6).map((quote)=><div key={quote.id}><span>{quote.label}</span><strong className="cross-value">{quote.display}</strong><strong className={(quote.change??0)>=0?"positive":"negative"}>{quote.changeDisplay}</strong></div>)}{!publicQuotes.length&&<div className="widget-empty">Waiting for public sources…</div>}</div><WidgetSource source="Coinbase · ECB · U.S. Treasury" asOf={marketData?.fetchedAt??null} cadence="Mixed cadence" now={clock} status={publicQuotes.length?"available":"unavailable"}/></article>
+            <article className="market-widget flow-widget"><div className="widget-label"><span>FUTURES POSITIONING</span><em>WEEKLY</em></div>{marketData?.positioning?<><div className="position-data"><div><span>Leveraged funds net</span><strong>{compactNumber(marketData.positioning.leveragedNet)}</strong></div><div><span>Asset managers net</span><strong>{compactNumber(marketData.positioning.assetManagerNet)}</strong></div><div><span>Open interest</span><strong>{compactNumber(marketData.positioning.openInterest).replace("+","")}</strong></div></div><div className="position-callout"><span>CONTRACT</span><strong>{marketData.positioning.label}</strong><small>Net equals reported long positions minus short positions.</small></div></>:<div className="widget-empty tall">CFTC report unavailable</div>}<WidgetSource source={marketData?.positioning?.source??"CFTC Traders in Financial Futures"} url={marketData?.positioning?.sourceUrl} asOf={marketData?.positioning?.asOf??null} cadence={marketData?.positioning?.cadence??"Weekly"} now={clock} status={marketData?.positioning?"available":"unavailable"}/></article>
+            <article className="market-widget coverage-widget"><div className="widget-label"><span>SOURCE COVERAGE</span><em>NO LOGIN</em></div><div className="source-list">{marketData?.sources.map((source)=><a href={source.sourceUrl} target="_blank" rel="noreferrer" key={source.id}><i className={source.status}/><span><strong>{source.label}</strong><small>{source.cadence}</small></span><em>{source.asOf?sourceAge(source.asOf,clock):"Unavailable"}</em></a>)??<div className="widget-empty tall">Connecting sources…</div>}</div><WidgetSource source="ATLAS public-data aggregator" asOf={marketData?.fetchedAt??null} cadence="30-second refresh" now={clock} status={marketData?"available":"unavailable"}/></article>
+            <article className="market-widget long-widget"><div className="widget-label"><span>RATE-CURVE HEALTH</span><em>DAILY</em></div><div className="health-grid"><div><strong>{quoteFor("US-2Y")?.display??"—"}</strong><span>US 2-year</span></div><div><strong>{quoteFor("US-10Y")?.display??"—"}</strong><span>US 10-year</span></div><div><strong>{marketData?.curve.twoTen==null?"—":`${marketData.curve.twoTen>=0?"+":"−"}${Math.abs(marketData.curve.twoTen).toFixed(0)} bp`}</strong><span>2s10s slope</span></div><div><strong>{marketData?.curve.threeMonthTen==null?"—":`${marketData.curve.threeMonthTen>=0?"+":"−"}${Math.abs(marketData.curve.threeMonthTen).toFixed(0)} bp`}</strong><span>3m10y slope</span></div></div><p>Curve slopes are calculated directly from official Treasury observations.</p><WidgetSource source="U.S. Treasury" url={marketData?.sources.find((source)=>source.id==="treasury")?.sourceUrl} asOf={marketData?.sources.find((source)=>source.id==="treasury")?.asOf??null} cadence="Daily close" now={clock} status={marketData?.treasury.length?"available":"unavailable"}/></article>
+            <article className="market-widget scenario-widget"><div className="widget-label"><span>GEOPOL → MARKET</span><em>FRAMEWORK</em></div><div className="scenario-list"><div><i className="amber"/><span><strong>Energy route disruption</strong><small>Relevant data absent: Brent · freight · breakevens</small></span></div><div><i className="blue"/><span><strong>Growth shock</strong><small>Public proxies: Treasury curve · EUR/USD</small></span></div><div><i className="red"/><span><strong>Funding stress</strong><small>Public proxies: USD crosses · Treasury curve</small></span></div></div><p>Scenario links are observation prompts, not trade recommendations.</p><WidgetSource source="ATLAS analytical framework" asOf={null} cadence="Static context" now={clock}/></article>
           </div>
-          <div className="market-method"><span>SAMPLE MARKET DATA</span><p>These widgets demonstrate the analytical framework. Connect a licensed market-data feed before relying on values; educational context only.</p></div>
+          <div className="market-method"><span>PUBLIC DATA ONLY</span><p>Crypto is real-time public market data. ECB and Treasury observations are daily; CFTC positioning is weekly. Unsupported values remain blank. Educational context only.</p></div>
         </section>
 
         <section className="saved-panel panel" id="saved-section"><div className="panel-heading"><div><p>YOUR WATCHLIST</p><h3>Saved briefings</h3></div><span className="saved-total">{savedIds.length}</span></div>{savedIds.length?<div className="saved-grid">{stories.filter((story)=>savedIds.includes(story.id)).map((story)=><article key={story.id}><button onClick={()=>setSelectedStory(story)}><span>{story.category}</span><strong>{story.title}</strong><small><time dateTime={story.publishedAt} title={`Published ${exactTime(story.publishedAt)}`}>{relativeTime(story.publishedAt,clock)}</time> · Open briefing →</small></button><a href={sourceUrlForStory(story)} target="_blank" rel="noreferrer">{sourceActionForStory()} ↗</a></article>)}</div>:<div className="saved-empty"><span>◇</span><p>Save any headline or top story and it will appear here.</p></div>}</section>
