@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { MapMode } from "./components/WorldEventMap";
+import VideoNewsDesk from "./components/VideoNewsDesk";
 import { NEWS_CATEGORIES } from "./news-taxonomy";
 
 const WorldEventMap = dynamic(() => import("./components/WorldEventMap"), { ssr: false, loading: () => <div className="map-loading">Loading intelligence map…</div> });
@@ -201,6 +202,8 @@ export default function Home(){
           <div className="headline-list">{filteredStories.slice(0,showAll?filteredStories.length:7).map((story)=><article key={story.id} className="headline-row"><button className="headline-main" onClick={()=>setSelectedStory(story)}><span className={`status-dot ${story.level}`}/><span className="headline-copy"><span className="headline-kicker">{story.region} · {story.category}</span><strong>{story.title}</strong><small>{story.source} · <time dateTime={story.publishedAt} title={`Published ${exactTime(story.publishedAt)}`}>{relativeTime(story.publishedAt,clock)}</time> · {story.read}</small></span></button><a className="headline-source" href={sourceUrlForStory(story)} target="_blank" rel="noreferrer" aria-label={`${sourceActionForStory()}: ${story.title}`} title={`Open the original ${story.source} article`}>↗<span>{sourceActionForStory()}</span></a><button className={`save-icon ${savedIds.includes(story.id)?"saved":""}`} onClick={()=>toggleSaved(story.id)} aria-label={`Save ${story.title}`}>{savedIds.includes(story.id)?"◆":"◇"}</button></article>)}</div>
           {!filteredStories.length&&feedStatus!=="loading"&&feedStatus!=="error"&&<div className="no-results"><span>⌕</span><h4>No matching headlines</h4><p>Try another country, topic, source or region.</p><button onClick={clearFilters}>Reset search</button></div>}{filteredStories.length>7&&<button className="all-briefings" onClick={()=>setShowAll((value)=>!value)}>{showAll?"Show fewer headlines":`View all ${filteredStories.length} headlines`} <span>{showAll?"↑":"↓"}</span></button>}
         </section>
+
+        <VideoNewsDesk />
 
         <section className="signals-panel panel" id="indicators-section"><div className="panel-heading"><div><p>PUBLIC MARKET SIGNALS</p><h3>Markets & movement</h3></div><button className={`market-feed-state ${marketStatus}`} onClick={()=>void loadMarkets()}>{marketStatus==="loading"?"SYNCING":marketStatus.toUpperCase()} · REFRESH</button></div><div className="signal-grid">{signalQuotes.map((quote,index)=>quote?<div key={quote.id}><p>{quote.label}</p><strong>{quote.display}</strong><span className={(quote.change??0)>=0?"up":"down"}>{quote.changeDisplay}</span><small><a href={quote.sourceUrl} target="_blank" rel="noreferrer">{quote.source}</a> · {quote.cadence} · {sourceAge(quote.asOf,clock)}</small></div>:<div className="signal-unavailable" key={index}><p>{["BITCOIN","ETHEREUM","EUR / USD","US 10Y"][index]}</p><strong>—</strong><span>Unavailable</span><small>All configured providers failed · freshness unknown</small></div>)}</div><div className="ticker"><span>RESILIENCE</span><p>Coinbase → Kraken and U.S. Treasury → FRED fail over automatically. Every displayed value retains the provider that actually served it.</p></div></section>
 
