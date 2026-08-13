@@ -4,40 +4,26 @@ import { join } from "node:path";
 
 const projectRoot = process.cwd();
 const legacyPages = join(projectRoot, "src", "pages");
-const parkedPages = join(
-  projectRoot,
-  `.vercel-legacy-pages-${process.pid}`,
-);
+const parkedPages = join(projectRoot, `.vercel-legacy-pages-${process.pid}`);
 
 let parked = false;
 
 try {
-  // The original Vite dashboard used src/pages for ordinary components.
-  // Next interprets that folder as its Pages Router, which conflicts with the
-  // redesigned root app directory. Park it only for this ephemeral build.
+  // Next.js type-checks every file included by tsconfig. Cloudflare-only
+  // sources are excluded there; this wrapper only parks legacy Vite pages.
   if (existsSync(legacyPages)) {
     renameSync(legacyPages, parkedPages);
     parked = true;
   }
 
-  const nextCli = join(
-    projectRoot,
-    "node_modules",
-    "next",
-    "dist",
-    "bin",
-    "next",
-  );
+  const nextCli = join(projectRoot, "node_modules", "next", "dist", "bin", "next");
   const result = spawnSync(process.execPath, [nextCli, "build"], {
     cwd: projectRoot,
     env: process.env,
     stdio: "inherit",
   });
 
-  if (result.error) {
-    throw result.error;
-  }
-
+  if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
 } finally {
   if (parked && existsSync(parkedPages)) {
