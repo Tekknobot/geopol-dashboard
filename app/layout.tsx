@@ -4,21 +4,26 @@ import { Analytics } from "@vercel/analytics/next";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
 
-export const metadata = {
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
   title: "Atlas",
+  description:
+    "A geopolitical news and market-context dashboard for short- and long-horizon analysis.",
   icons: {
     icon: "/favicon.svg",
   },
-};
-
-export const metadata: Metadata = {
-  title: "Geopolitical Market Intelligence",
-  description:
-    "A geopolitical news and market-context dashboard for short- and long-horizon analysis.",
-  other: { "codex-preview": "development" },
+  other: {
+    "codex-preview": "development",
+  },
 };
 
 export const viewport: Viewport = {
