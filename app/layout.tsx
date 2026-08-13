@@ -7,8 +7,8 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Geopolitical Dashboard",
-  description: "A desktop-first global intelligence and geopolitical news dashboard.",
+  title: "Geopolitical Market Intelligence",
+  description: "A geopolitical news and market-context dashboard for short- and long-horizon analysis.",
   other: { "codex-preview": "development" },
 };
 

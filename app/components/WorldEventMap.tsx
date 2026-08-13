@@ -96,3 +96,4 @@ export default function WorldEventMap({mode,stories,filter=""}:{mode:MapMode;sto
     {!points.length&&<div className="map-empty"><strong>No located headlines match these filters</strong><span>Clear search or choose All topics.</span></div>}
   </div>;
 }
+

@@ -66,3 +66,4 @@ export async function GET(request:Request){
     return new Response("Publisher image unavailable",{status:404,headers:{"Cache-Control":"public, max-age=300, s-maxage=900"}});
   }
 }
+

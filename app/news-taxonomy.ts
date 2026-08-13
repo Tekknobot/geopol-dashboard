@@ -167,3 +167,4 @@ const CATEGORY_RULES: Array<[NewsCategory, RegExp]> = [
 
 export const categoryFor = (value: string): NewsCategory =>
   CATEGORY_RULES.find(([, rule]) => rule.test(value))?.[0] ?? "World Affairs";
+
