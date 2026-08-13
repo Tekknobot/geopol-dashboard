@@ -7,6 +7,13 @@ import "./globals.css";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
+export const metadata = {
+  title: "Atlas",
+  icons: {
+    icon: "/favicon.svg",
+  },
+};
+
 export const metadata: Metadata = {
   title: "Geopolitical Market Intelligence",
   description:
