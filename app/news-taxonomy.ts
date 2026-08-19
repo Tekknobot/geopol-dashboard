@@ -77,11 +77,71 @@ export const NEWS_CATEGORIES = [
   "Indigenous Affairs",
   "Tourism",
   "Media & Information",
+  "Film",
+  "Television",
+  "Music",
+  "Streaming",
+  "Awards",
+  "Gaming",
+  "Books & Publishing",
+  "Theatre",
+  "Celebrity & Creators",
+  "Arts & Design",
+  "Football",
+  "Basketball",
+  "Baseball",
+  "Hockey",
+  "Tennis",
+  "Cricket",
+  "Motorsport",
+  "Rugby",
+  "Golf",
+  "Athletics",
+  "Cycling",
+  "Winter Sports",
+  "Olympics & Paralympics",
+  "Women's Sport",
+  "Esports",
+  "Sports Business",
   "Arctic & Polar",
   "World Affairs",
 ] as const;
 
 export type NewsCategory = (typeof NEWS_CATEGORIES)[number];
+
+export type NewsDesk = "world" | "entertainment" | "sports";
+
+const ENTERTAINMENT_RULES: Array<[NewsCategory, RegExp]> = [
+  ["Film", /film|movie|cinema|box office|director|screenplay|actor|actress|hollywood|bollywood|cannes|sundance/i],
+  ["Television", /television|\btv\b|series|showrunner|sitcom|drama series|reality show|broadcast series/i],
+  ["Music", /music|album|single|song|singer|rapper|band|concert|tour|festival|grammy/i],
+  ["Streaming", /streaming|netflix|disney\+|prime video|hulu|hbo|max\b|paramount\+|peacock/i],
+  ["Awards", /awards?|nomination|red carpet|oscars?|emmys?|golden globes?|bafta|tony awards?/i],
+  ["Gaming", /video game|gaming|playstation|xbox|nintendo|steam|game studio|game developer/i],
+  ["Books & Publishing", /book|novel|author|writer|publishing|literary|booker prize|bestseller/i],
+  ["Theatre", /theatre|theater|broadway|west end|stage production|playwright|musical/i],
+  ["Celebrity & Creators", /celebrity|creator|influencer|entertainer|viral star|social media star/i],
+  ["Arts & Design", /art|artist|museum|gallery|exhibition|architecture|design|fashion|photography/i],
+];
+
+const SPORTS_RULES: Array<[NewsCategory, RegExp]> = [
+  ["Women's Sport", /women's|womens|\bwnba\b|\bnwsl\b|women's super league|female athlete/i],
+  ["Olympics & Paralympics", /olympic|paralympic|games bid|summer games|winter games/i],
+  ["Football", /football|soccer|premier league|champions league|world cup|\bnfl\b|quarterback|touchdown/i],
+  ["Basketball", /basketball|\bnba\b|\bwnba\b|euroleague|march madness/i],
+  ["Baseball", /baseball|\bmlb\b|world series|home run|pitcher|innings?/i],
+  ["Hockey", /hockey|\bnhl\b|stanley cup|ice rink/i],
+  ["Tennis", /tennis|grand slam|wimbledon|roland garros|us open|australian open|\batp\b|\bwta\b/i],
+  ["Cricket", /cricket|test match|one-day international|\bodi\b|\bt20\b|ashes series/i],
+  ["Motorsport", /formula one|formula 1|\bf1\b|motorsport|nascar|indycar|motogp|grand prix/i],
+  ["Rugby", /rugby|six nations|rugby union|rugby league/i],
+  ["Golf", /golf|\bpga\b|ryder cup|masters tournament|putting green/i],
+  ["Athletics", /athletics|track and field|marathon|sprint|high jump|pole vault/i],
+  ["Cycling", /cycling|tour de france|giro d'italia|vuelta|velodrome/i],
+  ["Winter Sports", /skiing|snowboard|biathlon|bobsleigh|curling|speed skating/i],
+  ["Esports", /esports|e-sports|league of legends|counter-strike|valorant|dota/i],
+  ["Sports Business", /sports business|broadcast rights|franchise value|sponsorship|salary cap|league revenue/i],
+];
 
 const CATEGORY_RULES: Array<[NewsCategory, RegExp]> = [
   ["Elections", /election|electoral|ballot|polling station|vote count|campaign trail|referendum|runoff/i],
@@ -168,3 +228,8 @@ const CATEGORY_RULES: Array<[NewsCategory, RegExp]> = [
 export const categoryFor = (value: string): NewsCategory =>
   CATEGORY_RULES.find(([, rule]) => rule.test(value))?.[0] ?? "World Affairs";
 
+export const categoryForDesk = (value: string, desk: NewsDesk): NewsCategory => {
+  if (desk === "entertainment") return ENTERTAINMENT_RULES.find(([, rule]) => rule.test(value))?.[0] ?? "Society & Culture";
+  if (desk === "sports") return SPORTS_RULES.find(([, rule]) => rule.test(value))?.[0] ?? "Sports Business";
+  return categoryFor(value);
+};

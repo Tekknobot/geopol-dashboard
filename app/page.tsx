@@ -2,13 +2,13 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import type { MapMode } from "./components/WorldEventMap";
-import VideoNewsDesk from "./components/VideoNewsDesk";
 import { NEWS_CATEGORIES } from "./news-taxonomy";
 
 const WorldEventMap = dynamic(() => import("./components/WorldEventMap"), { ssr: false, loading: () => <div className="map-loading">Loading intelligence map…</div> });
 
-type Story = { id:number; category:string; region:string; publishedAt:string; level:"critical"|"elevated"|"watch"|"stable"; title:string; summary:string; source:string; read:string; tags:string[]; articleUrl:string; imageUrl?:string; location?:{name:string;lat:number;lng:number;precision:"country"|"hotspot"} };
+type Story = { id:number; desk:"world"|"entertainment"|"sports"; category:string; region:string; publishedAt:string; level:"critical"|"elevated"|"watch"|"stable"; title:string; summary:string; source:string; read:string; tags:string[]; articleUrl:string; imageUrl?:string; location?:{name:string;lat:number;lng:number;precision:"country"|"hotspot"} };
 type NewsResponse = { stories:Story[]; sources:string[]; fetchedAt:string; failedFeeds:number; totalFeeds:number };
 type MarketQuote = { id:string; label:string; value:number; display:string; change:number|null; changeDisplay:string; asOf:string; source:string; sourceUrl:string; cadence:string };
 type MarketSource = { id:string; label:string; cadence:string; status:"live"|"available"|"degraded"|"unavailable"; asOf:string|null; sourceUrl:string; route:"primary"|"fallback"|"unavailable"; detail:string; attempts:Array<{provider:string;status:"ok"|"failed";detail:string}> };
@@ -68,7 +68,7 @@ export default function Home(){
   const loadNews=useCallback(async()=>{
     setFeedStatus((status)=>status==="error"?"loading":status);
     try{
-      const response=await fetch("/api/news",{cache:"no-store"});
+      const response=await fetch("/api/news",{cache:"no-store",signal:AbortSignal.timeout(8500)});
       if(!response.ok)throw new Error("Publisher feeds unavailable");
       const data=await response.json() as NewsResponse;
       if(!data.stories.length)throw new Error("No current publisher stories");
@@ -105,6 +105,7 @@ export default function Home(){
   const heroVisual=hero?mediaForStory(hero):null;
 
   const categoryCounts=useMemo(()=>{const counts=new Map<string,number>();for(const story of stories)counts.set(story.category,(counts.get(story.category)??0)+1);return counts;},[stories]);
+  const deskCounts=useMemo(()=>stories.reduce((counts,story)=>({...counts,[story.desk]:(counts[story.desk]??0)+1}),{} as Record<Story["desk"],number>),[stories]);
   const visibleCategories=useMemo(()=>["All",...NEWS_CATEGORIES.filter((item)=>(categoryCounts.get(item)??0)>0)],[categoryCounts]);
   const coverageSnapshot=useMemo(()=>{
     const regionCounts=new Map<string,number>();
@@ -175,10 +176,13 @@ export default function Home(){
       <nav className="primary-nav" aria-label="Primary navigation"><p className="nav-label">Intelligence</p>
         {["Overview","Live events","Countries","Watchlist"].map((item,index)=><button key={item} className={activeView===item?"active":""} onClick={()=>navigateTo(item)}><span className="nav-glyph" aria-hidden>{["⌂","⌁","◎","◇"][index]}</span>{item}{item==="Live events"&&<span className="nav-count">{stories.length}</span>}{item==="Watchlist"&&savedIds.length>0&&<span className="nav-count neutral">{savedIds.length}</span>}</button>)}
         <p className="nav-label secondary">Analysis</p>{["Risk monitor","Markets","Indicators","Briefings"].map((item,index)=><button key={item} className={activeView===item?"active":""} onClick={()=>navigateTo(item)}><span className="nav-glyph" aria-hidden>{["△","◫","⌇","▤"][index]}</span>{item}</button>)}
+        <p className="nav-label secondary">Newsrooms</p>
+        <Link href="/entertainment"><span className="nav-glyph" aria-hidden>✦</span>Entertainment{deskCounts.entertainment>0&&<span className="nav-count neutral">{deskCounts.entertainment}</span>}</Link>
+        <Link href="/sports"><span className="nav-glyph" aria-hidden>◉</span>Sports{deskCounts.sports>0&&<span className="nav-count neutral">{deskCounts.sports}</span>}</Link>
       </nav><div className="sidebar-bottom"><div className={`sync-status ${feedStatus}`}><span/> {feedStatus==="loading"?"Connecting publisher feeds":feedStatus==="error"?"Publisher feeds unavailable":`${feedSourceCount} publishers · ${feedStatus}`}</div><div className="analyst-card"><div className="avatar">AR</div><div><strong>Analyst workspace</strong><small>Global desk</small></div></div></div>
     </aside>
     <section className="workspace" id="top">
-      <header className="topbar"><div><p className="eyebrow">GLOBAL INTELLIGENCE / <span>{activeView.toUpperCase()}</span></p><h1>World news monitor</h1></div><div className="top-actions">
+      <header className="topbar"><div><p className="eyebrow">GLOBAL INTELLIGENCE / <span>{activeView.toUpperCase()}</span></p><h1>World, entertainment & sports monitor</h1></div><div className="top-actions">
         <form className="search-form" onSubmit={submitSearch}><label className="search"><span>⌕</span><input aria-label="Search all headlines" placeholder="Search countries, events, topics" value={query} onChange={(event)=>setQuery(event.target.value)}/><button type="submit" aria-label="Run search">↵</button></label>{query&&<div className="search-hint"><strong>Press Enter to search all stories</strong><span>Try “Taiwan”, “energy”, “Africa” or “shipping”</span></div>}</form>
         <button className="icon-button" aria-label="Open latest headlines" onClick={()=>setNotificationsOpen((open)=>!open)}>◉<span className="notification-dot"/></button><button className="refresh-button" onClick={()=>void loadNews()} disabled={feedStatus==="loading"}><span>↻</span> {feedStatus==="loading"?"Updating":lastFetchedAt?`Updated ${relativeTime(lastFetchedAt,clock)}`:"Refresh news"}</button>
         {notificationsOpen&&<div className="notifications-popover"><strong>Latest publisher headlines</strong>{stories.slice(0,3).map((story)=><button key={story.id} onClick={()=>{setSelectedStory(story);setNotificationsOpen(false);}}>{story.title}<span><time dateTime={story.publishedAt} title={exactTime(story.publishedAt)}>{relativeTime(story.publishedAt,clock)}</time></span></button>)}{!stories.length&&<p className="feed-popover-status">Waiting for publisher feeds…</p>}</div>}
@@ -202,8 +206,6 @@ export default function Home(){
           <div className="headline-list">{filteredStories.slice(0,showAll?filteredStories.length:7).map((story)=><article key={story.id} className="headline-row"><button className="headline-main" onClick={()=>setSelectedStory(story)}><span className={`status-dot ${story.level}`}/><span className="headline-copy"><span className="headline-kicker">{story.region} · {story.category}</span><strong>{story.title}</strong><small>{story.source} · <time dateTime={story.publishedAt} title={`Published ${exactTime(story.publishedAt)}`}>{relativeTime(story.publishedAt,clock)}</time> · {story.read}</small></span></button><a className="headline-source" href={sourceUrlForStory(story)} target="_blank" rel="noreferrer" aria-label={`${sourceActionForStory()}: ${story.title}`} title={`Open the original ${story.source} article`}>↗<span>{sourceActionForStory()}</span></a><button className={`save-icon ${savedIds.includes(story.id)?"saved":""}`} onClick={()=>toggleSaved(story.id)} aria-label={`Save ${story.title}`}>{savedIds.includes(story.id)?"◆":"◇"}</button></article>)}</div>
           {!filteredStories.length&&feedStatus!=="loading"&&feedStatus!=="error"&&<div className="no-results"><span>⌕</span><h4>No matching headlines</h4><p>Try another country, topic, source or region.</p><button onClick={clearFilters}>Reset search</button></div>}{filteredStories.length>7&&<button className="all-briefings" onClick={()=>setShowAll((value)=>!value)}>{showAll?"Show fewer headlines":`View all ${filteredStories.length} headlines`} <span>{showAll?"↑":"↓"}</span></button>}
         </section>
-
-        <VideoNewsDesk />
 
         <section className="signals-panel panel" id="indicators-section"><div className="panel-heading"><div><p>PUBLIC MARKET SIGNALS</p><h3>Markets & movement</h3></div><button className={`market-feed-state ${marketStatus}`} onClick={()=>void loadMarkets()}>{marketStatus==="loading"?"SYNCING":marketStatus.toUpperCase()} · REFRESH</button></div><div className="signal-grid">{signalQuotes.map((quote,index)=>quote?<div key={quote.id}><p>{quote.label}</p><strong>{quote.display}</strong><span className={(quote.change??0)>=0?"up":"down"}>{quote.changeDisplay}</span><small><a href={quote.sourceUrl} target="_blank" rel="noreferrer">{quote.source}</a> · {quote.cadence} · {sourceAge(quote.asOf,clock)}</small></div>:<div className="signal-unavailable" key={index}><p>{["BITCOIN","ETHEREUM","EUR / USD","US 10Y"][index]}</p><strong>—</strong><span>Unavailable</span><small>All configured providers failed · freshness unknown</small></div>)}</div><div className="ticker"><span>RESILIENCE</span><p>Coinbase → Kraken and U.S. Treasury → FRED fail over automatically. Every displayed value retains the provider that actually served it.</p></div></section>
 
@@ -235,9 +237,10 @@ export default function Home(){
         {label:"Home",view:"Overview",glyph:"⌂"},
         {label:"News",view:"Briefings",glyph:"▤"},
         {label:"Map",view:"Live events",glyph:"⌁"},
-        {label:"Topics",view:"Countries",glyph:"◎"},
+        {label:"Entertainment",href:"/entertainment",glyph:"✦"},
+        {label:"Sports",href:"/sports",glyph:"◉"},
         {label:"Saved",view:"Watchlist",glyph:"◇"},
-      ].map((item)=><button key={item.label} className={activeView===item.view?"active":""} onClick={()=>navigateTo(item.view)} aria-label={item.label}><span aria-hidden>{item.glyph}</span><small>{item.label}</small>{item.view==="Watchlist"&&savedIds.length>0&&<i>{savedIds.length}</i>}</button>)}
+      ].map((item)=>item.href?<Link key={item.label} href={item.href} aria-label={item.label}><span aria-hidden>{item.glyph}</span><small>{item.label}</small></Link>:<button key={item.label} className={activeView===item.view?"active":""} onClick={()=>navigateTo(item.view!)} aria-label={item.label}><span aria-hidden>{item.glyph}</span><small>{item.label}</small>{item.view==="Watchlist"&&savedIds.length>0&&<i>{savedIds.length}</i>}</button>)}
     </nav>
 
     {selectedStory&&<div className="story-modal-backdrop" role="presentation" onMouseDown={()=>setSelectedStory(null)}><article className="story-modal" role="dialog" aria-modal="true" aria-labelledby="story-modal-title" onMouseDown={(event)=>event.stopPropagation()}><button className="modal-close" onClick={()=>setSelectedStory(null)} aria-label="Close briefing">×</button><p>{selectedStory.category} · {selectedStory.region}</p><h2 id="story-modal-title">{selectedStory.title}</h2><div className="modal-meta"><span className={`status-dot ${selectedStory.level}`}/>{selectedStory.source} · <time dateTime={selectedStory.publishedAt} title={`Published ${exactTime(selectedStory.publishedAt)}`}>{relativeTime(selectedStory.publishedAt,clock)}</time> · {selectedStory.read} read</div><p className="modal-summary">{selectedStory.summary}</p><div className="modal-tags">{selectedStory.tags.map((tag)=><button key={tag} onClick={()=>{setQuery(tag);setAppliedQuery(tag);setSelectedStory(null);setShowAll(true);requestAnimationFrame(()=>navigateTo("Briefings"));}}>#{tag}</button>)}</div><div className="modal-actions"><a className="primary-action" href={sourceUrlForStory(selectedStory)} target="_blank" rel="noreferrer">{sourceActionForStory()} ↗</a><button onClick={()=>toggleSaved(selectedStory.id)}>{savedIds.includes(selectedStory.id)?"◆ Remove saved":"◇ Save"}</button><button onClick={()=>setSelectedStory(null)}>Close</button></div><small className="demo-note">The direct article URL and publication timestamp come from {selectedStory.source}’s feed. Relative age recalculates every minute; hover or focus it to see the exact reported time.</small></article></div>}

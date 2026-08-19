@@ -16,7 +16,6 @@
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
   },
   "dependencies": {
-    "@vercel/analytics": "^2.0.1",
     "drizzle-orm": "0.45.2",
     "fast-xml-parser": "^5.3.8",
     "leaflet": "^1.9.4",

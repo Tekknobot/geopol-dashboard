@@ -1,16 +1,18 @@
 import { XMLParser } from "fast-xml-parser";
 import countries from "world-countries";
-import { categoryFor } from "../../news-taxonomy";
+import { categoryForDesk, type NewsDesk } from "../../news-taxonomy";
 
 export const runtime = "edge";
 
 type FeedDefinition = {
   source: string;
   url: string;
+  desk: NewsDesk;
 };
 
 type FeedStory = {
   id: number;
+  desk: NewsDesk;
   category: string;
   region: string;
   publishedAt: string;
@@ -31,18 +33,28 @@ type FeedStory = {
 };
 
 const feeds: FeedDefinition[] = [
-  { source: "BBC News", url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
-  { source: "BBC News", url: "https://feeds.bbci.co.uk/news/business/rss.xml" },
-  { source: "BBC News", url: "https://feeds.bbci.co.uk/news/technology/rss.xml" },
-  { source: "The Guardian", url: "https://www.theguardian.com/world/rss" },
-  { source: "The Guardian", url: "https://www.theguardian.com/business/rss" },
-  { source: "The Guardian", url: "https://www.theguardian.com/environment/rss" },
-  { source: "Al Jazeera", url: "https://www.aljazeera.com/xml/rss/all.xml" },
-  { source: "UN News", url: "https://news.un.org/feed/subscribe/en/news/all/rss.xml" },
-  { source: "NPR", url: "https://feeds.npr.org/1004/rss.xml" },
-  { source: "POLITICO Europe", url: "https://www.politico.eu/feed/" },
-  { source: "DW", url: "https://rss.dw.com/rdf/rss-en-all" },
-  { source: "France 24", url: "https://www.france24.com/en/rss" },
+  { source: "BBC News", url: "https://feeds.bbci.co.uk/news/world/rss.xml", desk: "world" },
+  { source: "BBC News", url: "https://feeds.bbci.co.uk/news/business/rss.xml", desk: "world" },
+  { source: "BBC News", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", desk: "world" },
+  { source: "The Guardian", url: "https://www.theguardian.com/world/rss", desk: "world" },
+  { source: "The Guardian", url: "https://www.theguardian.com/business/rss", desk: "world" },
+  { source: "The Guardian", url: "https://www.theguardian.com/environment/rss", desk: "world" },
+  { source: "Al Jazeera", url: "https://www.aljazeera.com/xml/rss/all.xml", desk: "world" },
+  { source: "UN News", url: "https://news.un.org/feed/subscribe/en/news/all/rss.xml", desk: "world" },
+  { source: "NPR", url: "https://feeds.npr.org/1004/rss.xml", desk: "world" },
+  { source: "POLITICO Europe", url: "https://www.politico.eu/feed/", desk: "world" },
+  { source: "DW", url: "https://rss.dw.com/rdf/rss-en-all", desk: "world" },
+  { source: "France 24", url: "https://www.france24.com/en/rss", desk: "world" },
+  { source: "BBC Culture", url: "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml", desk: "entertainment" },
+  { source: "The Guardian Culture", url: "https://www.theguardian.com/culture/rss", desk: "entertainment" },
+  { source: "The Guardian Film", url: "https://www.theguardian.com/film/rss", desk: "entertainment" },
+  { source: "The Guardian Music", url: "https://www.theguardian.com/music/rss", desk: "entertainment" },
+  { source: "The Guardian Games", url: "https://www.theguardian.com/games/rss", desk: "entertainment" },
+  { source: "NPR Arts & Life", url: "https://feeds.npr.org/1008/rss.xml", desk: "entertainment" },
+  { source: "BBC Sport", url: "https://feeds.bbci.co.uk/sport/rss.xml", desk: "sports" },
+  { source: "The Guardian Sport", url: "https://www.theguardian.com/sport/rss", desk: "sports" },
+  { source: "The Guardian Football", url: "https://www.theguardian.com/football/rss", desk: "sports" },
+  { source: "ESPN", url: "https://www.espn.com/espn/rss/news", desk: "sports" },
 ];
 
 const parser = new XMLParser({
@@ -55,6 +67,17 @@ const parser = new XMLParser({
 
 type LocationMatch = NonNullable<FeedStory["location"]> & { aliases: string[] };
 const hotspotLocations: LocationMatch[] = [
+  {name:"Los Angeles",lat:34.05,lng:-118.24,precision:"hotspot",aliases:["Los Angeles","Hollywood"]},
+  {name:"New York City",lat:40.71,lng:-74.01,precision:"hotspot",aliases:["New York City","New York"]},
+  {name:"London",lat:51.51,lng:-0.13,precision:"hotspot",aliases:["London","Wembley"]},
+  {name:"Paris",lat:48.86,lng:2.35,precision:"hotspot",aliases:["Paris","Roland Garros"]},
+  {name:"Cannes",lat:43.55,lng:7.02,precision:"hotspot",aliases:["Cannes"]},
+  {name:"Toronto",lat:43.65,lng:-79.38,precision:"hotspot",aliases:["Toronto"]},
+  {name:"Mumbai",lat:19.08,lng:72.88,precision:"hotspot",aliases:["Mumbai","Bollywood"]},
+  {name:"Seoul",lat:37.57,lng:126.98,precision:"hotspot",aliases:["Seoul"]},
+  {name:"Tokyo",lat:35.68,lng:139.69,precision:"hotspot",aliases:["Tokyo"]},
+  {name:"Melbourne",lat:-37.81,lng:144.96,precision:"hotspot",aliases:["Melbourne"]},
+  {name:"Nashville",lat:36.16,lng:-86.78,precision:"hotspot",aliases:["Nashville"]},
   {name:"Gaza Strip",lat:31.45,lng:34.4,precision:"hotspot",aliases:["Gaza Strip","Gaza"]},
   {name:"West Bank",lat:31.95,lng:35.2,precision:"hotspot",aliases:["West Bank"]},
   {name:"Strait of Hormuz",lat:26.56,lng:56.25,precision:"hotspot",aliases:["Strait of Hormuz","Hormuz"]},
@@ -221,11 +244,12 @@ export function parseFeed(xml: string, feed: FeedDefinition): FeedStory[] {
     const timestamp = Date.parse(rawDate);
     if (!title || !articleUrl || !Number.isFinite(timestamp)) return [];
     const combined = `${title} ${summary}`;
-    const category = categoryFor(combined);
+    const category = categoryForDesk(combined, feed.desk);
     const region = regionFor(combined);
     const wordCount = `${title} ${summary}`.split(/\s+/).length;
     return [{
       id: hash(articleUrl),
+      desk: feed.desk,
       category,
       region,
       publishedAt: new Date(timestamp).toISOString(),
@@ -245,28 +269,38 @@ export function parseFeed(xml: string, feed: FeedDefinition): FeedStory[] {
 async function loadFeed(feed: FeedDefinition) {
   const response = await fetch(feed.url, {
     headers: { "User-Agent": "AtlasWorldNews/1.0 (+news dashboard feed reader)" },
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(4500),
   });
   if (!response.ok) throw new Error(`${feed.source}: ${response.status}`);
   return parseFeed(await response.text(), feed);
 }
 
-export async function GET() {
-  const results = await Promise.allSettled(feeds.map(loadFeed));
+export async function GET(request:Request) {
+  const requestedDesk=new URL(request.url).searchParams.get("desk");
+  const activeFeeds=requestedDesk==="world"||requestedDesk==="entertainment"||requestedDesk==="sports"?feeds.filter((feed)=>feed.desk===requestedDesk):feeds;
+  const feedResults:Array<PromiseSettledResult<FeedStory[]>|undefined>=new Array(activeFeeds.length);
+  const tasks=activeFeeds.map(async(feed,index)=>{
+    try{feedResults[index]={status:"fulfilled",value:await loadFeed(feed)};}
+    catch(reason){feedResults[index]={status:"rejected",reason};}
+  });
+  await Promise.race([
+    Promise.all(tasks).then(()=>undefined),
+    new Promise<void>((resolve)=>setTimeout(resolve,6000)),
+  ]);
+  const results=feedResults.filter((result):result is PromiseSettledResult<FeedStory[]>=>Boolean(result));
   const stories = results
     .flatMap((result) => result.status === "fulfilled" ? result.value : [])
     .filter((story, index, all) => all.findIndex((candidate) => candidate.articleUrl === story.articleUrl) === index)
     .sort((left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt))
     .slice(0, 180);
   const sources = [...new Set(stories.map((story) => story.source))];
-  const failedFeeds = results.filter((result) => result.status === "rejected").length;
+  const failedFeeds = activeFeeds.length-results.filter((result) => result.status === "fulfilled").length;
 
   return Response.json(
-    { stories, sources, fetchedAt: new Date().toISOString(), failedFeeds, totalFeeds: feeds.length },
+    { stories, sources, fetchedAt: new Date().toISOString(), failedFeeds, totalFeeds: activeFeeds.length },
     {
       status: stories.length ? 200 : 503,
       headers: { "Cache-Control": "public, max-age=120, s-maxage=300, stale-while-revalidate=900" },
     },
   );
 }
-

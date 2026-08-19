@@ -1,4 +1,4 @@
-export const runtime = "edge";
+export const runtime = "edge"; //
 
 const publisherDomains = [
   "bbc.co.uk",
@@ -10,6 +10,7 @@ const publisherDomains = [
   "politico.eu",
   "dw.com",
   "france24.com",
+  "espn.com",
 ];
 
 const isPublisherHost = (hostname:string) => publisherDomains.some((domain)=>hostname===domain||hostname.endsWith(`.${domain}`));
@@ -66,4 +67,3 @@ export async function GET(request:Request){
     return new Response("Publisher image unavailable",{status:404,headers:{"Cache-Control":"public, max-age=300, s-maxage=900"}});
   }
 }
-
