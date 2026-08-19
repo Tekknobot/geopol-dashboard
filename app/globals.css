@@ -227,6 +227,26 @@ time{font-variant-numeric:tabular-nums}
 .desk-mobile-tabs{display:none}
 .desk-carousel-count{position:absolute;z-index:5;top:18px;right:18px;padding:6px 8px;border:1px solid #ffffff38;border-radius:999px;background:#090d14b8;color:#fff;font:750 8px var(--font-geist-mono);letter-spacing:.08em;backdrop-filter:blur(8px)}
 
+/* Match the World desk's readable desktop type scale. */
+@media(min-width:821px){
+  .desk-global-nav nav a{font-size:14px}.desk-live{font-size:10px}
+  .desk-title-block>p{font-size:11px}.desk-title-block h1{font-size:clamp(46px,4.2vw,64px);line-height:1;letter-spacing:-.05em}.desk-title-block>span{font-size:16px;line-height:1.6}
+  .desk-search{width:min(440px,36vw);height:52px}.desk-search input{font-size:14px}.desk-search button{height:38px;padding:0 16px;font-size:12px}
+  .desk-ticker{height:50px}.desk-ticker>strong{font-size:10px}.desk-ticker a{font-size:12px}.desk-ticker a span{font-size:10px}
+  .desk-topic-bar{min-height:66px}.desk-topic-bar button{height:40px;padding:0 14px;font-size:12px}
+  .desk-hero-copy h2{font-size:clamp(32px,2.8vw,46px);line-height:1.08;letter-spacing:-.04em}.desk-hero-copy>p:first-child{font-size:10px}.desk-hero-meta{font-size:12px}.desk-hero-summary{font-size:15px;line-height:1.6}.desk-hero-copy>a{min-height:46px;font-size:12px}
+  .desk-lead-rail-heading span{font-size:11px}.desk-lead-rail-heading small{font-size:10px}.desk-lead-rail>button>span{font-size:10px}.desk-lead-rail p{font-size:9px}.desk-lead-rail h3{font-size:15px;line-height:1.35}.desk-lead-rail button small{font-size:10px}
+  .desk-metrics span{font-size:10px}.desk-metrics strong{font-size:30px}.desk-metrics small{font-size:11px}
+  .desk-section-heading{min-height:88px}.desk-section-heading p{font-size:10px}.desk-section-heading h2{font-size:24px}.desk-section-heading>span,.wire-heading>div>span{font-size:11px}
+  .desk-card-rail p{font-size:10px}.desk-card-rail h3{font-size:17px;line-height:1.38}.desk-card-rail article>a>div:last-child>span{font-size:10px}
+  .wire-heading select{height:40px;font-size:12px}.desk-feed-note{font-size:12px}.desk-wire-list p{font-size:10px}.desk-wire-list h3{font-size:19px;line-height:1.38}.desk-wire-list small{font-size:11px}
+  .desk-lenses article h3{font-size:18px}.desk-lenses article p{font-size:13px;line-height:1.6}.desk-lenses article button{min-height:36px;padding:8px 11px;font-size:11px}
+  .desk-category-index>button{min-height:84px}.desk-category-index strong{font-size:13px}.desk-category-index small{font-size:10px}.desk-category-index>button>b{font-size:12px}
+  .desk-provenance>span{font-size:10px}.desk-provenance h2{font-size:22px}.desk-provenance p{font-size:13px}.desk-provenance small{font-size:10px}
+  .desk-video-feature-copy small{font-size:10px}.desk-video-feature-copy em{font-size:11px}.desk-video-queue-label span,.desk-video-queue-label small{font-size:10px}.desk-video-queue button small{font-size:9px}.desk-video-queue button strong{font-size:13px;line-height:1.38}.desk-video-loading p{font-size:12px}.desk-video-note>span{font-size:10px}.desk-video-note p,.desk-video-note a{font-size:11px}
+  .desk-footer{font-size:11px}
+}
+
 @media(max-width:1050px){
   .desk-mobile-tabs{display:grid;grid-template-columns:repeat(3,1fr);height:48px;background:#11161d;border-bottom:1px solid #ffffff18}
   .desk-mobile-tabs a{display:grid;place-items:center;min-width:0;color:#8f9aaa;text-decoration:none;border-bottom:3px solid transparent;font-size:11px;font-weight:750}
