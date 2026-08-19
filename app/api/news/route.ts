@@ -275,26 +275,49 @@ async function loadFeed(feed: FeedDefinition) {
   return parseFeed(await response.text(), feed);
 }
 
+const headlineScore=(story:FeedStory,now:number)=>{
+  const ageHours=Math.max(0,(now-Date.parse(story.publishedAt))/3_600_000);
+  const recency=Math.max(0,120-ageHours*1.4);
+  const completeness=(story.imageUrl?14:0)+(story.summary.length>=120?7:story.summary.length>=60?3:0)+(story.location?4:0);
+  const urgency=story.level==="critical"?10:story.level==="elevated"?6:story.level==="watch"?2:0;
+  return recency+completeness+urgency;
+};
+
+function selectBestHeadlines(candidates:FeedStory[],includeAllDesks:boolean){
+  const now=Date.now();
+  const byScore=[...candidates].sort((left,right)=>headlineScore(right,now)-headlineScore(left,now)||Date.parse(right.publishedAt)-Date.parse(left.publishedAt));
+  if(!includeAllDesks)return byScore.slice(0,180);
+
+  // Reserve a small representation floor for every newsroom, then fill the
+  // remaining places strictly by score. This keeps the combined carousel
+  // genuinely global without letting one high-volume feed crowd out a desk.
+  const selected:FeedStory[]=[];
+  const selectedUrls=new Set<string>();
+  for(const desk of ["world","sports","entertainment"] as const){
+    for(const story of byScore.filter((candidate)=>candidate.desk===desk).slice(0,12)){
+      selected.push(story);
+      selectedUrls.add(story.articleUrl);
+    }
+  }
+  for(const story of byScore){
+    if(selected.length>=180)break;
+    if(selectedUrls.has(story.articleUrl))continue;
+    selected.push(story);
+    selectedUrls.add(story.articleUrl);
+  }
+  return selected.sort((left,right)=>headlineScore(right,now)-headlineScore(left,now)||Date.parse(right.publishedAt)-Date.parse(left.publishedAt)).slice(0,180);
+}
+
 export async function GET(request:Request) {
   const requestedDesk=new URL(request.url).searchParams.get("desk");
   const activeFeeds=requestedDesk==="world"||requestedDesk==="entertainment"||requestedDesk==="sports"?feeds.filter((feed)=>feed.desk===requestedDesk):feeds;
-  const feedResults:Array<PromiseSettledResult<FeedStory[]>|undefined>=new Array(activeFeeds.length);
-  const tasks=activeFeeds.map(async(feed,index)=>{
-    try{feedResults[index]={status:"fulfilled",value:await loadFeed(feed)};}
-    catch(reason){feedResults[index]={status:"rejected",reason};}
-  });
-  await Promise.race([
-    Promise.all(tasks).then(()=>undefined),
-    new Promise<void>((resolve)=>setTimeout(resolve,6000)),
-  ]);
-  const results=feedResults.filter((result):result is PromiseSettledResult<FeedStory[]>=>Boolean(result));
-  const stories = results
+  const results=await Promise.allSettled(activeFeeds.map((feed)=>loadFeed(feed)));
+  const candidates = results
     .flatMap((result) => result.status === "fulfilled" ? result.value : [])
     .filter((story, index, all) => all.findIndex((candidate) => candidate.articleUrl === story.articleUrl) === index)
-    .sort((left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt))
-    .slice(0, 180);
+  const stories=selectBestHeadlines(candidates,!requestedDesk);
   const sources = [...new Set(stories.map((story) => story.source))];
-  const failedFeeds = activeFeeds.length-results.filter((result) => result.status === "fulfilled").length;
+  const failedFeeds = results.filter((result) => result.status === "rejected").length;
 
   return Response.json(
     { stories, sources, fetchedAt: new Date().toISOString(), failedFeeds, totalFeeds: activeFeeds.length },

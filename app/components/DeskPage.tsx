@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeskVideoSection from "./DeskVideoSection";
 
 const WorldEventMap = dynamic(() => import("./WorldEventMap"), {
@@ -69,6 +69,7 @@ export default function DeskPage({config}:{config:DeskConfig}){
   const [region,setRegion]=useState("All regions");
   const [query,setQuery]=useState("");
   const [appliedQuery,setAppliedQuery]=useState("");
+  const heroTouchX=useRef<number|null>(null);
 
   const loadNews=useCallback(async()=>{
     setStatus((current)=>current==="error"?"loading":current);
@@ -113,13 +114,17 @@ export default function DeskPage({config}:{config:DeskConfig}){
   const submitSearch=(event:FormEvent)=>{event.preventDefault();setAppliedQuery(query.trim());document.getElementById("desk-wire")?.scrollIntoView({behavior:"smooth"});};
   const selectTopic=(value:string)=>{setTopic(value);document.getElementById("desk-wire")?.scrollIntoView({behavior:"smooth"});};
   const reset=()=>{setTopic("All");setRegion("All regions");setQuery("");setAppliedQuery("");};
+  const stepHero=(direction:-1|1)=>setHeroIndex((current)=>stories.length?(current+direction+stories.length)%stories.length:0);
+  const finishHeroSwipe=(clientX:number)=>{if(heroTouchX.current===null)return;const delta=clientX-heroTouchX.current;heroTouchX.current=null;if(Math.abs(delta)>=44)stepHero(delta>0?-1:1);};
 
   return <main className="desk-page" data-desk={config.desk}>
     <header className="desk-global-nav">
       <Link className="desk-brand" href="/"><img src="/favicon.svg" alt=""/>ATLAS<span>.</span></Link>
-      <nav aria-label="ATLAS newsrooms"><Link href="/">World</Link><Link className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
+      <nav aria-label="ATLAS newsrooms"><Link href="/">World</Link><Link aria-current={config.desk==="entertainment"?"page":undefined} className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link aria-current={config.desk==="sports"?"page":undefined} className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
       <button onClick={()=>void loadNews()} className={`desk-live ${status}`}><i/>{status==="loading"?"Connecting":status==="error"?"Retry feeds":status==="partial"?"Partial feed":"Live desk"}</button>
     </header>
+
+    <nav className="desk-mobile-tabs" aria-label="Switch newsroom"><Link href="/">World</Link><Link aria-current={config.desk==="entertainment"?"page":undefined} className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link aria-current={config.desk==="sports"?"page":undefined} className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
 
     <section className="desk-masthead">
       <div className="desk-title-block"><p>{config.eyebrow}</p><h1>{config.title}</h1><span>{config.intro}</span></div>
@@ -131,12 +136,13 @@ export default function DeskPage({config}:{config:DeskConfig}){
     <section className="desk-topic-bar" aria-label={`${config.desk} categories`}><button className={topic==="All"?"active":""} onClick={()=>setTopic("All")}>All <span>{stories.length}</span></button>{categories.map((item)=><button key={item.name} className={topic===item.name?"active":""} onClick={()=>selectTopic(item.name)}>{item.name}<span>{item.count}</span></button>)}</section>
 
     <section className="desk-lead-grid">
-      {hero?<section className="desk-hero" aria-label="Top story carousel">
+      {hero?<section className="desk-hero" aria-label="Top story carousel" onTouchStart={(event)=>{heroTouchX.current=event.touches[0]?.clientX??null;}} onTouchEnd={(event)=>finishHeroSwipe(event.changedTouches[0]?.clientX??0)}>
         <StoryImage story={hero} className="desk-hero-image"/>
         <div className="desk-hero-shade"/>
         <div className="desk-hero-copy"><p><span>TOP STORY</span>{hero.category} · {hero.region}</p><h2>{hero.title}</h2><div className="desk-hero-meta"><strong>{hero.source}</strong><time dateTime={hero.publishedAt} title={exactTime(hero.publishedAt)}>{relativeTime(hero.publishedAt,clock)}</time><span>{hero.read} read</span></div><p className="desk-hero-summary">{hero.summary}</p><a href={hero.articleUrl} target="_blank" rel="noreferrer">Read original story ↗</a></div>
-        <button className="desk-carousel-arrow previous" onClick={()=>setHeroIndex((heroIndex-1+stories.length)%stories.length)} aria-label="Previous top story">‹</button><button className="desk-carousel-arrow next" onClick={()=>setHeroIndex((heroIndex+1)%stories.length)} aria-label="Next top story">›</button>
+        <button className="desk-carousel-arrow previous" onClick={()=>stepHero(-1)} aria-label="Previous top story">‹</button><button className="desk-carousel-arrow next" onClick={()=>stepHero(1)} aria-label="Next top story">›</button>
         <div className="desk-carousel-dots">{stories.slice(0,8).map((story,index)=><button key={story.id} className={index===heroIndex?"active":""} onClick={()=>setHeroIndex(index)} aria-label={`Show story ${index+1}`}/>)}</div>
+        <span className="desk-carousel-count">{String(heroIndex+1).padStart(2,"0")} / {stories.length}</span>
       </section>:<section className="desk-hero desk-empty"><span className="feed-spinner"/><h2>{status==="error"?"Publisher feeds are temporarily unavailable":"Loading live headlines…"}</h2><p>ATLAS only displays stories supplied by publisher feeds—no fabricated placeholder headlines.</p>{status==="error"&&<button onClick={()=>void loadNews()}>Try again</button>}</section>}
       <aside className="desk-lead-rail" aria-label="More top stories"><div className="desk-lead-rail-heading"><span>TOP STORIES</span><small>LIVE DESK</small></div>{stories.slice(1,5).map((story,index)=><button key={story.id} onClick={()=>setHeroIndex(index+1)} className={heroIndex===index+1?"active":""}><span>{String(index+1).padStart(2,"0")}</span><div><p>{story.category} · {relativeTime(story.publishedAt,clock)}</p><h3>{story.title}</h3><small>{story.source}</small></div></button>)}</aside>
     </section>
