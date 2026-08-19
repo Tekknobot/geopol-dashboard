@@ -286,3 +286,14 @@ time{font-variant-numeric:tabular-nums}
   .desk-metrics{margin:8px}.desk-metrics article{padding:13px}.desk-layout{padding-left:8px;padding-right:8px}.desk-section-heading{padding:14px}.desk-card-rail article{flex-basis:calc(100% - 26px)}
   .desk-video-feature{min-height:205px}.desk-video-feature-copy strong{font-size:18px}.desk-video-queue>button{grid-template-columns:96px 1fr}.desk-map-section .leaflet-map-shell,.desk-map-section .map-loading{height:280px}
 }
+
+/* Keep each NOW headline inside its own clipped ticker cell. */
+.desk-ticker{grid-template-columns:auto minmax(0,1fr)}
+.desk-ticker>div{min-width:0;gap:0;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scrollbar-width:none}
+.desk-ticker>div::-webkit-scrollbar{display:none}
+.desk-ticker a{flex:0 0 auto;width:min(520px,48vw);max-width:none;padding-right:28px;margin-right:28px;border-right:1px solid #dedbd5;overflow:hidden;text-overflow:ellipsis;scroll-snap-align:start}
+.desk-ticker a:last-child{margin-right:0;border-right:0}
+
+@media(max-width:820px){
+  .desk-ticker a{width:min(330px,72vw);padding-right:18px;margin-right:18px}
+}
