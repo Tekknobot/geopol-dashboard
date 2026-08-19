@@ -7,8 +7,9 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ATLAS World News",
+  title: "Pulse Newsrooms",
   description: "Live world, entertainment and sports headlines with visual desks, maps and publisher links.",
+  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
   other: { "codex-preview": "development" },
 };
 

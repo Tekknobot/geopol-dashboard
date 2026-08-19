@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import DeskVideoSection from "./DeskVideoSection";
 
 const WorldEventMap = dynamic(() => import("./WorldEventMap"), {
   ssr: false,
@@ -115,7 +116,7 @@ export default function DeskPage({config}:{config:DeskConfig}){
 
   return <main className="desk-page" data-desk={config.desk}>
     <header className="desk-global-nav">
-      <Link className="desk-brand" href="/"><span className="desk-brand-mark"><i/><i/><i/></span>ATLAS<span>.</span></Link>
+      <Link className="desk-brand" href="/"><img src="/favicon.svg" alt=""/>ATLAS<span>.</span></Link>
       <nav aria-label="ATLAS newsrooms"><Link href="/">World</Link><Link className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
       <button onClick={()=>void loadNews()} className={`desk-live ${status}`}><i/>{status==="loading"?"Connecting":status==="error"?"Retry feeds":status==="partial"?"Partial feed":"Live desk"}</button>
     </header>
@@ -129,19 +130,24 @@ export default function DeskPage({config}:{config:DeskConfig}){
 
     <section className="desk-topic-bar" aria-label={`${config.desk} categories`}><button className={topic==="All"?"active":""} onClick={()=>setTopic("All")}>All <span>{stories.length}</span></button>{categories.map((item)=><button key={item.name} className={topic===item.name?"active":""} onClick={()=>selectTopic(item.name)}>{item.name}<span>{item.count}</span></button>)}</section>
 
-    {hero?<section className="desk-hero" aria-label="Top story carousel">
-      <StoryImage story={hero} className="desk-hero-image"/>
-      <div className="desk-hero-shade"/>
-      <div className="desk-hero-copy"><p><span>TOP STORY</span>{hero.category} · {hero.region}</p><h2>{hero.title}</h2><div className="desk-hero-meta"><strong>{hero.source}</strong><time dateTime={hero.publishedAt} title={exactTime(hero.publishedAt)}>{relativeTime(hero.publishedAt,clock)}</time><span>{hero.read} read</span></div><p className="desk-hero-summary">{hero.summary}</p><a href={hero.articleUrl} target="_blank" rel="noreferrer">Read original story ↗</a></div>
-      <button className="desk-carousel-arrow previous" onClick={()=>setHeroIndex((heroIndex-1+stories.length)%stories.length)} aria-label="Previous top story">‹</button><button className="desk-carousel-arrow next" onClick={()=>setHeroIndex((heroIndex+1)%stories.length)} aria-label="Next top story">›</button>
-      <div className="desk-carousel-dots">{stories.slice(0,10).map((story,index)=><button key={story.id} className={index===heroIndex?"active":""} onClick={()=>setHeroIndex(index)} aria-label={`Show story ${index+1}`}/>)}</div>
-    </section>:<section className="desk-hero desk-empty"><span className="feed-spinner"/><h2>{status==="error"?"Publisher feeds are temporarily unavailable":"Loading live headlines…"}</h2><p>ATLAS only displays stories supplied by publisher feeds—no fabricated placeholder headlines.</p>{status==="error"&&<button onClick={()=>void loadNews()}>Try again</button>}</section>}
+    <section className="desk-lead-grid">
+      {hero?<section className="desk-hero" aria-label="Top story carousel">
+        <StoryImage story={hero} className="desk-hero-image"/>
+        <div className="desk-hero-shade"/>
+        <div className="desk-hero-copy"><p><span>TOP STORY</span>{hero.category} · {hero.region}</p><h2>{hero.title}</h2><div className="desk-hero-meta"><strong>{hero.source}</strong><time dateTime={hero.publishedAt} title={exactTime(hero.publishedAt)}>{relativeTime(hero.publishedAt,clock)}</time><span>{hero.read} read</span></div><p className="desk-hero-summary">{hero.summary}</p><a href={hero.articleUrl} target="_blank" rel="noreferrer">Read original story ↗</a></div>
+        <button className="desk-carousel-arrow previous" onClick={()=>setHeroIndex((heroIndex-1+stories.length)%stories.length)} aria-label="Previous top story">‹</button><button className="desk-carousel-arrow next" onClick={()=>setHeroIndex((heroIndex+1)%stories.length)} aria-label="Next top story">›</button>
+        <div className="desk-carousel-dots">{stories.slice(0,8).map((story,index)=><button key={story.id} className={index===heroIndex?"active":""} onClick={()=>setHeroIndex(index)} aria-label={`Show story ${index+1}`}/>)}</div>
+      </section>:<section className="desk-hero desk-empty"><span className="feed-spinner"/><h2>{status==="error"?"Publisher feeds are temporarily unavailable":"Loading live headlines…"}</h2><p>ATLAS only displays stories supplied by publisher feeds—no fabricated placeholder headlines.</p>{status==="error"&&<button onClick={()=>void loadNews()}>Try again</button>}</section>}
+      <aside className="desk-lead-rail" aria-label="More top stories"><div className="desk-lead-rail-heading"><span>TOP STORIES</span><small>LIVE DESK</small></div>{stories.slice(1,5).map((story,index)=><button key={story.id} onClick={()=>setHeroIndex(index+1)} className={heroIndex===index+1?"active":""}><span>{String(index+1).padStart(2,"0")}</span><div><p>{story.category} · {relativeTime(story.publishedAt,clock)}</p><h3>{story.title}</h3><small>{story.source}</small></div></button>)}</aside>
+    </section>
 
     <section className="desk-metrics" aria-label="Desk coverage"><article><span>LIVE STORIES</span><strong>{stories.length}</strong><small>in the current wire</small></article><article><span>PUBLISHERS</span><strong>{sources}</strong><small>original sources</small></article><article><span>MAPPED</span><strong>{mapped}</strong><small>located headlines</small></article><article><span>FRESH · 6H</span><strong>{fresh}</strong><small>recent updates</small></article></section>
 
     <section className="desk-layout">
       <div className="desk-main-column">
         <section className="desk-featured"><div className="desk-section-heading"><div><p>VISUAL EDIT</p><h2>Picture-led stories</h2></div><span>Publisher imagery · original links</span></div><div className="desk-card-rail">{stories.slice(1,7).map((story)=><article key={story.id}><a href={story.articleUrl} target="_blank" rel="noreferrer"><StoryImage story={story}/><div><p>{story.category} · {story.region}</p><h3>{story.title}</h3><span>{story.source} · <time dateTime={story.publishedAt}>{relativeTime(story.publishedAt,clock)}</time></span></div></a></article>)}</div></section>
+
+        <DeskVideoSection desk={config.desk}/>
 
         <section className="desk-map-section"><div className="desk-section-heading"><div><p>GLOBAL FOOTPRINT</p><h2>{config.desk==="sports"?"Where sport is happening":"Where culture is moving"}</h2></div><span>{mapped} live locations</span></div><WorldEventMap mode="Events" stories={stories} filter={[topic==="All"?"":topic,region==="All regions"?"":region,appliedQuery].filter(Boolean).join(" ")}/></section>
 
