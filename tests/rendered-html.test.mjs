@@ -1,16 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const developmentPreviewMeta =
-  /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
-
-test("renders development preview metadata", async () => {
+async function fetchPage(pathname) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
 
-  const response = await worker.fetch(
-    new Request("http://localhost/", {
+  return worker.fetch(
+    new Request(`http://localhost${pathname}`, {
       headers: { accept: "text/html" },
     }),
     {
@@ -23,11 +20,26 @@ test("renders development preview metadata", async () => {
       passThroughOnException() {},
     },
   );
+}
+
+test("renders production ATLAS metadata", async () => {
+  const response = await fetchPage("/");
 
   assert.equal(response.status, 200);
   assert.match(
     response.headers.get("content-type") ?? "",
     /^text\/html\b/i,
   );
-  assert.match(await response.text(), developmentPreviewMeta);
+  const html = await response.text();
+  assert.match(html, /<title>ATLAS \| World, Entertainment &amp; Sports<\/title>/i);
+  assert.doesNotMatch(html, /codex-preview/i);
+});
+
+test("renders the Intelligence Map route", async () => {
+  const response = await fetchPage("/intelligence");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+  const html = await response.text();
+  assert.match(html, /<title>ATLAS Intelligence Map<\/title>/i);
+  assert.match(html, /Building global operating picture/i);
 });

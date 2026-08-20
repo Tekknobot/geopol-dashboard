@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Atlas">
-  <g fill="#E8343F">
-    <path d="M6 49 14 17h10l-8 32H6Z"/>
-    <path d="M23 56 35 8h10L33 56H23Z"/>
-    <path d="M40 49 48 17h10l-8 32H40Z"/>
-  </g>
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="64" height="64" rx="14" fill="#0B0E13"/>
+<rect x="13" y="24" width="7" height="27" rx="3.5" fill="#B84AE0"/>
+<rect x="25" y="10" width="7" height="41" rx="3.5" fill="#FFFFFF"/>
+<rect x="37" y="18" width="7" height="33" rx="3.5" fill="#19B77A"/>
+<circle cx="52" cy="46" r="4" fill="#F0B72F"/>
 </svg>
