@@ -242,7 +242,7 @@ export default function Home(){
     <nav className="mobile-nav" aria-label="Mobile navigation">
       {[
         {label:"Home",view:"Overview",glyph:"⌂"},
-        {label:"News",view:"Briefings",glyph:"▤"},
+        //{label:"News",view:"Briefings",glyph:"▤"},
         {label:"Intel",href:"/intelligence",glyph:"◎"},
         //{label:"Map",view:"Live events",glyph:"⌁"},
         {label:"Entertainment",href:"/entertainment",glyph:"✦"},
