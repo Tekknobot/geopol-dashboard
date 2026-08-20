@@ -211,6 +211,12 @@ time{font-variant-numeric:tabular-nums}
 .desk-video-queue button strong{font-size:10px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .desk-video-loading{min-height:330px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:linear-gradient(135deg,var(--desk-deep),#10151c);color:#fff;text-align:center}
 .desk-video-loading strong{margin-top:8px;font-size:17px}.desk-video-loading p{margin:0;color:#8e99a6;font-size:10px}
+.desk-video-fallback-poster{background:radial-gradient(circle at 72% 30%,color-mix(in srgb,var(--desk-accent) 35%,transparent),transparent 28%),linear-gradient(135deg,#18232f,#080b10 68%)}
+.desk-video-fallback-art{position:absolute;right:8%;top:50%;transform:translateY(-54%);color:#ffffff0d;font-size:clamp(150px,18vw,310px);font-weight:950;letter-spacing:-.12em;line-height:1}
+.desk-video-channel-thumb{display:grid;place-items:center;background:linear-gradient(135deg,color-mix(in srgb,var(--desk-accent) 62%,#17202b),#090c11)}
+.desk-video-channel-thumb b{color:#fff;font:900 19px var(--font-geist-mono);letter-spacing:-.05em}.desk-video-channel-thumb i{inset:auto 7px 6px auto;width:24px;height:24px;border-radius:50%;background:#0009;font-size:9px}
+.desk-video-queue>button.active{background:#ffffff0c;box-shadow:inset 3px 0 0 var(--desk-accent)}
+.desk-video-unavailable{min-height:330px;display:grid;place-content:center;justify-items:center;gap:10px;padding:30px;background:linear-gradient(135deg,var(--desk-deep),#10151c);color:#fff;text-align:center}.desk-video-unavailable strong{font-size:18px}.desk-video-unavailable p{margin:0;color:#8e99a6;font-size:11px}.desk-video-unavailable button,.desk-video-note button{border:0;border-radius:4px;background:var(--desk-accent);color:#fff;padding:9px 13px;font-size:10px;font-weight:800;cursor:pointer}
 .desk-video-note{min-height:54px;padding:10px 17px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:13px;background:#f5f3ee;border-top:1px solid #d8d6d0}
 .desk-video-note>span{color:var(--desk-accent);font:850 8px var(--font-geist-mono);letter-spacing:.1em}.desk-video-note p{margin:0;color:#77746e;font-size:9px}.desk-video-note a{color:#1b222b;font-size:9px;font-weight:800;text-decoration:none;white-space:nowrap}
 
