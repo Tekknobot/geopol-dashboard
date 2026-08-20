@@ -38,3 +38,63 @@ body:has(.intelligence-workspace){background:var(--intel-bg);overflow:hidden}
   .intel-legend{left:10px;right:auto;bottom:78px;gap:7px;max-width:calc(100% - 20px);overflow-x:auto}.intel-timeline{left:10px;right:10px;bottom:10px;height:57px;grid-template-columns:84px 1fr}.intel-timeline>div{padding:8px}.intel-timeline>div span{font-size:6px}.intel-timeline button{flex-basis:150px}.intel-detail h2{font-size:24px}.intel-detail{padding-bottom:calc(20px + env(safe-area-inset-bottom))}
 }
 @media(max-width:390px){.intel-title p{display:none}.intel-title h1{font-size:15px}.intel-live span{font-size:7px}.intel-map-stats article:nth-child(3){display:none}.intel-map-stats{grid-template-columns:repeat(3,1fr)}.intel-map-actions button{padding:0 7px}.intel-map-actions button span{margin-right:2px}.intel-map-actions button:last-child{font-size:0}.intel-map-actions button:last-child span{font-size:15px;margin:0}.intel-legend span{font-size:6px}.intel-timeline{grid-template-columns:72px 1fr}}
+
+/* Large desktop and 4K readability */
+@media (min-width: 2200px) and (min-height: 1200px) {
+  .intel-layout {
+    grid-template-columns: 320px minmax(0, 1fr) 430px;
+  }
+
+  .intel-title p,
+  .intel-panel-head span,
+  .intel-section-label,
+  .intel-layer-list small,
+  .intel-switch small,
+  .intel-feed-list time,
+  .intel-location small,
+  .intel-source-card span,
+  .intel-source-card small {
+    font-size: 10px;
+  }
+
+  .intel-search input,
+  .intel-layer-list > button > span,
+  .intel-switch > span,
+  .intel-region-grid button,
+  .intel-map-actions button,
+  .intel-timeline button span,
+  .intel-feed-list small,
+  .intel-detail-actions a,
+  .intel-detail-actions button {
+    font-size: 12px;
+  }
+
+  .intel-panel-head strong {
+    font-size: 16px;
+  }
+
+  .intel-feed-list strong,
+  .intel-detail .intel-summary {
+    font-size: 15px;
+  }
+
+  .intel-detail h2 {
+    font-size: 28px;
+  }
+
+  .intel-leaflet-map .leaflet-tooltip {
+    min-width: 200px;
+    max-width: 340px;
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+
+  .intel-leaflet-map .leaflet-tooltip span {
+    font-size: 11px;
+  }
+
+  .intel-feed-list > button {
+    min-height: 125px;
+    padding: 18px 46px 18px 19px;
+  }
+}
