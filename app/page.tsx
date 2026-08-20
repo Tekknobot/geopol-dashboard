@@ -239,7 +239,7 @@ export default function Home(){
       {[
         {label:"Home",view:"Overview",glyph:"⌂"},
         {label:"News",view:"Briefings",glyph:"▤"},
-        {label:"Map",view:"Live events",glyph:"⌁"},
+        //{label:"Map",view:"Live events",glyph:"⌁"},
         {label:"Entertainment",href:"/entertainment",glyph:"✦"},
         {label:"Sports",href:"/sports",glyph:"◉"},
         {label:"Saved",view:"Watchlist",glyph:"◇"},
