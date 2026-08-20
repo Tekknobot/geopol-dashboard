@@ -42,3 +42,11 @@ test("accepts unambiguous forms of ambiguous country names", () => {
   assert.equal(locationMatchFor("Talks continue in Tbilisi")?.name, "Georgia");
   assert.equal(locationMatchFor("Chadian officials announce the result")?.name, "Chad");
 });
+
+test("maps Canadian national and city coverage accurately", () => {
+  assert.equal(locationMatchFor("Canada announces a new federal budget")?.region, "Canada");
+  assert.equal(locationMatchFor("Ottawa releases the federal budget")?.name, "Ottawa");
+  assert.equal(locationMatchFor("Wildfire conditions worsen near Yellowknife")?.name, "Yellowknife");
+  assert.equal(locationMatchFor("Port of Vancouver traffic resumes")?.name, "Vancouver");
+  assert.equal(locationMatchFor("Regina King joins the cast"), undefined);
+});

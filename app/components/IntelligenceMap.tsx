@@ -77,6 +77,7 @@ const basemaps:Record<Basemap,{url:string;attribution:string}>={
 };
 const regions=[
   {label:"Global",lat:18,lng:8,zoom:2},
+  {label:"Canada",lat:57,lng:-101,zoom:3},
   {label:"Americas",lat:18,lng:-78,zoom:3},
   {label:"Europe",lat:50,lng:14,zoom:4},
   {label:"MENA",lat:28,lng:41,zoom:4},

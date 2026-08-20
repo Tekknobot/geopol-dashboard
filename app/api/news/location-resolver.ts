@@ -1,6 +1,6 @@
 import countries from "world-countries";
 
-export type NewsRegion = "Middle East" | "Europe" | "Africa" | "Americas" | "Asia Pacific" | "Global";
+export type NewsRegion = "Canada" | "Middle East" | "Europe" | "Africa" | "Americas" | "Asia Pacific" | "Global";
 
 export type LocationMatch = {
   name: string;
@@ -12,6 +12,32 @@ export type LocationMatch = {
 };
 
 const hotspotLocations: LocationMatch[] = [
+  {name:"Ottawa",lat:45.42,lng:-75.7,precision:"hotspot",aliases:["Ottawa"],region:"Canada"},
+  {name:"Vancouver",lat:49.28,lng:-123.12,precision:"hotspot",aliases:["Vancouver"],region:"Canada"},
+  {name:"Montreal",lat:45.5,lng:-73.57,precision:"hotspot",aliases:["Montreal","Montréal"],region:"Canada"},
+  {name:"Calgary",lat:51.05,lng:-114.07,precision:"hotspot",aliases:["Calgary"],region:"Canada"},
+  {name:"Edmonton",lat:53.55,lng:-113.49,precision:"hotspot",aliases:["Edmonton"],region:"Canada"},
+  {name:"Winnipeg",lat:49.9,lng:-97.14,precision:"hotspot",aliases:["Winnipeg"],region:"Canada"},
+  {name:"Halifax",lat:44.65,lng:-63.57,precision:"hotspot",aliases:["Halifax"],region:"Canada"},
+  {name:"Regina",lat:50.45,lng:-104.62,precision:"hotspot",aliases:["Regina"],region:"Canada"},
+  {name:"Saskatoon",lat:52.13,lng:-106.67,precision:"hotspot",aliases:["Saskatoon"],region:"Canada"},
+  {name:"St. John's",lat:47.56,lng:-52.71,precision:"hotspot",aliases:["St. John's","St John’s","St Johns"],region:"Canada"},
+  {name:"Yellowknife",lat:62.45,lng:-114.38,precision:"hotspot",aliases:["Yellowknife"],region:"Canada"},
+  {name:"Whitehorse",lat:60.72,lng:-135.06,precision:"hotspot",aliases:["Whitehorse"],region:"Canada"},
+  {name:"Iqaluit",lat:63.75,lng:-68.52,precision:"hotspot",aliases:["Iqaluit"],region:"Canada"},
+  {name:"British Columbia",lat:53.73,lng:-127.65,precision:"hotspot",aliases:["British Columbia","B.C.","B.C"],region:"Canada"},
+  {name:"Alberta",lat:54.5,lng:-115,precision:"hotspot",aliases:["Alberta"],region:"Canada"},
+  {name:"Saskatchewan",lat:52.94,lng:-106.45,precision:"hotspot",aliases:["Saskatchewan"],region:"Canada"},
+  {name:"Manitoba",lat:54,lng:-98,precision:"hotspot",aliases:["Manitoba"],region:"Canada"},
+  {name:"Ontario",lat:50,lng:-85,precision:"hotspot",aliases:["Ontario"],region:"Canada"},
+  {name:"Quebec",lat:52,lng:-71.5,precision:"hotspot",aliases:["Quebec","Québec"],region:"Canada"},
+  {name:"New Brunswick",lat:46.5,lng:-66.5,precision:"hotspot",aliases:["New Brunswick"],region:"Canada"},
+  {name:"Nova Scotia",lat:45,lng:-63,precision:"hotspot",aliases:["Nova Scotia"],region:"Canada"},
+  {name:"Prince Edward Island",lat:46.5,lng:-63.4,precision:"hotspot",aliases:["Prince Edward Island","P.E.I.","PEI"],region:"Canada"},
+  {name:"Newfoundland and Labrador",lat:53.14,lng:-57.66,precision:"hotspot",aliases:["Newfoundland and Labrador","Newfoundland","Labrador"],region:"Canada"},
+  {name:"Northwest Territories",lat:64.83,lng:-124.85,precision:"hotspot",aliases:["Northwest Territories","N.W.T.","NWT"],region:"Canada"},
+  {name:"Yukon",lat:64.28,lng:-135,precision:"hotspot",aliases:["Yukon"],region:"Canada"},
+  {name:"Nunavut",lat:70.3,lng:-83.1,precision:"hotspot",aliases:["Nunavut"],region:"Canada"},
   {name:"Los Angeles",lat:34.05,lng:-118.24,precision:"hotspot",aliases:["Los Angeles","Hollywood"]},
   {name:"New York City",lat:40.71,lng:-74.01,precision:"hotspot",aliases:["New York City","New York"]},
   {name:"London",lat:51.51,lng:-0.13,precision:"hotspot",aliases:["London","Wembley"]},
@@ -81,7 +107,7 @@ const countryLocations: LocationMatch[] = countries.flatMap((country) => {
   if (country.cca3 === "PRK") aliases.push("North Korea");
   if (country.cca3 === "TUR") aliases.push("Turkey");
   if (country.cca3 === "CIV") aliases.push("Ivory Coast");
-  return [{name:country.name.common,lat:country.latlng[0],lng:country.latlng[1],precision:"country" as const,aliases,region:countryRegion(country.region,country.subregion)}];
+  return [{name:country.name.common,lat:country.latlng[0],lng:country.latlng[1],precision:"country" as const,aliases,region:country.cca3==="CAN"?"Canada":countryRegion(country.region,country.subregion)}];
 });
 
 const locationMatches = [...hotspotLocations,...countryLocations]
@@ -93,6 +119,7 @@ const escapePattern = (value:string) => value.replace(/[.*+?^${}()|[\]\\]/g,"\\$
 export const locationMatchFor = (value:string):LocationMatch|undefined => {
   const match = locationMatches.find(({alias}) => {
     if (alias === "Paris" && /\bParis\s+Hilton\b/iu.test(value)) return false;
+    if (alias === "Regina" && /\bRegina\s+King\b/iu.test(value)) return false;
     return new RegExp(`(^|[^\\p{L}])${escapePattern(alias)}(?=$|[^\\p{L}])`,"iu").test(value);
   });
   return match?.location;

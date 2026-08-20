@@ -8,6 +8,7 @@ type FeedDefinition = {
   source: string;
   url: string;
   desk: NewsDesk;
+  countryFocus?: "Canada";
 };
 
 type FeedStory = {
@@ -24,6 +25,7 @@ type FeedStory = {
   tags: string[];
   articleUrl: string;
   imageUrl?: string;
+  countryFocus?: "Canada";
   location?: {
     name: string;
     lat: number;
@@ -33,6 +35,24 @@ type FeedStory = {
 };
 
 const feeds: FeedDefinition[] = [
+  // Canadian national, regional, business and public-policy coverage. These
+  // feeds also receive a representation floor in selectBestHeadlines so they
+  // cannot be crowded out by higher-volume international publishers.
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-topstories", desk: "world", countryFocus: "Canada" },
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-canada", desk: "world", countryFocus: "Canada" },
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-politics", desk: "world", countryFocus: "Canada" },
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-business", desk: "world", countryFocus: "Canada" },
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-technology", desk: "world", countryFocus: "Canada" },
+  { source: "Global News", url: "https://globalnews.ca/canada/feed/", desk: "world", countryFocus: "Canada" },
+  { source: "Global News", url: "https://globalnews.ca/politics/feed/", desk: "world", countryFocus: "Canada" },
+  { source: "Global News", url: "https://globalnews.ca/money/feed/", desk: "world", countryFocus: "Canada" },
+  { source: "Global News", url: "https://globalnews.ca/environment/feed/", desk: "world", countryFocus: "Canada" },
+  { source: "Global News", url: "https://globalnews.ca/toronto/feed/", desk: "world", countryFocus: "Canada" },
+  { source: "CTV News", url: "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009", desk: "world", countryFocus: "Canada" },
+  { source: "Canada News Centre", url: "https://www.canada.ca/content/canadasite/en/news/subscribe-emails/national-news.atom.xml", desk: "world", countryFocus: "Canada" },
+  { source: "Bank of Canada", url: "https://www.bankofcanada.ca/utility/news/feed/", desk: "world", countryFocus: "Canada" },
+  { source: "The Narwhal", url: "https://thenarwhal.ca/feed/", desk: "world", countryFocus: "Canada" },
+  { source: "Canada's National Observer", url: "https://www.nationalobserver.com/front/rss", desk: "world", countryFocus: "Canada" },
   { source: "BBC News", url: "https://feeds.bbci.co.uk/news/world/rss.xml", desk: "world" },
   { source: "BBC News", url: "https://feeds.bbci.co.uk/news/business/rss.xml", desk: "world" },
   { source: "BBC News", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", desk: "world" },
@@ -51,10 +71,14 @@ const feeds: FeedDefinition[] = [
   { source: "The Guardian Music", url: "https://www.theguardian.com/music/rss", desk: "entertainment" },
   { source: "The Guardian Games", url: "https://www.theguardian.com/games/rss", desk: "entertainment" },
   { source: "NPR Arts & Life", url: "https://feeds.npr.org/1008/rss.xml", desk: "entertainment" },
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-arts", desk: "entertainment", countryFocus: "Canada" },
+  { source: "Global News", url: "https://globalnews.ca/entertainment/feed/", desk: "entertainment", countryFocus: "Canada" },
   { source: "BBC Sport", url: "https://feeds.bbci.co.uk/sport/rss.xml", desk: "sports" },
   { source: "The Guardian Sport", url: "https://www.theguardian.com/sport/rss", desk: "sports" },
   { source: "The Guardian Football", url: "https://www.theguardian.com/football/rss", desk: "sports" },
   { source: "ESPN", url: "https://www.espn.com/espn/rss/news", desk: "sports" },
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-sports", desk: "sports", countryFocus: "Canada" },
+  { source: "Global News", url: "https://globalnews.ca/sports/feed/", desk: "sports", countryFocus: "Canada" },
 ];
 
 const parser = new XMLParser({
@@ -120,11 +144,12 @@ const hash = (value: string) => {
 };
 
 const regionRules: Array<[FeedStory["region"], RegExp]> = [
+  ["Canada", /canada|canadian|ottawa|ontario|qu[eé]bec|british columbia|alberta|saskatchewan|manitoba|nova scotia|new brunswick|newfoundland|labrador|prince edward island|northwest territories|nunavut|yukon|toronto|montreal|vancouver|calgary|edmonton|winnipeg|halifax|regina|saskatoon/i],
   ["Middle East", /iran|iraq|israel|gaza|lebanon|syria|yemen|saudi|qatar|emirates|jordan|hormuz|red sea|middle east/i],
   ["Europe", /europe|ukraine|russia|britain|uk\b|france|germany|italy|spain|poland|nato|eu\b|balkan|black sea/i],
   ["Asia Pacific", /china|taiwan|japan|korea|india|pakistan|indonesia|philippines|australia|pacific|asia|asean/i],
   ["Africa", /africa|sudan|congo|sahel|ethiopia|somalia|kenya|nigeria|south africa|libya|egypt/i],
-  ["Americas", /united states|u\.s\.|usa|canada|mexico|brazil|argentina|colombia|venezuela|caribbean|america/i],
+  ["Americas", /united states|u\.s\.|usa|mexico|brazil|argentina|colombia|venezuela|caribbean|america/i],
 ];
 const regionFor = (value: string,location?:LocationMatch) => regionRules.find(([, rule]) => rule.test(value))?.[0] ?? location?.region ?? "Global";
 const levelFor = (value: string,desk:NewsDesk): FeedStory["level"] => {
@@ -215,6 +240,7 @@ export function parseFeed(xml: string, feed: FeedDefinition): FeedStory[] {
       tags: tagsFor(title, category, region),
       articleUrl,
       imageUrl: imageLink(item, rawDescription),
+      countryFocus: feed.countryFocus,
       location: matchedLocation?{name:matchedLocation.name,lat:matchedLocation.lat,lng:matchedLocation.lng,precision:matchedLocation.precision}:undefined,
     }];
   });
@@ -234,25 +260,35 @@ const headlineScore=(story:FeedStory,now:number)=>{
   const recency=Math.max(0,120-ageHours*1.4);
   const completeness=(story.imageUrl?14:0)+(story.summary.length>=120?7:story.summary.length>=60?3:0)+(story.location?4:0);
   const urgency=story.level==="critical"?10:story.level==="elevated"?6:story.level==="watch"?2:0;
-  return recency+completeness+urgency;
+  const localRelevance=story.countryFocus==="Canada"?6:0;
+  return recency+completeness+urgency+localRelevance;
 };
 
 function selectBestHeadlines(candidates:FeedStory[],includeAllDesks:boolean){
   const now=Date.now();
   const byScore=[...candidates].sort((left,right)=>headlineScore(right,now)-headlineScore(left,now)||Date.parse(right.publishedAt)-Date.parse(left.publishedAt));
-  if(!includeAllDesks)return byScore.slice(0,180);
-
-  // Reserve a small representation floor for every newsroom, then fill the
-  // remaining places strictly by score. This keeps the combined carousel
-  // genuinely global without letting one high-volume feed crowd out a desk.
   const selected:FeedStory[]=[];
   const selectedUrls=new Set<string>();
-  for(const desk of ["world","sports","entertainment"] as const){
-    for(const story of byScore.filter((candidate)=>candidate.desk===desk).slice(0,12)){
+  const add=(stories:FeedStory[])=>{
+    for(const story of stories){
+      if(selectedUrls.has(story.articleUrl))continue;
       selected.push(story);
       selectedUrls.add(story.articleUrl);
     }
+  };
+
+  // Keep a meaningful Canadian briefing in both the world-only endpoint used
+  // by the intelligence map and the combined Best 180 homepage carousel.
+  add(byScore.filter((story)=>story.countryFocus==="Canada").slice(0,36));
+
+  if(includeAllDesks){
+    // Reserve a small representation floor for every newsroom, then fill the
+    // remaining places strictly by score.
+    for(const desk of ["world","sports","entertainment"] as const){
+      add(byScore.filter((candidate)=>candidate.desk===desk).slice(0,12));
+    }
   }
+
   for(const story of byScore){
     if(selected.length>=180)break;
     if(selectedUrls.has(story.articleUrl))continue;
