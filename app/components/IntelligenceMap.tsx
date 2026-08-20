@@ -1,7 +1,8 @@
 "use client";
 
 import {useEffect,useMemo,useState} from "react";
-import {CircleMarker,MapContainer,Polyline,TileLayer,Tooltip,useMap,useMapEvents,ZoomControl} from "react-leaflet";
+import {divIcon} from "leaflet";
+import {CircleMarker,MapContainer,Marker,Polyline,TileLayer,Tooltip,useMap,useMapEvents,ZoomControl} from "react-leaflet";
 
 export type IntelSeverity="critical"|"elevated"|"watch"|"stable";
 export type IntelLayer="Headlines"|"Earthquakes"|"Wildfires"|"Storms"|"Volcanoes"|"Floods"|"Other natural"|"Infrastructure";
@@ -28,6 +29,47 @@ const layerOrder:IntelLayer[]=["Headlines","Earthquakes","Wildfires","Storms","V
 const layerIcons:Record<IntelLayer,string>={Headlines:"▤",Earthquakes:"≋",Wildfires:"♨",Storms:"◌",Volcanoes:"△",Floods:"≈","Other natural":"◇",Infrastructure:"⌘"};
 const colors:Record<IntelSeverity,string>={critical:"#ff4d5b",elevated:"#ff8b4a",watch:"#f6ce52",stable:"#4dd4a8"};
 const severityRank:Record<IntelSeverity,number>={critical:4,elevated:3,watch:2,stable:1};
+const outlineSvg=(body:string)=>`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${body}</svg>`;
+const markerSymbols:Record<IntelLayer,string>={
+  Headlines:outlineSvg('<path d="M5 4h14v16H5z"/><path d="M8 8h3v3H8zM14 8h3M14 11h3M8 15h9M8 18h6"/>'),
+  Earthquakes:outlineSvg('<path d="M3 13h4l2-7 4 13 2-8 2 4h4"/>'),
+  Wildfires:outlineSvg('<path d="M12 21c-4 0-7-2.7-7-6.4 0-2.5 1.5-4.4 3.8-6.8.2 2 1.3 3.1 2.2 3.8.2-3.4 1.8-5.8 4.1-8.1.2 3 1.3 4.8 2.4 6.3 1 1.4 1.5 2.9 1.5 4.8 0 3.7-3 6.4-7 6.4Z"/><path d="M12 21c-1.8 0-3.1-1.2-3.1-2.9 0-1.5.9-2.5 2.4-4.1.2 1.3.8 2 1.4 2.5.2-1.5.8-2.7 1.6-3.7.5 1.7.9 2.5.9 3.7 0 2.4-1.4 4.5-3.2 4.5Z"/>'),
+  Storms:outlineSvg('<path d="M5 8.5c1.7-3 5.4-4.2 8.5-2.7 2.5 1.2 3.7 4.2 2.5 6.7-1 2-3.4 2.9-5.4 1.9-1.6-.8-2.3-2.7-1.5-4.3.6-1.2 2.1-1.7 3.3-1.1"/><path d="M3.5 15.5c2.3 3.4 6.8 4.7 10.6 3"/>'),
+  Volcanoes:outlineSvg('<path d="m3 20 6.2-10 2.8 4 2.3-3.2L21 20Z"/><path d="M9.2 10 11 7.4 13 10l1.6-2.2"/><path d="M10 5.3c-.2-1.1.5-2.1 1.6-2.3M14 5.3c.4-1 .1-2-.7-2.7"/>'),
+  Floods:outlineSvg('<path d="M3 8c2 0 2 1.5 4 1.5S9 8 11 8s2 1.5 4 1.5S17 8 19 8s2 1.5 2 1.5M3 13c2 0 2 1.5 4 1.5S9 13 11 13s2 1.5 4 1.5S17 13 19 13s2 1.5 2 1.5M3 18c2 0 2 1.5 4 1.5S9 18 11 18s2 1.5 4 1.5S17 18 19 18s2 1.5 2 1.5"/>'),
+  "Other natural":outlineSvg('<path d="m12 3 9 9-9 9-9-9Z"/><path d="M12 7.5v5.5M12 16.5h.01"/>'),
+  Infrastructure:outlineSvg('<path d="M4 20h16M6 20V9l6-5 6 5v11M9 20v-6h6v6"/>'),
+};
+const infrastructureSymbols={
+  port:outlineSvg('<circle cx="12" cy="5" r="2"/><path d="M12 7v13M5 10h14M5 15c1.5 3.5 3.8 5 7 5s5.5-1.5 7-5M5 15H2.8M19 15h2.2"/>'),
+  route:outlineSvg('<path d="M5 3v5c0 4 2 5 7 5s7 1 7 5v3M19 3v5c0 3-1.5 4.5-4.5 4.9M5 21v-3c0-2.7 1-4.1 3.2-4.7"/>'),
+  energy:outlineSvg('<path d="m13.5 2-7 11h5L10.5 22l7-12h-5Z"/>'),
+  digital:outlineSvg('<circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="m7 11 10-4M7 13l10 4M19 8v8"/>'),
+  aviation:outlineSvg('<path d="m3 14 7-3 2-8 2 1-1 7 6 3c1 .5 1.5 1.3 1.5 2L13 15l-1 5-1.5-.5-.5-5-7-1Z"/>'),
+};
+const clusterSymbol=outlineSvg('<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><path d="M16.5 13v7M13 16.5h7"/>');
+function symbolFor(point:IntelPoint){
+  if(point.layer!=="Infrastructure")return markerSymbols[point.layer];
+  const category=(point.category??point.title).toLowerCase();
+  if(/air|aviation/.test(category))return infrastructureSymbols.aviation;
+  if(/digital|cable|network/.test(category))return infrastructureSymbols.digital;
+  if(/energy|oil|gas|lng/.test(category))return infrastructureSymbols.energy;
+  if(/chokepoint|corridor|strait|canal|passage/.test(category))return infrastructureSymbols.route;
+  if(/port|terminal|maritime/.test(category))return infrastructureSymbols.port;
+  return markerSymbols.Infrastructure;
+}
+function iconFor(cluster:Cluster){
+  const count=cluster.points.length;
+  const size=count>1?40:34;
+  const symbol=count>1?clusterSymbol:symbolFor(cluster.points[0]);
+  return divIcon({
+    className:"intel-div-icon",
+    html:`<span class="intel-symbol-marker ${cluster.severity} ${count>1?"cluster":""}">${symbol}${count>1?`<b>${count}</b>`:""}</span>`,
+    iconSize:[size,size],
+    iconAnchor:[size/2,size/2],
+    tooltipAnchor:[0,-size/2+3],
+  });
+}
 const basemaps:Record<Basemap,{url:string;attribution:string}>={
   dark:{url:"https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'},
   light:{url:"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'},
@@ -146,18 +188,17 @@ export default function IntelligenceMap({points,status,fetchedAt,sourceLine}:{po
               setSelectedCluster([...cluster.points].sort((a,b)=>severityRank[b.severity]-severityRank[a.severity]));
               setMobilePanel("feed");
             };
-            return <CircleMarker
+            return <Marker
               key={cluster.key}
-              center={[cluster.lat,cluster.lng]}
-              radius={count===1?(primary.layer==="Infrastructure"?7:8):Math.min(24,10+Math.log2(count)*3)}
+              position={[cluster.lat,cluster.lng]}
+              icon={iconFor(cluster)}
+              title={count>1?`${count} signals`:primary.title}
               eventHandlers={{click:inspect}}
-              className={`intel-map-marker ${cluster.severity} ${count>1?"cluster":""}`}
-              pathOptions={{color:count>1?"#eaf4fa":"#07131c",weight:count>1?2.5:2,fillColor:colors[cluster.severity],fillOpacity:.96}}
             >
-              <Tooltip direction="top" offset={[0,-8]} opacity={1}>
+              <Tooltip direction="top" offset={[0,-5]} opacity={1}>
                 {count>1?<><strong>{count} signals</strong><span>Click to inspect cluster</span></>:<><strong>{primary.title}</strong><span>{primary.category?`${primary.category} · `:""}{primary.layer} · {primary.source}</span></>}
               </Tooltip>
-            </CircleMarker>;
+            </Marker>;
           })}
         </MapContainer>
 

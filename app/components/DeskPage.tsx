@@ -127,7 +127,7 @@ export default function DeskPage({config}:{config:DeskConfig}){
       <button onClick={()=>void loadNews()} className={`desk-live ${status}`}><i/>{status==="loading"?"Connecting":status==="error"?"Retry feeds":status==="partial"?"Partial feed":"Live desk"}</button>
     </header>
 
-    <nav className="desk-mobile-tabs" aria-label="Switch newsroom"><Link href="/">World</Link><Link aria-current={config.desk==="entertainment"?"page":undefined} className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link aria-current={config.desk==="sports"?"page":undefined} className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
+    <nav className="desk-mobile-tabs" aria-label="Switch newsroom"><Link href="/">World</Link><Link href="/intelligence">Intel</Link><Link aria-current={config.desk==="entertainment"?"page":undefined} className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link aria-current={config.desk==="sports"?"page":undefined} className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
 
     <section className="desk-masthead">
       <div className="desk-title-block"><p>{config.eyebrow}</p><h1>{config.title}</h1><span>{config.intro}</span></div>
