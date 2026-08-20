@@ -155,7 +155,7 @@ export default function IntelligenceMap({points,status,fetchedAt,sourceLine}:{po
               pathOptions={{color:count>1?"#eaf4fa":"#07131c",weight:count>1?2.5:2,fillColor:colors[cluster.severity],fillOpacity:.96}}
             >
               <Tooltip direction="top" offset={[0,-8]} opacity={1}>
-                {count>1?<><strong>{count} signals</strong><span>Click to inspect cluster</span></>:<><strong>{primary.title}</strong><span>{primary.layer} · {primary.source}</span></>}
+                {count>1?<><strong>{count} signals</strong><span>Click to inspect cluster</span></>:<><strong>{primary.title}</strong><span>{primary.category?`${primary.category} · `:""}{primary.layer} · {primary.source}</span></>}
               </Tooltip>
             </CircleMarker>;
           })}
