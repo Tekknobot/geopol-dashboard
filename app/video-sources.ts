@@ -15,6 +15,7 @@ export type VideoSource = {
   focus: string;
   region: string;
   desk: VideoDesk;
+  room?: "sports" | "entertainment";
 };
 
 export const VIDEO_DESKS: Array<"All" | VideoDesk> = [
@@ -43,6 +44,18 @@ export const VIDEO_SOURCES: VideoSource[] = [
   { id: "nhk-world-japan", name: "NHK World-Japan", channelId: "UCSPEjw8F2nQDtmUKPFNF7_A", channelUrl: "https://www.youtube.com/@NHKWORLDJAPAN", focus: "Japan, East Asia and regional public-service reporting", region: "Japan / Asia", desk: "Asia-Pacific" },
   { id: "africanews", name: "Africanews", channelId: "UC1_E8NeF5QHY2dtdLRBCCLA", channelUrl: "https://www.youtube.com/@africanews", focus: "Pan-African politics, economies and regional affairs", region: "Africa", desk: "Africa" },
   { id: "cnbc-international", name: "CNBC International", channelId: "UCo7a6riBFJ3tkeHjvkXPn1g", channelUrl: "https://www.youtube.com/@CNBCInternational", focus: "Global business, economies, energy and markets", region: "Global markets", desk: "Markets" },
+  { id: "espn", name: "ESPN", channelId: "UCiWLfSweyRNmLpgEHekhoAg", channelUrl: "https://www.youtube.com/@espn", focus: "Scores, interviews and major competitions", region: "United States / Global", desk: "Americas", room: "sports" },
+  { id: "nba", name: "NBA", channelId: "UCWJ2lWNubArHWmf3FIHbfcQ", channelUrl: "https://www.youtube.com/@NBA", focus: "Official basketball highlights and reports", region: "Global basketball", desk: "Americas", room: "sports" },
+  { id: "nfl", name: "NFL", channelId: "UCDVYQ4Zhbm3S2dlz7P1GBDg", channelUrl: "https://www.youtube.com/@NFL", focus: "Official American football highlights", region: "United States", desk: "Americas", room: "sports" },
+  { id: "mlb", name: "MLB", channelId: "UCoLrcjPV5PbUrUyXq5mjc_A", channelUrl: "https://www.youtube.com/@MLB", focus: "Official baseball highlights and news", region: "Americas / Global", desk: "Americas", room: "sports" },
+  { id: "formula-one", name: "Formula 1", channelId: "UCBV0ghP9x4k2e6rv1MjNZLg", channelUrl: "https://www.youtube.com/@Formula1", focus: "Official Formula 1 highlights and features", region: "Global motorsport", desk: "Europe", room: "sports" },
+  { id: "fifa", name: "FIFA", channelId: "UCpcTrCXblq78GZrTUTLWeBw", channelUrl: "https://www.youtube.com/@fifa", focus: "Official international football coverage", region: "Global football", desk: "Europe", room: "sports" },
+  { id: "netflix", name: "Netflix", channelId: "UCWOA1ZGywLbqmigxE4Qlvuw", channelUrl: "https://www.youtube.com/@Netflix", focus: "Official trailers and series previews", region: "Global entertainment", desk: "Wires", room: "entertainment" },
+  { id: "sony-pictures", name: "Sony Pictures", channelId: "UCz97F7dMxBNOfGYu3rx8aCw", channelUrl: "https://www.youtube.com/@SonyPictures", focus: "Official film trailers and features", region: "Global film", desk: "Americas", room: "entertainment" },
+  { id: "warner-bros", name: "Warner Bros. Pictures", channelId: "UCjmJDM5pRKbUlVIzDYYWb6g", channelUrl: "https://www.youtube.com/@WarnerBrosPictures", focus: "Official film trailers and announcements", region: "Global film", desk: "Americas", room: "entertainment" },
+  { id: "ign", name: "IGN", channelId: "UCKy1dAqELo0zrOtPkf0eTMw", channelUrl: "https://www.youtube.com/@IGN", focus: "Games, film and entertainment coverage", region: "Global gaming", desk: "Wires", room: "entertainment" },
+  { id: "gamespot", name: "GameSpot", channelId: "UCbu2SsF-Or3Rsn3NxqODImw", channelUrl: "https://www.youtube.com/@GameSpot", focus: "Game trailers, reviews and industry news", region: "Global gaming", desk: "Wires", room: "entertainment" },
+  { id: "npr-music", name: "NPR Music", channelId: "UC4eYXhJI4-7wSWc8UNRwD4A", channelUrl: "https://www.youtube.com/@nprmusic", focus: "Music performances, interviews and discovery", region: "United States / Global", desk: "Americas", room: "entertainment" },
 ];
 
 export const uploadsPlaylistFor = (channelId: string) =>

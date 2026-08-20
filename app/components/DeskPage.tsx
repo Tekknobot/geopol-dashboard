@@ -4,6 +4,8 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeskVideoSection from "./DeskVideoSection";
+import { useSavedStories } from "./useSavedStories";
+import { ReleaseRadar, SportsMatchHub } from "./NewsroomFeatures";
 
 const WorldEventMap = dynamic(() => import("./WorldEventMap"), {
   ssr: false,
@@ -70,6 +72,7 @@ export default function DeskPage({config}:{config:DeskConfig}){
   const [query,setQuery]=useState("");
   const [appliedQuery,setAppliedQuery]=useState("");
   const heroTouchX=useRef<number|null>(null);
+  const {savedIds,toggleSaved}=useSavedStories();
 
   const loadNews=useCallback(async()=>{
     setStatus((current)=>current==="error"?"loading":current);
@@ -96,7 +99,7 @@ export default function DeskPage({config}:{config:DeskConfig}){
   const categories=useMemo(()=>{
     const counts=new Map<string,number>();
     stories.forEach((story)=>counts.set(story.category,(counts.get(story.category)??0)+1));
-    return config.categories.map((item)=>({...item,count:counts.get(item.name)??0}));
+    return config.categories.map((item)=>({...item,count:counts.get(item.name)??0})).filter((item)=>item.count>0);
   },[config.categories,stories]);
   const sources=useMemo(()=>new Set(stories.map((story)=>story.source)).size,[stories]);
   const mapped=useMemo(()=>stories.filter((story)=>story.location).length,[stories]);
@@ -139,7 +142,7 @@ export default function DeskPage({config}:{config:DeskConfig}){
       {hero?<section className="desk-hero" aria-label="Top story carousel" onTouchStart={(event)=>{heroTouchX.current=event.touches[0]?.clientX??null;}} onTouchEnd={(event)=>finishHeroSwipe(event.changedTouches[0]?.clientX??0)}>
         <StoryImage story={hero} className="desk-hero-image"/>
         <div className="desk-hero-shade"/>
-        <div className="desk-hero-copy"><p><span>TOP STORY</span>{hero.category} · {hero.region}</p><h2>{hero.title}</h2><div className="desk-hero-meta"><strong>{hero.source}</strong><time dateTime={hero.publishedAt} title={exactTime(hero.publishedAt)}>{relativeTime(hero.publishedAt,clock)}</time><span>{hero.read} read</span></div><p className="desk-hero-summary">{hero.summary}</p><a href={hero.articleUrl} target="_blank" rel="noreferrer">Read original story ↗</a></div>
+        <div className="desk-hero-copy"><p><span>TOP STORY</span>{hero.category} · {hero.region}</p><h2>{hero.title}</h2><div className="desk-hero-meta"><strong>{hero.source}</strong><time dateTime={hero.publishedAt} title={exactTime(hero.publishedAt)}>{relativeTime(hero.publishedAt,clock)}</time><span>{hero.read} read</span></div><p className="desk-hero-summary">{hero.summary}</p><div className="desk-hero-actions"><a href={hero.articleUrl} target="_blank" rel="noreferrer">Read original story ↗</a><button type="button" className={savedIds.includes(hero.id)?"saved":""} onClick={()=>toggleSaved(hero)}>{savedIds.includes(hero.id)?"◆ Saved":"◇ Save"}</button></div></div>
         <button className="desk-carousel-arrow previous" onClick={()=>stepHero(-1)} aria-label="Previous top story">‹</button><button className="desk-carousel-arrow next" onClick={()=>stepHero(1)} aria-label="Next top story">›</button>
         <div className="desk-carousel-dots">{stories.slice(0,8).map((story,index)=><button key={story.id} className={index===heroIndex?"active":""} onClick={()=>setHeroIndex(index)} aria-label={`Show story ${index+1}`}/>)}</div>
         <span className="desk-carousel-count">{String(heroIndex+1).padStart(2,"0")} / {stories.length}</span>
@@ -155,9 +158,11 @@ export default function DeskPage({config}:{config:DeskConfig}){
 
         <DeskVideoSection desk={config.desk}/>
 
+        {config.desk==="entertainment"?<ReleaseRadar stories={stories}/>:<SportsMatchHub stories={stories}/>}
+
         <section className="desk-map-section"><div className="desk-section-heading"><div><p>GLOBAL FOOTPRINT</p><h2>{config.desk==="sports"?"Where sport is happening":"Where culture is moving"}</h2></div><span>{mapped} live locations</span></div><WorldEventMap mode="Events" stories={stories} filter={[topic==="All"?"":topic,region==="All regions"?"":region,appliedQuery].filter(Boolean).join(" ")}/></section>
 
-        <section className="desk-wire" id="desk-wire"><div className="desk-section-heading wire-heading"><div><p>LIVE HEADLINE WIRE</p><h2>{topic==="All"?`Latest ${config.desk}`:topic}</h2><span>{filtered.length} verified headline{filtered.length===1?"":"s"}</span></div><select value={region} onChange={(event)=>setRegion(event.target.value)} aria-label="Filter headlines by region">{regions.map((item)=><option key={item}>{item}</option>)}</select></div>{status==="partial"&&<p className="desk-feed-note">Some publishers are temporarily unavailable. Available stories retain their original links and publication times.</p>}<div className="desk-wire-list">{filtered.map((story)=><article key={story.id}><a href={story.articleUrl} target="_blank" rel="noreferrer"><span className={`status-dot ${story.level}`}/><div><p>{story.category} · {story.region}</p><h3>{story.title}</h3><small>{story.source} · <time dateTime={story.publishedAt} title={exactTime(story.publishedAt)}>{relativeTime(story.publishedAt,clock)}</time> · {story.read}</small></div><b>↗</b></a></article>)}</div>{!filtered.length&&status!=="loading"&&<div className="desk-no-results"><strong>No matching headlines</strong><p>Try another topic, region or search phrase.</p><button onClick={reset}>Reset filters</button></div>}</section>
+        <section className="desk-wire" id="desk-wire"><div className="desk-section-heading wire-heading"><div><p>LIVE HEADLINE WIRE</p><h2>{topic==="All"?`Latest ${config.desk}`:topic}</h2><span>{filtered.length} verified headline{filtered.length===1?"":"s"}</span></div><select value={region} onChange={(event)=>setRegion(event.target.value)} aria-label="Filter headlines by region">{regions.map((item)=><option key={item}>{item}</option>)}</select></div>{status==="partial"&&<p className="desk-feed-note">Some publishers are temporarily unavailable. Available stories retain their original links and publication times.</p>}<div className="desk-wire-list">{filtered.map((story)=><article key={story.id}><a href={story.articleUrl} target="_blank" rel="noreferrer"><span className={`status-dot ${story.level}`}/><div><p>{story.category} · {story.region}</p><h3>{story.title}</h3><small>{story.source} · <time dateTime={story.publishedAt} title={exactTime(story.publishedAt)}>{relativeTime(story.publishedAt,clock)}</time> · {story.read}</small></div><b>↗</b></a><button type="button" className={`desk-wire-save ${savedIds.includes(story.id)?"saved":""}`} onClick={()=>toggleSaved(story)} aria-label={`${savedIds.includes(story.id)?"Remove":"Save"} ${story.title}`}>{savedIds.includes(story.id)?"◆":"◇"}</button></article>)}</div>{!filtered.length&&status!=="loading"&&<div className="desk-no-results"><strong>No matching headlines</strong><p>Try another topic, region or search phrase.</p><button onClick={reset}>Reset filters</button></div>}</section>
       </div>
 
       <aside className="desk-side-column">

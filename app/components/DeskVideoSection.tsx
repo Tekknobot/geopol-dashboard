@@ -37,8 +37,9 @@ export default function DeskVideoSection({desk}:{desk:Desk}){
   },[]);
 
   const deskVideos=useMemo(()=>{
-    const matches=videos.filter((video)=>keywords[desk].some((word)=>video.title.toLowerCase().includes(word)));
-    const remainder=videos.filter((video)=>!matches.some((match)=>match.videoId===video.videoId));
+    const roomVideos=videos.filter((video)=>VIDEO_SOURCES.find((source)=>source.id===video.sourceId)?.room===desk);
+    const matches=roomVideos.filter((video)=>keywords[desk].some((word)=>video.title.toLowerCase().includes(word)));
+    const remainder=roomVideos.filter((video)=>!matches.some((match)=>match.videoId===video.videoId));
     return [...matches,...remainder].slice(0,6);
   },[desk,videos]);
   const active=deskVideos.find((video)=>video.videoId===activeId)??deskVideos[0]??null;

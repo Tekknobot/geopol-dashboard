@@ -88,6 +88,7 @@ export const NEWS_CATEGORIES = [
   "Celebrity & Creators",
   "Arts & Design",
   "Football",
+  "American Football",
   "Basketball",
   "Baseball",
   "Hockey",
@@ -127,7 +128,8 @@ const ENTERTAINMENT_RULES: Array<[NewsCategory, RegExp]> = [
 const SPORTS_RULES: Array<[NewsCategory, RegExp]> = [
   ["Women's Sport", /women's|womens|\bwnba\b|\bnwsl\b|women's super league|female athlete/i],
   ["Olympics & Paralympics", /olympic|paralympic|games bid|summer games|winter games/i],
-  ["Football", /football|soccer|premier league|champions league|world cup|\bnfl\b|quarterback|touchdown/i],
+  ["American Football", /american football|gridiron|\bnfl\b|super bowl|quarterback|touchdown|wide receiver/i],
+  ["Football", /football|soccer|premier league|champions league|world cup|la liga|bundesliga|serie a|ligue 1/i],
   ["Basketball", /basketball|\bnba\b|\bwnba\b|euroleague|march madness/i],
   ["Baseball", /baseball|\bmlb\b|world series|home run|pitcher|innings?/i],
   ["Hockey", /hockey|\bnhl\b|stanley cup|ice rink/i],

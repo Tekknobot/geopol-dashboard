@@ -65,7 +65,7 @@ const parser = new XMLParser({
   parseTagValue: false,
 });
 
-type LocationMatch = NonNullable<FeedStory["location"]> & { aliases: string[] };
+type LocationMatch = NonNullable<FeedStory["location"]> & { aliases: string[]; region?: FeedStory["region"] };
 const hotspotLocations: LocationMatch[] = [
   {name:"Los Angeles",lat:34.05,lng:-118.24,precision:"hotspot",aliases:["Los Angeles","Hollywood"]},
   {name:"New York City",lat:40.71,lng:-74.01,precision:"hotspot",aliases:["New York City","New York"]},
@@ -101,6 +101,14 @@ const hotspotLocations: LocationMatch[] = [
   {name:"Amazon Basin",lat:-4,lng:-62,precision:"hotspot",aliases:["Amazon Basin","the Amazon","Amazon"]},
   {name:"Pacific Islands",lat:-10,lng:-165,precision:"hotspot",aliases:["Pacific Islands","Pacific states"]},
 ];
+const countryRegion=(region:string,subregion:string):FeedStory["region"]=>{
+  if(subregion==="Western Asia")return "Middle East";
+  if(region==="Europe")return "Europe";
+  if(region==="Africa")return "Africa";
+  if(region==="Americas")return "Americas";
+  if(region==="Asia"||region==="Oceania")return "Asia Pacific";
+  return "Global";
+};
 const countryLocations: LocationMatch[] = countries.flatMap((country) => {
   if (country.latlng.length < 2) return [];
   const aliases = [country.name.common,country.name.official,...country.altSpellings]
@@ -113,17 +121,16 @@ const countryLocations: LocationMatch[] = countries.flatMap((country) => {
   if (country.cca3 === "PRK") aliases.push("North Korea");
   if (country.cca3 === "TUR") aliases.push("Turkey");
   if (country.cca3 === "CIV") aliases.push("Ivory Coast");
-  return [{name:country.name.common,lat:country.latlng[0],lng:country.latlng[1],precision:"country" as const,aliases}];
+  return [{name:country.name.common,lat:country.latlng[0],lng:country.latlng[1],precision:"country" as const,aliases,region:countryRegion(country.region,country.subregion)}];
 });
 const locationMatches = [...hotspotLocations,...countryLocations]
   .flatMap((location) => location.aliases.map((alias) => ({location,alias})))
   .sort((left,right) => right.alias.length-left.alias.length);
 const escapePattern = (value:string) => value.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
-const locationFor = (value:string):FeedStory["location"] => {
+const locationMatchFor = (value:string):LocationMatch|undefined => {
   const match = locationMatches.find(({alias}) => new RegExp(`(^|[^\\p{L}])${escapePattern(alias)}(?=$|[^\\p{L}])`,"iu").test(value));
   if (!match) return undefined;
-  const {name,lat,lng,precision} = match.location;
-  return {name,lat,lng,precision};
+  return match.location;
 };
 
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" ? value as Record<string, unknown> : {};
@@ -187,8 +194,22 @@ const regionRules: Array<[FeedStory["region"], RegExp]> = [
   ["Africa", /africa|sudan|congo|sahel|ethiopia|somalia|kenya|nigeria|south africa|libya|egypt/i],
   ["Americas", /united states|u\.s\.|usa|canada|mexico|brazil|argentina|colombia|venezuela|caribbean|america/i],
 ];
-const regionFor = (value: string) => regionRules.find(([, rule]) => rule.test(value))?.[0] ?? "Global";
-const levelFor = (value: string): FeedStory["level"] => /war|attack|missile|killed|earthquake|emergency|invasion/i.test(value) ? "critical" : /sanction|military|conflict|crisis|flood|wildfire|tariff/i.test(value) ? "elevated" : /talks|election|trade|market|climate|security/i.test(value) ? "watch" : "stable";
+const regionFor = (value: string,location?:LocationMatch) => regionRules.find(([, rule]) => rule.test(value))?.[0] ?? location?.region ?? "Global";
+const levelFor = (value: string,desk:NewsDesk): FeedStory["level"] => {
+  if(desk==="sports"){
+    if(/event cancelled|match abandoned|serious injury|medical emergency|security incident/i.test(value))return "critical";
+    if(/champion|championship|final|wins?|defeats?|title|record/i.test(value))return "elevated";
+    if(/live|fixture|schedule|injury|tournament|qualif/i.test(value))return "watch";
+    return "stable";
+  }
+  if(desk==="entertainment"){
+    if(/production halted|festival cancelled|medical emergency|security incident/i.test(value))return "critical";
+    if(/award|acquisition|merger|strike|cancelled|renewed|box office record/i.test(value))return "elevated";
+    if(/release|premiere|trailer|album|tour|streaming|festival/i.test(value))return "watch";
+    return "stable";
+  }
+  return /war|attack|missile|killed|earthquake|emergency|invasion/i.test(value) ? "critical" : /sanction|military|conflict|crisis|flood|wildfire|tariff/i.test(value) ? "elevated" : /talks|election|trade|market|climate|security/i.test(value) ? "watch" : "stable";
+};
 const tagsFor = (value: string, category: string, region: string) => {
   const stop = new Set(["about","after","against","amid","from","have","into","over","says","that","their","this","with","world"]);
   const words = value.toLowerCase().match(/[a-z][a-z-]{3,}/g) ?? [];
@@ -244,8 +265,9 @@ export function parseFeed(xml: string, feed: FeedDefinition): FeedStory[] {
     const timestamp = Date.parse(rawDate);
     if (!title || !articleUrl || !Number.isFinite(timestamp)) return [];
     const combined = `${title} ${summary}`;
+    const matchedLocation=locationMatchFor(combined);
     const category = categoryForDesk(combined, feed.desk);
-    const region = regionFor(combined);
+    const region = regionFor(combined,matchedLocation);
     const wordCount = `${title} ${summary}`.split(/\s+/).length;
     return [{
       id: hash(articleUrl),
@@ -253,15 +275,15 @@ export function parseFeed(xml: string, feed: FeedDefinition): FeedStory[] {
       category,
       region,
       publishedAt: new Date(timestamp).toISOString(),
-      level: levelFor(combined),
+      level: levelFor(combined,feed.desk),
       title,
       summary: summary || "Open the original report for the publisher's full coverage.",
       source: feed.source,
-      read: `${Math.max(2, Math.ceil(wordCount / 45))} min`,
+      read: `~${Math.max(2, Math.ceil(wordCount / 45))} min`,
       tags: tagsFor(title, category, region),
       articleUrl,
       imageUrl: imageLink(item, rawDescription),
-      location: locationFor(combined),
+      location: matchedLocation?{name:matchedLocation.name,lat:matchedLocation.lat,lng:matchedLocation.lng,precision:matchedLocation.precision}:undefined,
     }];
   });
 }

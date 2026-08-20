@@ -34,28 +34,29 @@ export default function VideoNewsDesk(){
     return()=>controller.abort();
   },[]);
 
-  const activeSource=VIDEO_SOURCES.find((source)=>source.id===activeId)??VIDEO_SOURCES[0];
+  const worldSources=VIDEO_SOURCES.filter((source)=>!source.room);
+  const activeSource=worldSources.find((source)=>source.id===activeId)??worldSources[0];
   const activeVideo=latestVideos.find((video)=>video.sourceId===activeSource.id);
-  const visibleSources=useMemo(()=>activeDesk==="All"?VIDEO_SOURCES:VIDEO_SOURCES.filter((source)=>source.desk===activeDesk),[activeDesk]);
+  const visibleSources=useMemo(()=>activeDesk==="All"?worldSources:worldSources.filter((source)=>source.desk===activeDesk),[activeDesk,worldSources]);
   const playlistId=uploadsPlaylistFor(activeSource.channelId);
   const playerUrl=activeVideo?`https://www.youtube-nocookie.com/embed/${activeVideo.videoId}?rel=0&list=${playlistId}`:`https://www.youtube-nocookie.com/embed/videoseries?list=${playlistId}&rel=0`;
 
   const selectSource=(id:string)=>{setActiveId(id);setPlayerLoaded(false);};
   const selectDesk=(desk:"All"|VideoDesk)=>{
     setActiveDesk(desk);
-    const firstSource=desk==="All"?VIDEO_SOURCES[0]:VIDEO_SOURCES.find((source)=>source.desk===desk);
+    const firstSource=desk==="All"?worldSources[0]:worldSources.find((source)=>source.desk===desk);
     if(firstSource)selectSource(firstSource.id);
   };
 
   return(
     <section className="video-news-panel panel" id="video-intelligence-section">
       <div className="panel-heading video-news-heading">
-        <div><p>OFFICIAL PUBLISHER VIDEO</p><h3>Video intelligence</h3><span>Latest uploads from {VIDEO_SOURCES.length} selected international newsrooms</span></div>
+        <div><p>OFFICIAL PUBLISHER VIDEO</p><h3>Video intelligence</h3><span>Latest uploads from {worldSources.length} selected international newsrooms</span></div>
         <div className={`video-news-status ${feedState}`}><i/>{feedState==="loading"?"CHECKING FEEDS":"PUBLISHER FEEDS"}</div>
       </div>
 
       <div className="video-desk-filters" aria-label="Filter video sources">
-        {VIDEO_DESKS.map((desk)=><button key={desk} type="button" className={activeDesk===desk?"active":""} onClick={()=>selectDesk(desk)} aria-pressed={activeDesk===desk}>{desk}<span>{desk==="All"?VIDEO_SOURCES.length:VIDEO_SOURCES.filter((source)=>source.desk===desk).length}</span></button>)}
+        {VIDEO_DESKS.map((desk)=><button key={desk} type="button" className={activeDesk===desk?"active":""} onClick={()=>selectDesk(desk)} aria-pressed={activeDesk===desk}>{desk}<span>{desk==="All"?worldSources.length:worldSources.filter((source)=>source.desk===desk).length}</span></button>)}
       </div>
 
       <div className="video-news-layout">

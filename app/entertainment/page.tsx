@@ -19,6 +19,7 @@ const config:DeskConfig={
     {name:"Theatre",glyph:"◒",description:"Stage, Broadway, West End and performance"},
     {name:"Celebrity & Creators",glyph:"◎",description:"Public figures and digital creators"},
     {name:"Arts & Design",glyph:"◇",description:"Art, museums, exhibitions and design"},
+    {name:"Society & Culture",glyph:"◎",description:"Culture, communities and creative movements"},
   ],
   lenses:[
     {title:"On screen",copy:"Follow cinema, television and the shifting streaming landscape.",topics:["Film","Television","Streaming"]},
