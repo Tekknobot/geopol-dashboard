@@ -8,7 +8,7 @@ const IntelligenceMap=dynamic(()=>import("../components/IntelligenceMap"),{ssr:f
 
 type Story={id:number;desk:"world"|"entertainment"|"sports";category:string;region:string;publishedAt:string;level:IntelSeverity;title:string;summary:string;source:string;articleUrl:string;location?:{name:string;lat:number;lng:number;precision:"country"|"hotspot"}};
 type NewsResponse={stories:Story[];sources:string[];fetchedAt:string;failedFeeds:number;totalFeeds:number};
-type NaturalEvent={id:string;layer:Exclude<IntelPoint["layer"],"Headlines"|"Infrastructure">;title:string;summary:string;lat:number;lng:number;occurredAt:string;severity:IntelSeverity;source:string;sourceUrl:string};
+type NaturalEvent={id:string;layer:Exclude<IntelPoint["layer"],"Headlines"|"Infrastructure">;title:string;summary:string;lat:number;lng:number;occurredAt:string;severity:IntelSeverity;source:string;sourceUrl:string;active?:boolean};
 type IntelligenceResponse={fetchedAt:string;status:"live"|"partial"|"unavailable";events:NaturalEvent[];sources:Array<{id:string;label:string;url:string;status:"live"|"unavailable"}>};
 
 const infrastructure:IntelPoint[]=[

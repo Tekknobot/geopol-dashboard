@@ -19,6 +19,7 @@ export type IntelPoint={
   location?:string;
   category?:string;
   reference?:boolean;
+  active?:boolean;
 };
 
 type Cluster={key:string;lat:number;lng:number;points:IntelPoint[];severity:IntelSeverity};
@@ -95,7 +96,7 @@ export default function IntelligenceMap({points,status,fetchedAt,sourceLine}:{po
   const filtered=useMemo(()=>{
     const needle=query.trim().toLowerCase();
     const cutoff=Date.now()-timeWindow*3600000;
-    return points.filter((point)=>activeLayers.has(point.layer)&&(point.reference||Date.parse(point.occurredAt)>=cutoff)&&(!needle||[point.title,point.summary,point.source,point.location,point.category,point.layer].join(" ").toLowerCase().includes(needle)));
+    return points.filter((point)=>activeLayers.has(point.layer)&&(point.reference||point.active||Date.parse(point.occurredAt)>=cutoff)&&(!needle||[point.title,point.summary,point.source,point.location,point.category,point.layer].join(" ").toLowerCase().includes(needle)));
   },[activeLayers,points,query,timeWindow]);
   const sorted=useMemo(()=>[...filtered].sort((a,b)=>severityRank[b.severity]-severityRank[a.severity]||Date.parse(b.occurredAt)-Date.parse(a.occurredAt)),[filtered]);
   const clusters=useMemo(()=>clustersFor(filtered,zoom),[filtered,zoom]);
