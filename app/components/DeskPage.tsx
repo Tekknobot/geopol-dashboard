@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import DeskVideoSection from "./DeskVideoSection";
 import { useSavedStories } from "./useSavedStories";
 import { ReleaseRadar, SportsMatchHub } from "./NewsroomFeatures";
+import MobileSiteNav from "./MobileSiteNav";
 
 const WorldEventMap = dynamic(() => import("./WorldEventMap"), {
   ssr: false,
@@ -126,6 +127,7 @@ export default function DeskPage({config}:{config:DeskConfig}){
       <nav aria-label="ATLAS newsrooms"><Link href="/">World</Link><Link href="/intelligence">Intelligence</Link><Link aria-current={config.desk==="entertainment"?"page":undefined} className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link aria-current={config.desk==="sports"?"page":undefined} className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
       <button onClick={()=>void loadNews()} className={`desk-live ${status}`}><i/>{status==="loading"?"Connecting":status==="error"?"Retry feeds":status==="partial"?"Partial feed":"Live desk"}</button>
     </header>
+    <MobileSiteNav/>
 
     <nav className="desk-mobile-tabs" aria-label="Switch newsroom"><Link href="/">World</Link><Link aria-current={config.desk==="entertainment"?"page":undefined} className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link aria-current={config.desk==="sports"?"page":undefined} className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
 

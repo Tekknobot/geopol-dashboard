@@ -3,6 +3,7 @@
 import {useEffect,useMemo,useState} from "react";
 import {divIcon} from "leaflet";
 import {CircleMarker,MapContainer,Marker,Polyline,TileLayer,Tooltip,useMap,useMapEvents,ZoomControl} from "react-leaflet";
+import MobileSiteNav from "./MobileSiteNav";
 
 export type IntelSeverity="critical"|"elevated"|"watch"|"stable";
 export type IntelLayer="Headlines"|"Earthquakes"|"Wildfires"|"Storms"|"Volcanoes"|"Floods"|"Droughts"|"Landslides"|"Dust & haze"|"Other natural"|"Air quality"|"Humanitarian"|"Outbreaks"|"Airports"|"Ports"|"Infrastructure";
@@ -166,8 +167,9 @@ export default function IntelligenceMap({points,status,fetchedAt,sourceLine}:{po
       <a className="intel-brand" href="/"><span><i/><i/><i/></span>ATLAS<b>.</b></a>
       <div className="intel-title"><p>GLOBAL SITUATION ROOM</p><h1>Intelligence Map</h1></div>
       <div className={`intel-live ${status}`}><i/><span>{status==="loading"?"SYNCING":status.toUpperCase()}</span><small>{fetchedAt?`Updated ${relativeTime(fetchedAt)} ago`:"Connecting sources"}</small></div>
-      <nav><a href="/">World desk</a><a href="/entertainment">Entertainment</a><a href="/sports">Sports</a></nav>
+      <nav><a href="/">World desk</a><a href="/simulator">Canada Simulator</a><a href="/entertainment">Entertainment</a><a href="/sports">Sports</a></nav>
     </header>
+    <MobileSiteNav/>
 
     <div className="intel-layout">
       <aside className={`intel-layers ${mobilePanel==="layers"?"mobile-open":""}`}>

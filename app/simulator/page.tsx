@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import MobileSiteNav from "../components/MobileSiteNav";
 import {useEffect,useMemo,useState} from "react";
 import "./simulator.css";
 import ProjectionsPanel from "./ProjectionsPanel";
@@ -30,7 +31,7 @@ export default function SimulatorPage(){
  const selectedProvince=provinces.find(p=>p.id===selected);const aggregate=useMemo(()=>{const total=provinces.reduce((a,p)=>a+p.population,0),sums=provinces.reduce((acc,p)=>{const s=scoreProvince(p,scenario);for(const k of Object.keys(s) as Array<keyof typeof s>)acc[k]+=s[k]*p.population;return acc;},{housing:0,grid:0,health:0,climate:0,transit:0,productivity:0,resilience:0});for(const k of Object.keys(sums) as Array<keyof typeof sums>)sums[k]/=total;return sums;},[scenario]);const focus=selectedProvince?scoreProvince(selectedProvince,scenario):aggregate;
  const investment=Math.round((scenario.homes*1.8+scenario.cleanPower*1.35+scenario.transit*1.55+scenario.health*1.2+scenario.adaptation*.9+scenario.productivity*.75)*10)/10,horizonFactor=(horizon-2026)/9,homesAdded=Math.round(scenario.homes*17500*horizonFactor),cleanAdded=Math.round(scenario.cleanPower*410*horizonFactor)/10,transitGain=Math.round(scenario.transit*.12*horizonFactor*10)/10,highEvents=events.filter(e=>e.severity==="critical"||e.severity==="elevated").length,pressure=Math.min(100,Math.max(0,Math.round((100-focus.resilience)+(highEvents*1.8))));const change=(key:keyof Scenario,value:number)=>setScenario(s=>({...s,[key]:value}));
  return <main className="sim-root">
-  <header className="sim-topbar"><Link href="/" className="sim-brand">ATLAS<span>.</span></Link><div><p>NATIONAL ANALYSIS WORKSPACE</p><h1>Canada Simulator</h1></div><nav><Link href="/">World</Link><Link href="/intelligence">Intelligence</Link><b>Simulator</b></nav><span className={`sim-live ${status}`}><i/>{status==="loading"?"SYNCING":status.toUpperCase()}</span></header>
+  <header className="sim-topbar"><Link href="/" className="sim-brand">ATLAS<span>.</span></Link><div><p>NATIONAL ANALYSIS WORKSPACE</p><h1>Canada Simulator</h1></div><nav><Link href="/">World</Link><Link href="/intelligence">Intelligence</Link><b>Simulator</b></nav><span className={`sim-live ${status}`}><i/>{status==="loading"?"SYNCING":status.toUpperCase()}</span></header><MobileSiteNav/>
   <section className="analyst-brief"><div><span className="eyebrow">CANADA / CURRENT OPERATING PICTURE</span><h2>National Situation & Scenario Analysis</h2><p>Read the current map first, select a geography, then apply policy assumptions to test directional effects. <b>Observed signals and reference infrastructure are separate from simulated outputs.</b></p></div><div className="brief-kpis"><Kpi label="National pressure" value={`${pressure}/100`} note="composite model"/><Kpi label="High-severity signals" value={String(highEvents)} note="live feed"/><Kpi label="Mapped live signals" value={String(events.length)} note="Canada-resolved"/><Kpi label="Projection horizon" value={String(horizon)} note="scenario"/></div></section>
 
   <div className="sim-workspace">

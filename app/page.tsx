@@ -7,6 +7,7 @@ import type { MapMode } from "./components/WorldEventMap";
 import { NEWS_CATEGORIES } from "./news-taxonomy";
 import { useSavedStories } from "./components/useSavedStories";
 import { StoryThreads } from "./components/NewsroomFeatures";
+import MobileSiteNav from "./components/MobileSiteNav";
 
 const WorldEventMap = dynamic(() => import("./components/WorldEventMap"), { ssr: false, loading: () => <div className="map-loading">Loading intelligence map…</div> });
 
@@ -187,6 +188,7 @@ export default function Home(){
         <Link href="/sports"><span className="nav-glyph" aria-hidden>◉</span>Sports{deskCounts.sports>0&&<span className="nav-count neutral">{deskCounts.sports}</span>}</Link>
       </nav><div className="sidebar-bottom"><div className={`sync-status ${feedStatus}`}><span/> {feedStatus==="loading"?"Connecting publisher feeds":feedStatus==="error"?"Publisher feeds unavailable":`${feedSourceCount} publishers · ${feedStatus}`}</div><div className="analyst-card"><div className="avatar">AR</div><div><strong>Analyst workspace</strong><small>Global desk</small></div></div></div>
     </aside>
+    <MobileSiteNav/>
     <section className="workspace" id="top">
       <header className="topbar"><div><p className="eyebrow">GLOBAL INTELLIGENCE / <span>{activeView.toUpperCase()}</span></p><h1>World, entertainment & sports monitor</h1></div><div className="top-actions">
         <form className="search-form" onSubmit={submitSearch}><label className="search"><span>⌕</span><input aria-label="Search all headlines" placeholder="Search countries, events, topics" value={query} onChange={(event)=>setQuery(event.target.value)}/><button type="submit" aria-label="Run search">↵</button></label>{query&&<div className="search-hint"><strong>Press Enter to search all stories</strong><span>Try “Taiwan”, “energy”, “Africa” or “shipping”</span></div>}</form>
@@ -239,18 +241,6 @@ export default function Home(){
       </div>
       <footer><span>ATLAS Intelligence</span><span>Headlines, canonical links and publication times from publisher feeds · Map © OpenStreetMap</span><span>{lastFetchedAt?`Feeds checked ${exactTime(lastFetchedAt)}`:"Connecting feeds"}</span></footer>
     </section>
-
-    <nav className="mobile-nav" aria-label="Mobile navigation">
-      {[
-        {label:"Home",view:"Overview",glyph:"⌂"},
-        {label:"News",view:"Briefings",glyph:"▤"},
-        {label:"Intel",href:"/intelligence",glyph:"◎"},
-        //{label:"Map",view:"Live events",glyph:"⌁"},
-        {label:"Entertainment",href:"/entertainment",glyph:"✦"},
-        {label:"Sports",href:"/sports",glyph:"◉"},
-        {label:"Saved",view:"Watchlist",glyph:"◇"},
-      ].map((item)=>item.href?<Link key={item.label} href={item.href} aria-label={item.label}><span aria-hidden>{item.glyph}</span><small>{item.label}</small></Link>:<button key={item.label} className={activeView===item.view?"active":""} onClick={()=>navigateTo(item.view!)} aria-label={item.label}><span aria-hidden>{item.glyph}</span><small>{item.label}</small>{item.view==="Watchlist"&&savedIds.length>0&&<i>{savedIds.length}</i>}</button>)}
-    </nav>
 
     {selectedStory&&<div className="story-modal-backdrop" role="presentation" onMouseDown={()=>setSelectedStory(null)}><article className="story-modal" role="dialog" aria-modal="true" aria-labelledby="story-modal-title" onMouseDown={(event)=>event.stopPropagation()}><button className="modal-close" onClick={()=>setSelectedStory(null)} aria-label="Close briefing">×</button><p>{selectedStory.category} · {selectedStory.region}</p><h2 id="story-modal-title">{selectedStory.title}</h2><div className="modal-meta"><span className={`status-dot ${selectedStory.level}`}/>{selectedStory.source} · <time dateTime={selectedStory.publishedAt} title={`Published ${exactTime(selectedStory.publishedAt)}`}>{relativeTime(selectedStory.publishedAt,clock)}</time> · {selectedStory.read} read</div><p className="modal-summary">{selectedStory.summary}</p><div className="modal-tags">{selectedStory.tags.map((tag)=><button key={tag} onClick={()=>{setQuery(tag);setAppliedQuery(tag);setSelectedStory(null);setShowAll(true);requestAnimationFrame(()=>navigateTo("Briefings"));}}>#{tag}</button>)}</div><div className="modal-actions"><a className="primary-action" href={sourceUrlForStory(selectedStory)} target="_blank" rel="noreferrer">{sourceActionForStory()} ↗</a><button onClick={()=>toggleSaved(selectedStory)}>{savedIds.includes(selectedStory.id)?"◆ Remove saved":"◇ Save"}</button><button onClick={()=>setSelectedStory(null)}>Close</button></div><small className="demo-note">The direct article URL and publication timestamp come from {selectedStory.source}’s feed. Relative age recalculates every minute; hover or focus it to see the exact reported time.</small></article></div>}
   </main>;
