@@ -8,7 +8,7 @@ const IntelligenceMap=dynamic(()=>import("../components/IntelligenceMap"),{ssr:f
 
 type Story={id:number;desk:"world"|"entertainment"|"sports";category:string;region:string;publishedAt:string;level:IntelSeverity;title:string;summary:string;source:string;articleUrl:string;location?:{name:string;lat:number;lng:number;precision:"country"|"hotspot"}};
 type NewsResponse={stories:Story[];sources:string[];fetchedAt:string;failedFeeds:number;totalFeeds:number};
-type NaturalEvent={id:string;layer:Exclude<IntelPoint["layer"],"Headlines"|"Infrastructure">;title:string;summary:string;lat:number;lng:number;occurredAt:string;severity:IntelSeverity;source:string;sourceUrl:string;active?:boolean};
+type NaturalEvent={id:string;layer:Exclude<IntelPoint["layer"],"Headlines"|"Infrastructure"|"Airports"|"Ports">;title:string;summary:string;lat:number;lng:number;occurredAt:string;severity:IntelSeverity;source:string;sourceUrl:string;location?:string;category?:string;active?:boolean};
 type IntelligenceResponse={fetchedAt:string;status:"live"|"partial"|"unavailable";events:NaturalEvent[];sources:Array<{id:string;label:string;url:string;status:"live"|"unavailable"}>};
 
 const infrastructure:IntelPoint[]=[
@@ -70,6 +70,75 @@ const infrastructure:IntelPoint[]=[
   {id:"infra-dubai-air",layer:"Infrastructure",title:"Dubai international aviation hub",summary:"Major passenger and air-cargo transfer hub linking Europe, Asia, Africa and the Middle East.",lat:25.25,lng:55.36,occurredAt:"2026-01-01T00:00:00Z",severity:"stable",source:"ATLAS strategic reference layer",sourceUrl:"https://www.icao.int/sustainability/Pages/eap-fp-air-traffic.aspx",location:"United Arab Emirates",category:"Aviation hub",reference:true},
 ];
 
+const referenceDate="2026-01-01T00:00:00Z";
+const airportRecords:Array<[string,string,string,number,number]>=[
+  ["yyz","Toronto Pearson International Airport","Canada",43.68,-79.63],
+  ["yvr","Vancouver International Airport","Canada",49.19,-123.18],
+  ["yul","Montréal–Trudeau International Airport","Canada",45.47,-73.74],
+  ["yyc","Calgary International Airport","Canada",51.12,-114.02],
+  ["yeg","Edmonton International Airport","Canada",53.31,-113.58],
+  ["yow","Ottawa International Airport","Canada",45.32,-75.67],
+  ["yhz","Halifax Stanfield International Airport","Canada",44.88,-63.51],
+  ["jfk","John F. Kennedy International Airport","United States",40.64,-73.78],
+  ["lax","Los Angeles International Airport","United States",33.94,-118.41],
+  ["ord","Chicago O’Hare International Airport","United States",41.98,-87.9],
+  ["atl","Hartsfield–Jackson Atlanta International Airport","United States",33.64,-84.43],
+  ["mex","Mexico City International Airport","Mexico",19.44,-99.07],
+  ["gru","São Paulo–Guarulhos International Airport","Brazil",-23.44,-46.47],
+  ["bog","El Dorado International Airport","Colombia",4.7,-74.15],
+  ["lhr","London Heathrow Airport","United Kingdom",51.47,-0.45],
+  ["cdg","Paris Charles de Gaulle Airport","France",49.01,2.55],
+  ["fra","Frankfurt Airport","Germany",50.04,8.56],
+  ["ams","Amsterdam Airport Schiphol","Netherlands",52.31,4.77],
+  ["ist","Istanbul Airport","Türkiye",41.28,28.75],
+  ["cai","Cairo International Airport","Egypt",30.12,31.41],
+  ["jnb","O. R. Tambo International Airport","South Africa",-26.14,28.25],
+  ["nbo","Jomo Kenyatta International Airport","Kenya",-1.32,36.93],
+  ["add","Addis Ababa Bole International Airport","Ethiopia",8.98,38.8],
+  ["doh","Hamad International Airport","Qatar",25.26,51.61],
+  ["del","Indira Gandhi International Airport","India",28.56,77.1],
+  ["bom","Chhatrapati Shivaji Maharaj International Airport","India",19.09,72.87],
+  ["sin","Singapore Changi Airport","Singapore",1.36,103.99],
+  ["hkg","Hong Kong International Airport","Hong Kong",22.31,113.92],
+  ["pvg","Shanghai Pudong International Airport","China",31.14,121.81],
+  ["pek","Beijing Capital International Airport","China",40.08,116.6],
+  ["hnd","Tokyo Haneda Airport","Japan",35.55,139.78],
+  ["icn","Incheon International Airport","South Korea",37.46,126.44],
+  ["bkk","Suvarnabhumi Airport","Thailand",13.69,100.75],
+  ["kul","Kuala Lumpur International Airport","Malaysia",2.75,101.71],
+  ["syd","Sydney Airport","Australia",-33.94,151.18],
+];
+
+const portRecords:Array<[string,string,string,number,number]>=[
+  ["montreal","Port of Montréal","Canada",45.57,-73.52],
+  ["halifax","Port of Halifax","Canada",44.64,-63.57],
+  ["seattle-tacoma","Northwest Seaport Alliance","United States",47.27,-122.42],
+  ["manzanillo","Port of Manzanillo","Mexico",19.05,-104.32],
+  ["callao","Port of Callao","Peru",-12.05,-77.15],
+  ["valencia","Port of Valencia","Spain",39.45,-0.32],
+  ["le-havre","Port of Le Havre","France",49.49,0.1],
+  ["salalah","Port of Salalah","Oman",16.94,54],
+  ["chattogram","Port of Chattogram","Bangladesh",22.31,91.8],
+  ["cape-town","Port of Cape Town","South Africa",-33.91,18.43],
+  ["dar-es-salaam","Port of Dar es Salaam","Tanzania",-6.82,39.3],
+  ["melbourne","Port of Melbourne","Australia",-37.82,144.91],
+  ["sydney","Port Botany","Australia",-33.97,151.22],
+  ["auckland","Port of Auckland","New Zealand",-36.84,174.79],
+];
+
+const airportReferences:IntelPoint[]=airportRecords.map(([id,title,location,lat,lng])=>({
+  id:`airport-${id}`,layer:"Airports",title,summary:"Major international passenger and cargo gateway included as a global transport reference point.",lat,lng,occurredAt:referenceDate,severity:"stable",source:"OurAirports public data",sourceUrl:"https://ourairports.com/data/",location,category:"Major airport",reference:true,
+}));
+const portReferences:IntelPoint[]=portRecords.map(([id,title,location,lat,lng])=>({
+  id:`port-${id}`,layer:"Ports",title,summary:"Major commercial seaport included as a global maritime transport reference point.",lat,lng,occurredAt:referenceDate,severity:"stable",source:"NGA World Port Index",sourceUrl:"https://msi.nga.mil/Publications/WPI",location,category:"Major port",reference:true,
+}));
+const categorizedInfrastructure:IntelPoint[]=infrastructure.map((point)=>{
+  const category=(point.category??point.title).toLowerCase();
+  if(/air|aviation/.test(category))return {...point,layer:"Airports"};
+  if(/port/.test(category)&&!/energy/.test(category))return {...point,layer:"Ports"};
+  return point;
+});
+
 export default function IntelligencePage(){
   const [stories,setStories]=useState<Story[]>([]);
   const [natural,setNatural]=useState<NaturalEvent[]>([]);
@@ -93,7 +162,9 @@ export default function IntelligencePage(){
   const points=useMemo<IntelPoint[]>(()=>[
     ...stories.filter((story)=>story.desk==="world"&&story.location).map((story)=>({id:`news-${story.id}`,layer:"Headlines" as const,title:story.title,summary:story.summary,lat:story.location!.lat,lng:story.location!.lng,occurredAt:story.publishedAt,severity:story.level,source:story.source,sourceUrl:story.articleUrl,location:story.location!.name,category:story.category})),
     ...natural,
-    ...infrastructure,
+    ...categorizedInfrastructure,
+    ...airportReferences,
+    ...portReferences,
   ],[natural,stories]);
   const status=newsState==="loading"||naturalState==="loading"?"loading":newsState==="live"&&naturalState==="live"?"live":newsState!=="unavailable"||naturalState!=="unavailable"?"partial":"unavailable";
   const liveNaturalSources=naturalSources.filter((source)=>source.status==="live").map((source)=>source.label);

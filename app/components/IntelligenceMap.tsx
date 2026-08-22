@@ -5,7 +5,7 @@ import {divIcon} from "leaflet";
 import {CircleMarker,MapContainer,Marker,Polyline,TileLayer,Tooltip,useMap,useMapEvents,ZoomControl} from "react-leaflet";
 
 export type IntelSeverity="critical"|"elevated"|"watch"|"stable";
-export type IntelLayer="Headlines"|"Earthquakes"|"Wildfires"|"Storms"|"Volcanoes"|"Floods"|"Other natural"|"Infrastructure";
+export type IntelLayer="Headlines"|"Earthquakes"|"Wildfires"|"Storms"|"Volcanoes"|"Floods"|"Droughts"|"Landslides"|"Dust & haze"|"Other natural"|"Air quality"|"Humanitarian"|"Outbreaks"|"Airports"|"Ports"|"Infrastructure";
 export type IntelPoint={
   id:string;
   layer:IntelLayer;
@@ -25,8 +25,8 @@ export type IntelPoint={
 
 type Cluster={key:string;lat:number;lng:number;points:IntelPoint[];severity:IntelSeverity};
 type Basemap="dark"|"light"|"terrain";
-const layerOrder:IntelLayer[]=["Headlines","Earthquakes","Wildfires","Storms","Volcanoes","Floods","Other natural","Infrastructure"];
-const layerIcons:Record<IntelLayer,string>={Headlines:"▤",Earthquakes:"≋",Wildfires:"♨",Storms:"◌",Volcanoes:"△",Floods:"≈","Other natural":"◇",Infrastructure:"⌘"};
+const layerOrder:IntelLayer[]=["Headlines","Earthquakes","Wildfires","Storms","Volcanoes","Floods","Droughts","Landslides","Dust & haze","Other natural","Air quality","Humanitarian","Outbreaks","Airports","Ports","Infrastructure"];
+const layerIcons:Record<IntelLayer,string>={Headlines:"▤",Earthquakes:"≋",Wildfires:"♨",Storms:"◌",Volcanoes:"△",Floods:"≈",Droughts:"☼",Landslides:"⌁","Dust & haze":"≋","Other natural":"◇","Air quality":"◒",Humanitarian:"□",Outbreaks:"◉",Airports:"⌁",Ports:"⌘",Infrastructure:"⌘"};
 const colors:Record<IntelSeverity,string>={critical:"#ff4d5b",elevated:"#ff8b4a",watch:"#f6ce52",stable:"#4dd4a8"};
 const severityRank:Record<IntelSeverity,number>={critical:4,elevated:3,watch:2,stable:1};
 const outlineSvg=(body:string)=>`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${body}</svg>`;
@@ -37,7 +37,15 @@ const markerSymbols:Record<IntelLayer,string>={
   Storms:outlineSvg('<path d="M5 8.5c1.7-3 5.4-4.2 8.5-2.7 2.5 1.2 3.7 4.2 2.5 6.7-1 2-3.4 2.9-5.4 1.9-1.6-.8-2.3-2.7-1.5-4.3.6-1.2 2.1-1.7 3.3-1.1"/><path d="M3.5 15.5c2.3 3.4 6.8 4.7 10.6 3"/>'),
   Volcanoes:outlineSvg('<path d="m3 20 6.2-10 2.8 4 2.3-3.2L21 20Z"/><path d="M9.2 10 11 7.4 13 10l1.6-2.2"/><path d="M10 5.3c-.2-1.1.5-2.1 1.6-2.3M14 5.3c.4-1 .1-2-.7-2.7"/>'),
   Floods:outlineSvg('<path d="M3 8c2 0 2 1.5 4 1.5S9 8 11 8s2 1.5 4 1.5S17 8 19 8s2 1.5 2 1.5M3 13c2 0 2 1.5 4 1.5S9 13 11 13s2 1.5 4 1.5S17 13 19 13s2 1.5 2 1.5M3 18c2 0 2 1.5 4 1.5S9 18 11 18s2 1.5 4 1.5S17 18 19 18s2 1.5 2 1.5"/>'),
+  Droughts:outlineSvg('<circle cx="12" cy="7" r="3"/><path d="M12 1v2M12 11v2M6 7H4M20 7h-2M7.8 2.8 9.2 4.2M16.2 9.8l1.4 1.4M16.2 4.2l1.4-1.4M7.8 9.8l-1.4 1.4M3 21l4-5 3 3 3-4 3 6M13 15l3 3 2-2 3 5"/>'),
+  Landslides:outlineSvg('<path d="M3 20 10 6l11 14Z"/><path d="m9 10 3 3-2 2 4 2M16 9h.01M18 13h.01"/>'),
+  "Dust & haze":outlineSvg('<path d="M3 7h10c2 0 2-3 0-3-1 0-1.5.5-1.5 1M3 12h15c3 0 3-4 0-4-1.2 0-2 .7-2 1.5M3 17h10c2.5 0 2.5 3 0 3-1 0-1.7-.6-1.7-1.3"/>'),
   "Other natural":outlineSvg('<path d="m12 3 9 9-9 9-9-9Z"/><path d="M12 7.5v5.5M12 16.5h.01"/>'),
+  "Air quality":outlineSvg('<path d="M4 17a8 8 0 1 1 16 0"/><path d="m12 17 4-5M7 17h10M8 8l1.2 1.2M16 8l-1.2 1.2M12 6v2"/>'),
+  Humanitarian:outlineSvg('<path d="M5 5h14v14H5z"/><path d="m8 13 2-2 2 2 4-4M8 16h8"/>'),
+  Outbreaks:outlineSvg('<circle cx="12" cy="12" r="5"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5 19 19M19 5l-3.5 3.5M8.5 15.5 5 19"/><circle cx="10" cy="11" r=".7"/><circle cx="14" cy="13" r=".7"/>'),
+  Airports:outlineSvg('<path d="m3 14 7-3 2-8 2 1-1 7 6 3c1 .5 1.5 1.3 1.5 2L13 15l-1 5-1.5-.5-.5-5-7-1Z"/>'),
+  Ports:outlineSvg('<circle cx="12" cy="5" r="2"/><path d="M12 7v13M5 10h14M5 15c1.5 3.5 3.8 5 7 5s5.5-1.5 7-5M5 15H2.8M19 15h2.2"/>'),
   Infrastructure:outlineSvg('<path d="M4 20h16M6 20V9l6-5 6 5v11M9 20v-6h6v6"/>'),
 };
 const infrastructureSymbols={
@@ -166,11 +174,11 @@ export default function IntelligenceMap({points,status,fetchedAt,sourceLine}:{po
         <div className="intel-panel-head"><div><span>OPERATING PICTURE</span><strong>Map controls</strong></div><button onClick={()=>setMobilePanel(null)} aria-label="Close layers">×</button></div>
         <label className="intel-search"><span>⌕</span><input id="intel-search" value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="Search signals, places, sources"/><kbd>/</kbd></label>
         <section><div className="intel-section-label"><span>TIME WINDOW</span><small>Live data</small></div><div className="intel-segmented">{([6,24,168] as const).map((hours)=><button className={timeWindow===hours?"active":""} key={hours} onClick={()=>setTimeWindow(hours)}>{hours===168?"7D":`${hours}H`}</button>)}</div></section>
-        <section><div className="intel-section-label"><span>DATA LAYERS</span><button onClick={()=>setActiveLayers(activeLayers.size?new Set():new Set(layerOrder))}>{activeLayers.size?"Clear":"All"}</button></div><div className="intel-layer-list">{layerOrder.map((layer)=><button key={layer} onClick={()=>toggleLayer(layer)} className={activeLayers.has(layer)?"active":""}><i>{layerIcons[layer]}</i><span>{layer}<small>{layer==="Infrastructure"?"Reference":layer==="Headlines"?"Publisher feeds":"Official feed"}</small></span><b>{counts.get(layer)??0}</b><em/></button>)}</div></section>
+        <section><div className="intel-section-label"><span>DATA LAYERS</span><button onClick={()=>setActiveLayers(activeLayers.size?new Set():new Set(layerOrder))}>{activeLayers.size?"Clear":"All"}</button></div><div className="intel-layer-list">{layerOrder.map((layer)=><button key={layer} onClick={()=>toggleLayer(layer)} className={activeLayers.has(layer)?"active":""}><i>{layerIcons[layer]}</i><span>{layer}<small>{layer==="Infrastructure"||layer==="Airports"||layer==="Ports"?"Reference":layer==="Headlines"?"Publisher feeds":layer==="Air quality"?"Model feed":"Official feed"}</small></span><b>{counts.get(layer)??0}</b><em/></button>)}</div></section>
         <section><div className="intel-section-label"><span>ANALYTIC OVERLAYS</span></div><label className="intel-switch"><span>Pressure fields<small>Urgency-weighted halos</small></span><input type="checkbox" checked={pressure} onChange={(event)=>setPressure(event.target.checked)}/><i/></label><label className="intel-switch"><span>Trade corridors<small>Schematic reference routes</small></span><input type="checkbox" checked={routes} onChange={(event)=>setRoutes(event.target.checked)}/><i/></label></section>
         <section><div className="intel-section-label"><span>BASEMAP</span></div><div className="intel-basemaps">{(["dark","light","terrain"] as Basemap[]).map((name)=><button key={name} className={basemap===name?"active":""} onClick={()=>setBasemap(name)}><i/><span>{name}</span></button>)}</div></section>
         <section><div className="intel-section-label"><span>REGION JUMP</span></div><div className="intel-region-grid">{regions.map((region)=><button key={region.label} onClick={()=>setFocus({...region,key:Date.now()})}>{region.label}</button>)}</div></section>
-        <footer><span>{sourceLine}</span><small>Each signal retains its original source and timestamp. Infrastructure and routes are clearly marked as reference layers.</small></footer>
+        <footer><span>{sourceLine}</span><small>Each signal retains its original source and timestamp. Airports, ports, infrastructure and routes are clearly marked as reference layers.</small></footer>
       </aside>
 
       <section className="intel-map-stage">
