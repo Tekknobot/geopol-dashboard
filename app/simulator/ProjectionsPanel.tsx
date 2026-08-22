@@ -11,7 +11,7 @@ export default function ProjectionsPanel({horizon,resilience,scenarioIntensity}:
  const points=[{label:"Low growth",value:low,tone:"low"},{label:"Medium M1",value:mid,tone:"mid"},{label:"High growth",value:high,tone:"high"}];
  const max=80,min=40;
  return <section className="projection-panel">
-   <div className="sim-section-head"><div><span>06 / PROJECT</span><h3>Canada outlook to {horizon}</h3><p>Official Statistics Canada 2026 demographic scenario anchors combined with transparent Atlas capacity stress indicators.</p></div><a href="https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710005701" target="_blank" rel="noreferrer">TABLE 17-10-0057-01 ↗</a></div>
+   <div className="sim-section-head"><div><span>07 / PROJECT</span><h3>Canada outlook to {horizon}</h3><p>Official Statistics Canada 2026 demographic scenario anchors combined with transparent Atlas capacity stress indicators.</p></div><a href="https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710005701" target="_blank" rel="noreferrer">TABLE 17-10-0057-01 ↗</a></div>
    <div className="projection-layout">
      <div className="projection-chart" role="img" aria-label={`Population projection envelope to ${horizon}`}>
        <div className="projection-axis"><span>40M</span><span>50M</span><span>60M</span><span>70M</span><span>80M</span></div>
