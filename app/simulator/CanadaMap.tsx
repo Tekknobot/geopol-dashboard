@@ -1,6 +1,6 @@
 "use client";
 import {CircleMarker,MapContainer,TileLayer,Tooltip,ZoomControl,useMap} from "react-leaflet";
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import "leaflet/dist/leaflet.css";
 import {referencePins,type ReferenceKind} from "./canada-reference-pins";
 import {metros} from "./city-data";
@@ -14,8 +14,27 @@ const refColours:Record<ReferenceKind,string>={capital:"#f2f5f7",city:"#92a6b7",
 const labels:Record<ReferenceKind,string>={capital:"Capitals",city:"Population centres",airport:"Airports",port:"Ports",energy:"Energy",crossing:"Border",corridor:"Corridors"};
 const clamp=(n:number)=>Math.max(0,Math.min(100,n));
 const score=(p:Province,s:Scenario)=>({resilience:(clamp(p.housing+s.homes*.55+s.transit*.08)+clamp(p.grid+s.cleanPower*.42+s.adaptation*.08)+clamp(p.health+s.health*.46+s.homes*.04)+clamp(p.climate+s.adaptation*.5+s.cleanPower*.13)+clamp(p.transit+s.transit*.5+s.homes*.05)+clamp(p.productivity+s.productivity*.38+s.transit*.08+s.cleanPower*.04))/6,housing:clamp(p.housing+s.homes*.55+s.transit*.08),grid:clamp(p.grid+s.cleanPower*.42+s.adaptation*.08)});
-function MapFocus({cityId}:{cityId:string}){const map=useMap();useEffect(()=>{const c=metros.find(x=>x.id===cityId);if(c)map.flyTo([c.lat,c.lng],7,{duration:.7});},[cityId,map]);return null}
+function MapFocus({cityId}:{cityId:string}) {
+  const map = useMap();
+  const firstRender = useRef(true);
 
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+
+    const c = metros.find(x => x.id === cityId);
+
+    if (c) {
+      map.flyTo([c.lat, c.lng], 7, {
+        duration: 0.7
+      });
+    }
+  }, [cityId, map]);
+
+  return null;
+}
 export default function CanadaMap({provinces,events,scenario,selected,onSelect,layer,selectedCity,onCitySelect}:{provinces:Province[];events:LiveEvent[];scenario:Scenario;selected:string;onSelect:(id:string)=>void;layer:"situation"|"resilience"|"housing"|"grid";selectedCity:string;onCitySelect:(id:string)=>void}){
  const [liveOn,setLiveOn]=useState(true),[referenceOn,setReferenceOn]=useState(true),[metroOn,setMetroOn]=useState(true);
  const [activeKinds,setActiveKinds]=useState<ReferenceKind[]>(["capital","airport","port","energy","crossing","corridor"]);
