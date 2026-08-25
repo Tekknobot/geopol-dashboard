@@ -124,12 +124,12 @@ export default function DeskPage({config}:{config:DeskConfig}){
   return <main className="desk-page" data-desk={config.desk}>
     <header className="desk-global-nav">
       <Link className="desk-brand" href="/"><img src="/favicon.svg" alt=""/>ATLAS<span>.</span></Link>
-      <nav aria-label="ATLAS newsrooms"><Link href="/">World</Link><Link href="/intelligence">Intelligence</Link><Link aria-current={config.desk==="entertainment"?"page":undefined} className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link aria-current={config.desk==="sports"?"page":undefined} className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
+      <nav aria-label="ATLAS newsrooms"><Link href="/">World</Link><Link href="/world-grid">Grid</Link><Link href="/intelligence">Intelligence</Link><Link aria-current={config.desk==="entertainment"?"page":undefined} className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link aria-current={config.desk==="sports"?"page":undefined} className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
       <button onClick={()=>void loadNews()} className={`desk-live ${status}`}><i/>{status==="loading"?"Connecting":status==="error"?"Retry feeds":status==="partial"?"Partial feed":"Live desk"}</button>
     </header>
     <MobileSiteNav/>
 
-    <nav className="desk-mobile-tabs" aria-label="Switch newsroom"><Link href="/">World</Link><Link aria-current={config.desk==="entertainment"?"page":undefined} className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link aria-current={config.desk==="sports"?"page":undefined} className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
+    <nav className="desk-mobile-tabs" aria-label="Switch newsroom"><Link href="/">World</Link><Link href="/world-grid">Grid</Link><Link aria-current={config.desk==="entertainment"?"page":undefined} className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link aria-current={config.desk==="sports"?"page":undefined} className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
 
     <section className="desk-masthead">
       <div className="desk-title-block"><p>{config.eyebrow}</p><h1>{config.title}</h1><span>{config.intro}</span></div>
@@ -174,6 +174,6 @@ export default function DeskPage({config}:{config:DeskConfig}){
       </aside>
     </section>
 
-    <footer className="desk-footer"><Link href="/">ATLAS World News</Link><span>World · Entertainment · Sports</span><span>Map © OpenStreetMap contributors</span></footer>
+    <footer className="desk-footer"><Link href="/">ATLAS World News</Link><span>World · Grid · Entertainment · Sports</span><span>Map © OpenStreetMap contributors</span></footer>
   </main>;
 }

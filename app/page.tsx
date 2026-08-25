@@ -180,6 +180,7 @@ export default function Home(){
       <button className="brand" onClick={()=>navigateTo("Overview")} aria-label="Atlas home"><span className="brand-mark"><i/><i/><i/></span><span>ATLAS<span className="brand-dot">.</span></span></button>
       <nav className="primary-nav" aria-label="Primary navigation"><p className="nav-label">Intelligence</p>
         <Link href="/intelligence"><span className="nav-glyph" aria-hidden>◎</span>Intelligence map</Link>
+        <Link href="/world-grid"><span className="nav-glyph" aria-hidden>▦</span>World Grid</Link>
         <Link href="/simulator"><span className="nav-glyph" aria-hidden>◫</span>Canada Simulator</Link>
         {["Overview","Live events","Countries","Watchlist"].map((item,index)=><button key={item} className={activeView===item?"active":""} onClick={()=>navigateTo(item)}><span className="nav-glyph" aria-hidden>{["⌂","⌁","◎","◇"][index]}</span>{item}{item==="Live events"&&<span className="nav-count">{stories.length}</span>}{item==="Watchlist"&&savedIds.length>0&&<span className="nav-count neutral">{savedIds.length}</span>}</button>)}
         <p className="nav-label secondary">Analysis</p>{["Risk monitor","Markets","Indicators","Briefings"].map((item,index)=><button key={item} className={activeView===item?"active":""} onClick={()=>navigateTo(item)}><span className="nav-glyph" aria-hidden>{["△","◫","⌇","▤"][index]}</span>{item}</button>)}
