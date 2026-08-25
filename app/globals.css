@@ -319,3 +319,23 @@ time{font-variant-numeric:tabular-nums}
 /* Video desk resilience controls */
 .desk-video-retry{min-height:38px;padding:0 14px;border:1px solid #ffffff2a;border-radius:4px;background:#ffffff0d;color:#fff;font:800 9px var(--font-geist-mono);letter-spacing:.05em;cursor:pointer}
 .desk-video-retry:hover,.desk-video-retry:focus-visible{background:#ffffff18;border-color:#ffffff4a}
+
+/* Sports + Entertainment newsroom search legibility */
+.desk-page .desk-search input {
+  color: #111318;
+  caret-color: #111318;
+  -webkit-text-fill-color: #111318;
+  background: transparent;
+}
+.desk-page .desk-search input::placeholder {
+  color: #747b84;
+  opacity: 1;
+  -webkit-text-fill-color: #747b84;
+}
+.desk-page .desk-search input:-webkit-autofill,
+.desk-page .desk-search input:-webkit-autofill:hover,
+.desk-page .desk-search input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #111318;
+  caret-color: #111318;
+  box-shadow: 0 0 0 1000px #fff inset;
+}
