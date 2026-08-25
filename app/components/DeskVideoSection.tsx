@@ -26,15 +26,18 @@ export default function DeskVideoSection({desk}:{desk:Desk}){
   const [videos,setVideos]=useState<LatestVideo[]>([]);
   const [activeId,setActiveId]=useState<string|null>(null);
   const [playing,setPlaying]=useState(false);
+  const [loadFailed,setLoadFailed]=useState(false);
 
   useEffect(()=>{
     const controller=new AbortController();
-    fetch("/api/video-news",{cache:"no-store",signal:controller.signal})
+    const timeout=window.setTimeout(()=>controller.abort(),7000);
+    fetch(`/api/video-news?room=${desk}`,{cache:"no-store",signal:controller.signal})
       .then((response)=>response.ok?response.json() as Promise<VideoResponse>:Promise.reject())
-      .then((data)=>setVideos(data.videos))
-      .catch(()=>undefined);
-    return()=>controller.abort();
-  },[]);
+      .then((data)=>{setVideos(data.videos??[]);setLoadFailed(false);})
+      .catch(()=>setLoadFailed(true))
+      .finally(()=>window.clearTimeout(timeout));
+    return()=>{window.clearTimeout(timeout);controller.abort();};
+  },[desk]);
 
   const deskVideos=useMemo(()=>{
     const roomVideos=videos.filter((video)=>VIDEO_SOURCES.find((source)=>source.id===video.sourceId)?.room===desk);
@@ -67,7 +70,7 @@ export default function DeskVideoSection({desk}:{desk:Desk}){
           <span><small>{sourceName(video.sourceId)} · {relativeTime(video.publishedAt)}</small><strong>{video.title}</strong></span>
         </button>)}
       </div>
-    </div>:<div className="desk-video-loading"><span className="feed-spinner"/><strong>Checking publisher video desks…</strong><p>Official reports will appear here as feeds respond.</p></div>}
-    <div className="desk-video-note"><span>VIDEO DESK</span><p>Videos open in YouTube&apos;s privacy-enhanced player. Publishers control availability, advertising and embedding.</p>{active&&<a href={active.watchUrl} target="_blank" rel="noreferrer">Watch on publisher channel ↗</a>}</div>
+    </div>:<div className="desk-video-loading">{loadFailed?null:<span className="feed-spinner"/>}<strong>{loadFailed?"Video desk temporarily unavailable":"Checking publisher video desks…"}</strong><p>{loadFailed?"You can still open the official publisher channels below; the feed will retry when this page is refreshed.":"Official reports will appear here as feeds respond."}</p></div>}
+    <div className="desk-video-note"><span>VIDEO DESK</span><p>Videos open in YouTube&apos;s privacy-enhanced player. Publishers control availability, advertising and embedding.</p>{active?<a href={active.watchUrl} target="_blank" rel="noreferrer">Watch on publisher channel ↗</a>:<a href={VIDEO_SOURCES.find((source)=>source.room===desk)?.channelUrl} target="_blank" rel="noreferrer">Open official video channel ↗</a>}</div>
   </section>;
 }
