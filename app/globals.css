@@ -315,3 +315,7 @@ time{font-variant-numeric:tabular-nums}
   .atlas-mobile-site-nav a{min-width:66px;padding-left:7px;padding-right:7px}
   .atlas-mobile-site-nav a small{font-size:8px}
 }
+
+/* Video desk resilience controls */
+.desk-video-retry{min-height:38px;padding:0 14px;border:1px solid #ffffff2a;border-radius:4px;background:#ffffff0d;color:#fff;font:800 9px var(--font-geist-mono);letter-spacing:.05em;cursor:pointer}
+.desk-video-retry:hover,.desk-video-retry:focus-visible{background:#ffffff18;border-color:#ffffff4a}
