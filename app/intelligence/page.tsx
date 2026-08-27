@@ -151,13 +151,13 @@ export default function IntelligencePage(){
   const load=useCallback(async()=>{
     setNewsState("loading");setNaturalState("loading");
     const [newsResult,intelResult]=await Promise.allSettled([
-      fetch("/api/news",{cache:"no-store",signal:AbortSignal.timeout(10000)}).then(async(response)=>{if(!response.ok)throw new Error("news");return response.json() as Promise<NewsResponse>;}),
-      fetch("/api/intelligence",{cache:"no-store",signal:AbortSignal.timeout(10000)}).then(async(response)=>{if(!response.ok)throw new Error("intelligence");return response.json() as Promise<IntelligenceResponse>;}),
+      fetch("/api/news",{signal:AbortSignal.timeout(10000)}).then(async(response)=>{if(!response.ok)throw new Error("news");return response.json() as Promise<NewsResponse>;}),
+      fetch("/api/intelligence",{signal:AbortSignal.timeout(10000)}).then(async(response)=>{if(!response.ok)throw new Error("intelligence");return response.json() as Promise<IntelligenceResponse>;}),
     ]);
     if(newsResult.status==="fulfilled"){setStories(newsResult.value.stories);setNewsSources(newsResult.value.sources);setNewsState(newsResult.value.failedFeeds?"partial":"live");setFetchedAt(newsResult.value.fetchedAt);}else setNewsState("unavailable");
     if(intelResult.status==="fulfilled"){setNatural(intelResult.value.events);setNaturalSources(intelResult.value.sources);setNaturalState(intelResult.value.status);setFetchedAt((current)=>current??intelResult.value.fetchedAt);}else setNaturalState("unavailable");
   },[]);
-  useEffect(()=>{void load();const timer=setInterval(()=>void load(),5*60*1000);return()=>clearInterval(timer);},[load]);
+  useEffect(()=>{void load();const timer=setInterval(()=>{if(document.visibilityState==="visible")void load();},15*60*1000);return()=>clearInterval(timer);},[load]);
 
   const points=useMemo<IntelPoint[]>(()=>[
     ...stories.filter((story)=>story.desk==="world"&&story.location).map((story)=>({id:`news-${story.id}`,layer:"Headlines" as const,title:story.title,summary:story.summary,lat:story.location!.lat,lng:story.location!.lng,occurredAt:story.publishedAt,severity:story.level,source:story.source,sourceUrl:story.articleUrl,location:story.location!.name,category:story.category})),

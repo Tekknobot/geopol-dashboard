@@ -72,7 +72,7 @@ export default function Home(){
   const loadNews=useCallback(async()=>{
     setFeedStatus((status)=>status==="error"?"loading":status);
     try{
-      const response=await fetch("/api/news",{cache:"no-store",signal:AbortSignal.timeout(8500)});
+      const response=await fetch("/api/news",{signal:AbortSignal.timeout(8500)});
       if(!response.ok)throw new Error("Publisher feeds unavailable");
       const data=await response.json() as NewsResponse;
       if(!data.stories.length)throw new Error("No current publisher stories");
@@ -88,7 +88,7 @@ export default function Home(){
   },[]);
   const loadMarkets=useCallback(async()=>{
     try{
-      const response=await fetch("/api/markets",{cache:"no-store"});
+      const response=await fetch("/api/markets");
       if(!response.ok)throw new Error("Public market feeds unavailable");
       const data=await response.json() as MarketResponse;
       setMarketData(data);
@@ -100,8 +100,8 @@ export default function Home(){
   useEffect(()=>{
     const initialTimer=window.setTimeout(()=>void loadNews(),0);
     const marketInitialTimer=window.setTimeout(()=>void loadMarkets(),0);
-    const newsTimer=window.setInterval(()=>void loadNews(),300000);
-    const marketTimer=window.setInterval(()=>void loadMarkets(),30000);
+    const newsTimer=window.setInterval(()=>{if(document.visibilityState==="visible")void loadNews();},900000);
+    const marketTimer=window.setInterval(()=>{if(document.visibilityState==="visible")void loadMarkets();},300000);
     const clockTimer=window.setInterval(()=>setClock(Date.now()),60000);
     return ()=>{window.clearTimeout(initialTimer);window.clearTimeout(marketInitialTimer);window.clearInterval(newsTimer);window.clearInterval(marketTimer);window.clearInterval(clockTimer);};
   },[loadMarkets,loadNews]);

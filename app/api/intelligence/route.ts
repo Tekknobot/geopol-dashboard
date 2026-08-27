@@ -274,5 +274,5 @@ export async function GET() {
     {id:"who",label:"WHO Disease Outbreak News",url:"https://www.who.int/emergencies/disease-outbreak-news",status:who.status==="fulfilled"?"live":"unavailable"},
   ];
   const liveSources = sources.filter((source)=>source.status==="live").length;
-  return Response.json({fetchedAt,status:liveSources===sources.length?"live":liveSources?"partial":"unavailable",events,sources},{headers:{"Cache-Control":"public, max-age=120, s-maxage=300, stale-while-revalidate=900"}});
+  return Response.json({fetchedAt,status:liveSources===sources.length?"live":liveSources?"partial":"unavailable",events,sources},{headers:{"Cache-Control":"public, max-age=300, s-maxage=900, stale-while-revalidate=3600"}});
 }

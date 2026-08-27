@@ -313,7 +313,7 @@ export async function GET(request:Request) {
     { stories, sources, fetchedAt: new Date().toISOString(), failedFeeds, totalFeeds: activeFeeds.length },
     {
       status: stories.length ? 200 : 503,
-      headers: { "Cache-Control": "public, max-age=120, s-maxage=300, stale-while-revalidate=900" },
+      headers: { "Cache-Control": "public, max-age=300, s-maxage=900, stale-while-revalidate=3600" },
     },
   );
 }

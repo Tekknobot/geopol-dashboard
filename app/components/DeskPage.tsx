@@ -58,7 +58,7 @@ const storyImage=(story:Story)=>story.imageUrl??`/api/article-image?url=${encode
 function StoryImage({story,className=""}:{story:Story;className?:string}){
   return <div className={`desk-story-image ${className}`}>
     <div className="desk-image-fallback"><span>{story.category.slice(0,2).toUpperCase()}</span><small>{story.source}</small></div>
-    <img src={storyImage(story)} alt={`${story.source} image for ${story.title}`} referrerPolicy="no-referrer" onError={(event)=>{event.currentTarget.style.display="none";}}/>
+    <img loading="lazy" decoding="async" src={storyImage(story)} alt={`${story.source} image for ${story.title}`} referrerPolicy="no-referrer" onError={(event)=>{event.currentTarget.style.display="none";}}/>
   </div>;
 }
 
@@ -78,7 +78,7 @@ export default function DeskPage({config}:{config:DeskConfig}){
   const loadNews=useCallback(async()=>{
     setStatus((current)=>current==="error"?"loading":current);
     try{
-      const response=await fetch(`/api/news?desk=${config.desk}`,{cache:"no-store",signal:AbortSignal.timeout(8500)});
+      const response=await fetch(`/api/news?desk=${config.desk}`,{signal:AbortSignal.timeout(8500)});
       if(!response.ok)throw new Error("feed unavailable");
       const data=await response.json() as NewsResponse;
       const deskStories=data.stories.filter((story)=>story.desk===config.desk);
@@ -92,7 +92,7 @@ export default function DeskPage({config}:{config:DeskConfig}){
 
   useEffect(()=>{
     const initial=window.setTimeout(()=>void loadNews(),0);
-    const refresh=window.setInterval(()=>void loadNews(),300000);
+    const refresh=window.setInterval(()=>{if(document.visibilityState==="visible")void loadNews();},900000);
     const timer=window.setInterval(()=>setClock(Date.now()),60000);
     return()=>{window.clearTimeout(initial);window.clearInterval(refresh);window.clearInterval(timer);};
   },[loadNews]);

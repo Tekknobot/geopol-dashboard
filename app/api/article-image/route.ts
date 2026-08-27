@@ -1,5 +1,10 @@
 export const runtime = "edge"; //
 
+const SUCCESS_CACHE = "public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000";
+const MISS_CACHE = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800";
+const FAILURE_CACHE = "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400";
+const cachedText = (body:string,status:number,cacheControl:string) => new Response(body,{status,headers:{"Cache-Control":cacheControl}});
+
 const publisherDomains = [
   "bbc.co.uk",
   "bbc.com",
@@ -48,22 +53,22 @@ export function publisherImageFromHtml(html:string,articleUrl:string){
 
 export async function GET(request:Request){
   const rawUrl=new URL(request.url).searchParams.get("url");
-  if(!rawUrl)return new Response("Missing article URL",{status:400});
+  if(!rawUrl)return cachedText("Missing article URL",400,MISS_CACHE);
   let articleUrl:URL;
-  try{articleUrl=new URL(rawUrl);}catch{return new Response("Invalid article URL",{status:400});}
-  if(articleUrl.protocol!=="https:"||!isPublisherHost(articleUrl.hostname))return new Response("Unsupported publisher",{status:403});
+  try{articleUrl=new URL(rawUrl);}catch{return cachedText("Invalid article URL",400,MISS_CACHE);}
+  if(articleUrl.protocol!=="https:"||!isPublisherHost(articleUrl.hostname))return cachedText("Unsupported publisher",403,MISS_CACHE);
 
   try{
     const response=await fetch(articleUrl,{headers:{"User-Agent":"AtlasWorldNews/1.0 (+publisher image preview)",Accept:"text/html,application/xhtml+xml"},redirect:"follow",signal:AbortSignal.timeout(6500)});
-    if(!response.ok)return new Response("Publisher page unavailable",{status:404});
+    if(!response.ok)return cachedText("Publisher page unavailable",404,FAILURE_CACHE);
     const contentType=response.headers.get("content-type")??"";
-    if(!contentType.includes("text/html")&&!contentType.includes("application/xhtml+xml"))return new Response("Publisher page is not HTML",{status:404});
+    if(!contentType.includes("text/html")&&!contentType.includes("application/xhtml+xml"))return cachedText("Publisher page is not HTML",404,MISS_CACHE);
     const imageUrl=publisherImageFromHtml((await response.text()).slice(0,500_000),response.url);
-    if(!imageUrl)return new Response("Publisher image unavailable",{status:404,headers:{"Cache-Control":"public, max-age=900, s-maxage=3600"}});
+    if(!imageUrl)return cachedText("Publisher image unavailable",404,MISS_CACHE);
     const parsedImage=new URL(imageUrl);
-    if(parsedImage.protocol!=="https:"&&parsedImage.protocol!=="http:")return new Response("Invalid publisher image",{status:404});
-    return Response.redirect(parsedImage.toString(),302);
+    if(parsedImage.protocol!=="https:"&&parsedImage.protocol!=="http:")return cachedText("Invalid publisher image",404,MISS_CACHE);
+    return new Response(null,{status:302,headers:{Location:parsedImage.toString(),"Cache-Control":SUCCESS_CACHE}});
   }catch{
-    return new Response("Publisher image unavailable",{status:404,headers:{"Cache-Control":"public, max-age=300, s-maxage=900"}});
+    return cachedText("Publisher image unavailable",404,FAILURE_CACHE);
   }
 }

@@ -27,7 +27,7 @@ export default function VideoNewsDesk(){
 
   useEffect(()=>{
     const controller=new AbortController();
-    fetch("/api/video-news",{cache:"no-store",signal:controller.signal})
+    fetch("/api/video-news",{signal:controller.signal})
       .then((response)=>{if(!response.ok)throw new Error("Video feeds unavailable");return response.json() as Promise<VideoResponse>;})
       .then((data)=>{setLatestVideos(data.videos);setFeedState(data.availableSources===data.totalSources?"live":"partial");})
       .catch((error:unknown)=>{if((error as Error).name!=="AbortError")setFeedState("partial");});

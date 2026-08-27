@@ -88,6 +88,6 @@ export async function GET(request:Request){
       totalSources:selectedSources.length,
       partial:availableSources>0&&availableSources<selectedSources.length,
     },
-    {headers:{"Cache-Control":"public, max-age=120, s-maxage=300, stale-while-revalidate=1200"}}
+    {headers:{"Cache-Control":"public, max-age=600, s-maxage=1800, stale-while-revalidate=86400"}}
   );
 }

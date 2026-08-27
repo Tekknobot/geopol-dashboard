@@ -80,7 +80,7 @@ export default function WorldGrid(){
   const loadNews=useCallback(async()=>{
     setStatus((current)=>current==="error"?"loading":current);
     try{
-      const response=await fetch("/api/news",{cache:"no-store",signal:AbortSignal.timeout(9000)});
+      const response=await fetch("/api/news",{signal:AbortSignal.timeout(9000)});
       if(!response.ok)throw new Error("Publisher feeds unavailable");
       const data=await response.json() as NewsResponse;
       if(!data.stories.length)throw new Error("No publisher stories");
@@ -94,7 +94,7 @@ export default function WorldGrid(){
 
   useEffect(()=>{
     const initial=window.setTimeout(()=>void loadNews(),0);
-    const refresh=window.setInterval(()=>void loadNews(),300000);
+    const refresh=window.setInterval(()=>{if(document.visibilityState==="visible")void loadNews();},900000);
     const ticker=window.setInterval(()=>setClock(Date.now()),60000);
     return()=>{window.clearTimeout(initial);window.clearInterval(refresh);window.clearInterval(ticker);};
   },[loadNews]);

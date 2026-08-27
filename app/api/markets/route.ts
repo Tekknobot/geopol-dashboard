@@ -132,5 +132,5 @@ export async function GET(){
   ]);
   const sources=[sourceState("crypto",crypto,true),sourceState("ecb",ecb),sourceState("rates",rates),sourceState("cftc",cftc),sourceState("breadth",breadth),sourceState("volatility",volatility)];const availableCount=sources.filter(source=>source.status!=="unavailable").length;const degraded=sources.some(source=>source.status==="degraded");
   const regime=regimeProxy(breadth.data,volatility.data,rates.data,crypto.data);
-  return Response.json({fetchedAt,status:availableCount===6?(degraded?"degraded":"live"):availableCount?"partial":"unavailable",crypto:crypto.data?.quotes??[],fx:ecb.data?.quotes??[],treasury:rates.data?.quotes??[],curve:rates.data?.curve??{twoTen:null,threeMonthTen:null},positioning:cftc.data,breadth:breadth.data,volatility:volatility.data,regime,sources},{headers:{"Cache-Control":"public, s-maxage=15, stale-while-revalidate=120"}});
+  return Response.json({fetchedAt,status:availableCount===6?(degraded?"degraded":"live"):availableCount?"partial":"unavailable",crypto:crypto.data?.quotes??[],fx:ecb.data?.quotes??[],treasury:rates.data?.quotes??[],curve:rates.data?.curve??{twoTen:null,threeMonthTen:null},positioning:cftc.data,breadth:breadth.data,volatility:volatility.data,regime,sources},{headers:{"Cache-Control":"public, max-age=60, s-maxage=300, stale-while-revalidate=3600"}});
 }

@@ -42,7 +42,7 @@ export default function DeskVideoSection({desk}:{desk:Desk}){
     // The API already caps each publisher independently; this is a final client
     // guard so a browser/Vercel edge oddity can never leave the spinner forever.
     const timeout=window.setTimeout(()=>controller.abort(),6500);
-    fetch(`/api/video-news?room=${desk}&t=${Date.now()}`,{cache:"no-store",signal:controller.signal})
+    fetch(`/api/video-news?room=${desk}`,{signal:controller.signal})
       .then((response)=>response.ok?response.json() as Promise<VideoResponse>:Promise.reject(new Error("video feed unavailable")))
       .then((data)=>{
         const next=Array.isArray(data.videos)?data.videos:[];
