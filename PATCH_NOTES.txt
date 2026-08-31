@@ -13,3 +13,9 @@ Changes
 Deployment
 - Deploy/build this archive the same way as the previous project.
 - A hard refresh after deployment is recommended so previously cached CARTO tiles disappear.
+
+MAP VISIBILITY PASS
+- Lightened the API-key-free dark map treatment used by Intelligence Map and Canada Simulator.
+- Replaced the near-black monochrome transform with a brighter slate/blue-gray treatment.
+- Roads, coastlines, borders, labels, and city detail should now read much more clearly while retaining ATLAS's dark UI.
+- No external tile provider or API key was added.
