@@ -80,8 +80,10 @@ function iconFor(cluster:Cluster){
   });
 }
 const basemaps:Record<Basemap,{url:string;attribution:string}>={
-  dark:{url:"https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'},
-  light:{url:"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'},
+  // CARTO began watermarking unauthenticated raster tiles in August 2026.
+  // Keep the default dark look without an API key by styling standard OSM tiles locally.
+  dark:{url:"https://tile.openstreetmap.org/{z}/{x}/{y}.png",attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'},
+  light:{url:"https://tile.openstreetmap.org/{z}/{x}/{y}.png",attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'},
   terrain:{url:"https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",attribution:'Map data &copy; OpenStreetMap contributors, SRTM | Map style &copy; OpenTopoMap'},
 };
 const regions=[
@@ -185,7 +187,7 @@ export default function IntelligenceMap({points,status,fetchedAt,sourceLine}:{po
 
       <section className="intel-map-stage">
         <MapContainer center={[18,8]} zoom={2} minZoom={2} maxZoom={9} zoomControl={false} scrollWheelZoom worldCopyJump className="intel-leaflet-map">
-          <TileLayer key={basemap} url={basemaps[basemap].url} attribution={basemaps[basemap].attribution}/>
+          <TileLayer key={basemap} className={basemap==="dark"?"intel-dark-tiles":undefined} url={basemaps[basemap].url} attribution={basemaps[basemap].attribution}/>
           <ZoomControl position="topright"/>
           <ZoomWatch onZoom={setZoom}/><MapMotion focus={focus}/>
           {routes&&activeLayers.has("Infrastructure")&&tradeRoutes.map((route)=><Polyline key={route.name} positions={route.points} pathOptions={{color:"#51b9d6",weight:1.4,opacity:.52,dashArray:"7 9"}}><Tooltip sticky>{route.name} · schematic reference corridor</Tooltip></Polyline>)}

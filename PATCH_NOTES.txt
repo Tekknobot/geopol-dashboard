@@ -1,0 +1,15 @@
+ATLAS map basemap patch — 2026-08-30
+
+Problem
+- CARTO's legacy raster basemaps now require an API key and watermark keyless tiles with "API KEY REQUIRED".
+
+Changes
+- Intelligence Map dark basemap now uses OpenStreetMap raster tiles with a local CSS dark treatment, so no CARTO key is required.
+- Intelligence Map light basemap uses OpenStreetMap directly.
+- Canada Simulator dark basemap now uses OpenStreetMap with the same API-key-free dark treatment.
+- CARTO attribution was removed from the affected layers; OpenStreetMap attribution remains visible.
+- Terrain/OpenTopoMap and the existing World Event Map were left unchanged.
+
+Deployment
+- Deploy/build this archive the same way as the previous project.
+- A hard refresh after deployment is recommended so previously cached CARTO tiles disappear.
