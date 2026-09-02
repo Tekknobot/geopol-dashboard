@@ -37,7 +37,7 @@ const sourceAge = (asOf:string|null,now:number) => asOf ? relativeTime(asOf,now)
 const compactNumber = (value:number) => new Intl.NumberFormat(undefined,{notation:"compact",maximumFractionDigits:1,signDisplay:"always"}).format(value);
 const clampScore = (value:number) => Math.min(100,Math.max(0,value));
 
-const regions = ["All regions","Canada","Global","Middle East","Europe","Asia Pacific","Africa","Americas"];
+const regions = ["All regions","Canada","United States","Latin America & Caribbean","Europe","Middle East","Africa","South Asia","East Asia","Southeast Asia","Oceania & Pacific","Global"];
 type HeroMedia = {image:string;credit:string;label:string};
 const mediaForStory = (story:Story):HeroMedia => ({
   image:story.imageUrl??`/api/article-image?url=${encodeURIComponent(story.articleUrl)}`,

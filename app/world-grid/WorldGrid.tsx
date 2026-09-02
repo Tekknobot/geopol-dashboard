@@ -33,7 +33,7 @@ type DeskFilter = "all"|Story["desk"];
 type SortMode = "latest"|"priority"|"visual";
 
 const PAGE_SIZE=36;
-const regions=["All regions","Canada","Global","Middle East","Europe","Asia Pacific","Africa","Americas"];
+const regions=["All regions","Canada","United States","Latin America & Caribbean","Europe","Middle East","Africa","South Asia","East Asia","Southeast Asia","Oceania & Pacific","Global"];
 const editorialTopics=["All","Conflict","Politics","Economy","Technology","Climate","Disasters","Science","Film","Music","Gaming","Football","Basketball","Hockey"];
 const priorityRank:Record<Story["level"],number>={critical:4,elevated:3,watch:2,stable:1};
 

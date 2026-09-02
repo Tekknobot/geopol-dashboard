@@ -19,3 +19,27 @@ MAP VISIBILITY PASS
 - Replaced the near-black monochrome transform with a brighter slate/blue-gray treatment.
 - Roads, coastlines, borders, labels, and city detail should now read much more clearly while retaining ATLAS's dark UI.
 - No external tile provider or API key was added.
+
+GLOBAL NEWS SOURCE BALANCE PASS — 2026-09-02
+
+Goal
+- Keep Canada well represented while making the World desk materially more global by publisher origin and story geography.
+
+Changes
+- Expanded the World desk to 42 feeds from 34 distinct publishers.
+- Added dedicated publisher coverage for the United States, Africa, South Asia, East Asia, Southeast Asia, Oceania/Pacific, and Latin America/Caribbean.
+- Added/expanded regional sources including PBS NewsHour, ABC News US, Arab News, The New Arab, Africanews, Daily Maverick, AllAfrica, Dawn, The Hindu, The Indian Express, South China Morning Post, The Japan Times, Japan Today, CNA, Bangkok Post, ABC News Australia, RNZ, RNZ Pacific, MercoPress, Buenos Aires Herald, and Buenos Aires Times.
+- Reduced duplicate Canadian World feeds from the previous configuration while retaining CBC, Global, CTV, The Narwhal, and Canada's National Observer.
+- Replaced countryFocus with regionFocus metadata so feeds have a publisher-region fallback when local headlines omit geography.
+- Removed the Canada-only +6 ranking bonus and 36-story Canada reserve.
+- Added regional representation floors for Canada, United States, Europe, Middle East, Africa, South Asia, East Asia, Southeast Asia, Oceania/Pacific, Latin America/Caribbean, and Global stories.
+- Added an 18-story per-publisher cap to reduce domination by high-volume publishers.
+- Split the old Asia Pacific bucket into South Asia, East Asia, Southeast Asia, and Oceania & Pacific.
+- Split the old Americas bucket into United States and Latin America & Caribbean, while Canada remains its own region.
+- Updated the location resolver and World/desk filter menus to use the new regional taxonomy.
+- Added API metadata that distinguishes configured publisher count from feed count and returns regionalCoverage.
+
+Validation
+- Static source validation passed: 42 World feeds / 34 World publishers and all target regions represented in feed metadata.
+- TypeScript syntax checking of the modified news files produced only expected unresolved-module errors because dependencies are not installed in this sandbox; no syntax/type errors from the patch were reported.
+- A full npm install/build could not run because registry.npmjs.org is not resolvable from this sandbox. No package versions or lockfile entries were changed.

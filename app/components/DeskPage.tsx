@@ -41,7 +41,7 @@ export type DeskConfig = {
   lenses:Array<{title:string;copy:string;topics:string[]}>;
 };
 
-const regions=["All regions","Canada","Global","Middle East","Europe","Asia Pacific","Africa","Americas"];
+const regions=["All regions","Canada","United States","Latin America & Caribbean","Europe","Middle East","Africa","South Asia","East Asia","Southeast Asia","Oceania & Pacific","Global"];
 const exactTime=(value:string)=>new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(value));
 const relativeTime=(value:string,now:number)=>{
   const elapsed=Math.max(0,now-Date.parse(value));
