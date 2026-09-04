@@ -50,3 +50,12 @@ test("maps Canadian national and city coverage accurately", () => {
   assert.equal(locationMatchFor("Port of Vancouver traffic resumes")?.name, "Vancouver");
   assert.equal(locationMatchFor("Regina King joins the cast"), undefined);
 });
+
+test("maps Colombo headlines to the Sri Lankan capital", () => {
+  const match = locationMatchFor("Colombo port operations return to normal");
+  assert.equal(match?.name, "Colombo");
+  assert.equal(match?.region, "South Asia");
+  assert.equal(match?.precision, "hotspot");
+  assert.ok(match && match.lat > 6 && match.lat < 8);
+  assert.ok(match && match.lng > 79 && match.lng < 81);
+});

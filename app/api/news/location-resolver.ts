@@ -45,6 +45,7 @@ const hotspotLocations: LocationMatch[] = [
   {name:"Cannes",lat:43.55,lng:7.02,precision:"hotspot",aliases:["Cannes"],region:"Europe"},
   {name:"Toronto",lat:43.65,lng:-79.38,precision:"hotspot",aliases:["Toronto"]},
   {name:"Mumbai",lat:19.08,lng:72.88,precision:"hotspot",aliases:["Mumbai","Bollywood"],region:"South Asia"},
+  {name:"Colombo",lat:6.9271,lng:79.8612,precision:"hotspot",aliases:["Colombo"],region:"South Asia"},
   {name:"Seoul",lat:37.57,lng:126.98,precision:"hotspot",aliases:["Seoul"],region:"East Asia"},
   {name:"Tokyo",lat:35.68,lng:139.69,precision:"hotspot",aliases:["Tokyo"],region:"East Asia"},
   {name:"Melbourne",lat:-37.81,lng:144.96,precision:"hotspot",aliases:["Melbourne"],region:"Oceania & Pacific"},

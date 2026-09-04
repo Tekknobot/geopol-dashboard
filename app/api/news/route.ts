@@ -80,6 +80,7 @@ const feeds: FeedDefinition[] = [
   { source: "Dawn", url: "https://www.dawn.com/feeds/home", desk: "world", regionFocus: "South Asia" },
   { source: "The Hindu", url: "https://www.thehindu.com/feeder/default.rss", desk: "world", regionFocus: "South Asia" },
   { source: "The Indian Express", url: "https://indianexpress.com/section/india/feed/", desk: "world", regionFocus: "South Asia" },
+  { source: "Daily Mirror Sri Lanka", url: "https://www.dailymirror.lk/rss/breaking_news/108", desk: "world", regionFocus: "South Asia" },
 
   // East Asia.
   { source: "South China Morning Post", url: "https://www.scmp.com/rss/91/feed", desk: "world", regionFocus: "East Asia" },
