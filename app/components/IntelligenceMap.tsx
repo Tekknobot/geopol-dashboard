@@ -210,7 +210,7 @@ export default function IntelligenceMap({points,status,fetchedAt,sourceLine}:{po
               eventHandlers={{click:inspect}}
             >
               <Tooltip direction="top" offset={[0,-5]} opacity={1}>
-                {count>1?<><strong>{count} signals</strong><span>Click to inspect cluster</span></>:<><strong>{primary.title}</strong><span>{primary.category?`${primary.category} · `:""}{primary.layer} · {primary.source}</span></>}
+                {count>1?<><strong>{count} signals</strong><span>Click to inspect cluster</span></>:<><strong data-atlas-content-translate>{primary.title}</strong><span>{primary.category?`${primary.category} · `:""}{primary.layer} · {primary.source}</span></>}
               </Tooltip>
             </Marker>;
           })}
@@ -220,20 +220,20 @@ export default function IntelligenceMap({points,status,fetchedAt,sourceLine}:{po
         <div className="intel-map-actions"><button onClick={()=>setMobilePanel("layers")}><span>☷</span> Layers</button><button onClick={()=>setMobilePanel("feed")}><span>▤</span> Signals</button><button onClick={()=>setFocusMode((value)=>!value)}><span>{focusMode?"⊟":"⊞"}</span> {focusMode?"Exit focus":"Focus map"}</button></div>
         <div className="intel-legend"><span><i className="critical"/>Critical</span><span><i className="elevated"/>Elevated</span><span><i className="watch"/>Watch</span><span><i className="stable"/>Stable</span></div>
         {!filtered.length&&<div className="intel-empty"><strong>No signals match this operating picture</strong><span>Enable another layer, expand the time window or clear search.</span><button onClick={()=>{setQuery("");setActiveLayers(new Set(layerOrder));setTimeWindow(168);}}>Reset view</button></div>}
-        <div className="intel-timeline"><div><span>RECENT SIGNALS</span><small>{timeWindow===168?"7 days":`${timeWindow} hours`} · newest first</small></div><section>{timeline.map((point)=><button key={point.id} onClick={()=>choosePoint(point)}><i className={point.severity}/><time>{relativeTime(point.occurredAt)}</time><span>{point.title}</span></button>)}</section></div>
+        <div className="intel-timeline"><div><span>RECENT SIGNALS</span><small>{timeWindow===168?"7 days":`${timeWindow} hours`} · newest first</small></div><section>{timeline.map((point)=><button key={point.id} onClick={()=>choosePoint(point)}><i className={point.severity}/><time>{relativeTime(point.occurredAt)}</time><span data-atlas-content-translate>{point.title}</span></button>)}</section></div>
       </section>
 
       <aside className={`intel-feed ${mobilePanel==="feed"?"mobile-open":""}`}>
         <div className="intel-panel-head"><div><span>{selectedCluster?"CLUSTER INSPECTOR":selected?"SIGNAL INSPECTOR":"PRIORITY QUEUE"}</span><strong>{selectedCluster?`${selectedCluster.length} related signals`:selected?selected.layer:"Live signal feed"}</strong></div><button onClick={()=>{setMobilePanel(null);setSelected(null);setSelectedCluster(null);}} aria-label="Close signal panel">×</button></div>
         {selected&&<article className="intel-detail">
           <div className="intel-detail-meta"><span className={selected.severity}>{selected.severity}</span><time>{relativeTime(selected.occurredAt)} ago</time></div>
-          <p>{selected.layer}{selected.category?` · ${selected.category}`:""}</p><h2 data-atlas-no-ui-translate>{selected.title}</h2>
+          <p>{selected.layer}{selected.category?` · ${selected.category}`:""}</p><h2 data-atlas-content-translate>{selected.title}</h2>
           <div className="intel-location"><span>◎</span><strong>{selected.location??`${selected.lat.toFixed(2)}, ${selected.lng.toFixed(2)}`}</strong><small>{selected.reference?"Reference location":"Mapped event location"}</small></div>
-          <p className="intel-summary" data-atlas-no-ui-translate>{selected.summary}</p>
+          <p className="intel-summary" data-atlas-content-translate>{selected.summary}</p>
           <div className="intel-source-card"><span>SOURCE</span><strong>{selected.source}</strong><small>{selected.reference?"Reference layer · not a live status report":`Published ${new Date(selected.occurredAt).toLocaleString()}`}</small></div>
           <div className="intel-detail-actions">{selected.sourceUrl&&<a href={selected.sourceUrl} target="_blank" rel="noreferrer">Open source ↗</a>}<button onClick={()=>toggleSaved(selected.id)}>{saved.includes(selected.id)?"◆ Saved":"◇ Save"}</button><button onClick={()=>void share(selected)}>{copied?"Copied":"Share"}</button></div>
         </article>}
-        {!selected&&<div className="intel-feed-list">{selectedCluster&&<button className="intel-back" onClick={()=>setSelectedCluster(null)}>← Back to priority queue</button>}{shown.map((point,index)=><button key={point.id} onClick={()=>choosePoint(point)}><div><span className={point.severity}>{point.layer}</span><time>{relativeTime(point.occurredAt)}</time></div><strong data-atlas-no-ui-translate>{point.title}</strong><small>{point.location??point.source}</small><em>{String(index+1).padStart(2,"0")}</em></button>)}</div>}
+        {!selected&&<div className="intel-feed-list">{selectedCluster&&<button className="intel-back" onClick={()=>setSelectedCluster(null)}>← Back to priority queue</button>}{shown.map((point,index)=><button key={point.id} onClick={()=>choosePoint(point)}><div><span className={point.severity}>{point.layer}</span><time>{relativeTime(point.occurredAt)}</time></div><strong data-atlas-content-translate>{point.title}</strong><small>{point.location??point.source}</small><em>{String(index+1).padStart(2,"0")}</em></button>)}</div>}
         {!selected&&shown.length===0&&<div className="intel-feed-empty">No visible signals</div>}
       </aside>
     </div>

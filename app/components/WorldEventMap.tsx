@@ -86,7 +86,7 @@ export default function WorldEventMap({mode,stories,filter=""}:{mode:MapMode;sto
         const count=cluster.stories.length;
         return <CircleMarker key={cluster.key} center={cluster.position} radius={count===1?8:Math.min(21,9+Math.log2(count)*3)} pathOptions={{color:"#fff",weight:3,fillColor:colors[cluster.tone],fillOpacity:.94}}>
           {count>1&&<Tooltip permanent direction="center" className="cluster-label" opacity={1}>{count}</Tooltip>}
-          <Popup><div className="news-map-popup"><strong>{count===1?cluster.stories[0].location.name:`${count} headlines in this area`}</strong>{cluster.stories.slice(0,5).map((story)=><a key={story.id} href={story.articleUrl} target="_blank" rel="noreferrer"><span>{story.title}</span><small>{story.source} · {story.location.name} ↗</small></a>)}{count>5&&<em>Zoom in to separate {count-5} more headlines.</em>}{count===1&&<em>{cluster.stories[0].location.precision==="country"?"Placed at the country’s geographic centre.":"Placed at the named location."}</em>}</div></Popup>
+          <Popup><div className="news-map-popup"><strong>{count===1?cluster.stories[0].location.name:`${count} headlines in this area`}</strong>{cluster.stories.slice(0,5).map((story)=><a key={story.id} href={story.articleUrl} target="_blank" rel="noreferrer"><span data-atlas-content-translate>{story.title}</span><small>{story.source} · {story.location.name} ↗</small></a>)}{count>5&&<em>Zoom in to separate {count-5} more headlines.</em>}{count===1&&<em>{cluster.stories[0].location.precision==="country"?"Placed at the country’s geographic centre.":"Placed at the named location."}</em>}</div></Popup>
         </CircleMarker>;
       })}
     </MapContainer>

@@ -1,7 +1,7 @@
 export type AtlasLanguage = "en" | "ta";
 
-// Sri Lankan standard written Tamil (ta-LK). Publisher headlines/summaries are intentionally
-// not translated here; this dictionary covers ATLAS-owned interface language only.
+// Sri Lankan standard written Tamil (ta-LK). This dictionary covers ATLAS-owned interface language.
+// Live publisher headlines and summaries are translated separately at display time so source data stays untouched.
 export const TA: Record<string, string> = {
   // Global navigation
   "World": "உலகம்",

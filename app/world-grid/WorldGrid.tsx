@@ -195,7 +195,7 @@ export default function WorldGrid(){
             <GridImage story={story}/>
             <div className="world-grid-card-copy">
               <p><span>{story.category}</span><b>·</b>{story.region}</p>
-              <h3 data-atlas-no-ui-translate>{story.title}</h3>
+              <h3 data-atlas-content-translate>{story.title}</h3>
               <div><strong>{story.source}</strong><time dateTime={story.publishedAt} title={exactTime(story.publishedAt)}>{relativeTime(story.publishedAt,clock)}</time><span>{story.read}</span></div>
             </div>
           </a>

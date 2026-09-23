@@ -46,8 +46,8 @@ export function StoryThreads({stories}:{stories:FeatureStory[]}){
     <div className="panel-heading feature-heading"><div><p>DEVELOPING STORY THREADS</p><h3 id="story-threads-title">Follow events, not duplicates</h3><span>Related publisher reports grouped by place or topic.</span></div><em>{threads.length} active threads</em></div>
     <div className="thread-grid">{threads.map((thread)=><article key={thread.label}>
       <header><span>{thread.label}</span><strong>{thread.stories.length} updates · {thread.sources} sources</strong></header>
-      <a className="thread-lead" href={thread.stories[0].articleUrl} target="_blank" rel="noreferrer"><small>{thread.stories[0].source} · {relativeTime(thread.stories[0].publishedAt)}</small><h4>{thread.stories[0].title}</h4></a>
-      <div>{thread.stories.slice(1,4).map((story)=><a key={story.id} href={story.articleUrl} target="_blank" rel="noreferrer"><time dateTime={story.publishedAt}>{relativeTime(story.publishedAt)}</time><span>{story.title}</span><small>{story.source}</small></a>)}</div>
+      <a className="thread-lead" href={thread.stories[0].articleUrl} target="_blank" rel="noreferrer"><small>{thread.stories[0].source} · {relativeTime(thread.stories[0].publishedAt)}</small><h4 data-atlas-content-translate>{thread.stories[0].title}</h4></a>
+      <div>{thread.stories.slice(1,4).map((story)=><a key={story.id} href={story.articleUrl} target="_blank" rel="noreferrer"><time dateTime={story.publishedAt}>{relativeTime(story.publishedAt)}</time><span data-atlas-content-translate>{story.title}</span><small>{story.source}</small></a>)}</div>
     </article>)}</div>
   </section>;
 }
@@ -70,7 +70,7 @@ export function ReleaseRadar({stories}:{stories:FeatureStory[]}){
   if(!entries.length)return null;
   return <section className="desk-live-module release-radar" aria-labelledby="release-radar-title">
     <div className="desk-section-heading"><div><p>LIVE RELEASE COVERAGE</p><h2 id="release-radar-title">Release radar</h2></div><span>Publisher-reported launches, premieres and events</span></div>
-    <div className="release-radar-grid">{entries.map(({label,story})=><article key={label}><span>{label}</span><small>{story.category} · {relativeTime(story.publishedAt)}</small><h3>{story.title}</h3><p>{story.summary}</p><a href={story.articleUrl} target="_blank" rel="noreferrer">{story.source} ↗</a></article>)}</div>
+    <div className="release-radar-grid">{entries.map(({label,story})=><article key={label}><span>{label}</span><small>{story.category} · {relativeTime(story.publishedAt)}</small><h3 data-atlas-content-translate>{story.title}</h3><p data-atlas-content-translate>{story.summary}</p><a href={story.articleUrl} target="_blank" rel="noreferrer">{story.source} ↗</a></article>)}</div>
   </section>;
 }
 
@@ -96,8 +96,8 @@ export function SportsMatchHub({stories}:{stories:FeatureStory[]}){
   if(!matches.length&&!tournaments.length)return null;
   return <section className="desk-live-module sports-match-hub" aria-labelledby="match-centre-title">
     <div className="desk-section-heading"><div><p>FIXTURES / RESULTS / COMPETITIONS</p><h2 id="match-centre-title">Match Centre</h2></div><span>Source-first updates · no betting content</span></div>
-    <div className="match-hub-grid"><div className="match-centre-list"><header><strong>Latest match coverage</strong><small>{matches.length} reports</small></header>{matches.map((story)=><a key={story.id} href={story.articleUrl} target="_blank" rel="noreferrer"><em className={matchState(story).toLowerCase()}>{matchState(story)}</em><span><small>{story.category} · {relativeTime(story.publishedAt)}</small><strong>{story.title}</strong><i>{story.source} ↗</i></span></a>)}</div>
-      <aside className="tournament-hub"><header><strong>Tournament hub</strong><small>Active coverage clusters</small></header>{tournaments.map((tournament)=><article key={tournament.label}><div><strong>{tournament.label}</strong><span>{tournament.stories.length} current reports</span></div><a href={tournament.stories[0].articleUrl} target="_blank" rel="noreferrer">{tournament.stories[0].title} ↗</a></article>)}</aside>
+    <div className="match-hub-grid"><div className="match-centre-list"><header><strong>Latest match coverage</strong><small>{matches.length} reports</small></header>{matches.map((story)=><a key={story.id} href={story.articleUrl} target="_blank" rel="noreferrer"><em className={matchState(story).toLowerCase()}>{matchState(story)}</em><span><small>{story.category} · {relativeTime(story.publishedAt)}</small><strong data-atlas-content-translate>{story.title}</strong><i>{story.source} ↗</i></span></a>)}</div>
+      <aside className="tournament-hub"><header><strong>Tournament hub</strong><small>Active coverage clusters</small></header>{tournaments.map((tournament)=><article key={tournament.label}><div><strong>{tournament.label}</strong><span>{tournament.stories.length} current reports</span></div><a href={tournament.stories[0].articleUrl} target="_blank" rel="noreferrer"><span data-atlas-content-translate>{tournament.stories[0].title}</span> ↗</a></article>)}</aside>
     </div>
   </section>;
 }

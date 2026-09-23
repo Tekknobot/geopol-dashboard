@@ -81,14 +81,14 @@ export default function DeskVideoSection({desk}:{desk:Desk}){
           <img src={`https://i.ytimg.com/vi/${active.videoId}/maxresdefault.jpg`} alt="" onError={(event)=>{event.currentTarget.src=`https://i.ytimg.com/vi/${active.videoId}/hqdefault.jpg`;}}/>
           <span className="desk-video-wash"/>
           <span className="desk-video-play">▶</span>
-          <span className="desk-video-feature-copy"><small>FEATURED VIDEO · {sourceName(active.sourceId)}</small><strong>{active.title}</strong><em>{relativeTime(active.publishedAt)}</em></span>
+          <span className="desk-video-feature-copy"><small>FEATURED VIDEO · {sourceName(active.sourceId)}</small><strong data-atlas-content-translate>{active.title}</strong><em>{relativeTime(active.publishedAt)}</em></span>
         </button>}
       </div>
       <div className="desk-video-queue" aria-label="More publisher videos">
         <div className="desk-video-queue-label"><span>UP NEXT</span><small>{deskVideos.length} reports</small></div>
         {deskVideos.slice(1,5).map((video)=><button key={video.videoId} type="button" onClick={()=>choose(video)}>
           <span className="desk-video-thumb"><img src={`https://i.ytimg.com/vi/${video.videoId}/mqdefault.jpg`} alt=""/><i>▶</i></span>
-          <span><small>{sourceName(video.sourceId)} · {relativeTime(video.publishedAt)}</small><strong>{video.title}</strong></span>
+          <span><small>{sourceName(video.sourceId)} · {relativeTime(video.publishedAt)}</small><strong data-atlas-content-translate>{video.title}</strong></span>
         </button>)}
       </div>
     </div>:loadState==="fallback"&&fallbackSource&&fallbackPlaylist?<div className="desk-video-grid">
