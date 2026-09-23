@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MobileSiteNav from "../components/MobileSiteNav";
+import LanguageToggle from "../i18n/LanguageToggle";
 import { useSavedStories } from "../components/useSavedStories";
 
 type Story = {
@@ -144,7 +145,7 @@ export default function WorldGrid(){
       <Link className="world-grid-brand" href="/"><img src="/favicon.svg" alt=""/>ATLAS<span>.</span></Link>
       <nav aria-label="ATLAS views"><Link href="/">World</Link><Link href="/world-grid" className="active" aria-current="page">Grid</Link><Link href="/intelligence">Intelligence</Link><Link href="/entertainment">Entertainment</Link><Link href="/sports">Sports</Link></nav>
       <button type="button" className={`world-grid-live ${status}`} onClick={()=>void loadNews()}><i/>{status==="loading"?"Connecting":status==="error"?"Retry feeds":status==="partial"?"Partial feed":"Live grid"}</button>
-    </header>
+    <LanguageToggle/></header>
     <MobileSiteNav/>
 
     <section className="world-grid-masthead">
@@ -194,7 +195,7 @@ export default function WorldGrid(){
             <GridImage story={story}/>
             <div className="world-grid-card-copy">
               <p><span>{story.category}</span><b>·</b>{story.region}</p>
-              <h3>{story.title}</h3>
+              <h3 data-atlas-no-ui-translate>{story.title}</h3>
               <div><strong>{story.source}</strong><time dateTime={story.publishedAt} title={exactTime(story.publishedAt)}>{relativeTime(story.publishedAt,clock)}</time><span>{story.read}</span></div>
             </div>
           </a>

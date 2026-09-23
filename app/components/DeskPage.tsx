@@ -7,6 +7,7 @@ import DeskVideoSection from "./DeskVideoSection";
 import { useSavedStories } from "./useSavedStories";
 import { ReleaseRadar, SportsMatchHub } from "./NewsroomFeatures";
 import MobileSiteNav from "./MobileSiteNav";
+import LanguageToggle from "../i18n/LanguageToggle";
 
 const WorldEventMap = dynamic(() => import("./WorldEventMap"), {
   ssr: false,
@@ -125,7 +126,7 @@ export default function DeskPage({config}:{config:DeskConfig}){
     <header className="desk-global-nav">
       <Link className="desk-brand" href="/"><img src="/favicon.svg" alt=""/>ATLAS<span>.</span></Link>
       <nav aria-label="ATLAS newsrooms"><Link href="/">World</Link><Link href="/world-grid">Grid</Link><Link href="/intelligence">Intelligence</Link><Link aria-current={config.desk==="entertainment"?"page":undefined} className={config.desk==="entertainment"?"active":""} href="/entertainment">Entertainment</Link><Link aria-current={config.desk==="sports"?"page":undefined} className={config.desk==="sports"?"active":""} href="/sports">Sports</Link></nav>
-      <button onClick={()=>void loadNews()} className={`desk-live ${status}`}><i/>{status==="loading"?"Connecting":status==="error"?"Retry feeds":status==="partial"?"Partial feed":"Live desk"}</button>
+      <div className="desk-header-actions"><LanguageToggle/><button onClick={()=>void loadNews()} className={`desk-live ${status}`}><i/>{status==="loading"?"Connecting":status==="error"?"Retry feeds":status==="partial"?"Partial feed":"Live desk"}</button></div>
     </header>
     <MobileSiteNav/>
 
@@ -144,7 +145,7 @@ export default function DeskPage({config}:{config:DeskConfig}){
       {hero?<section className="desk-hero" aria-label="Top story carousel" onTouchStart={(event)=>{heroTouchX.current=event.touches[0]?.clientX??null;}} onTouchEnd={(event)=>finishHeroSwipe(event.changedTouches[0]?.clientX??0)}>
         <StoryImage story={hero} className="desk-hero-image"/>
         <div className="desk-hero-shade"/>
-        <div className="desk-hero-copy"><p><span>TOP STORY</span>{hero.category} · {hero.region}</p><h2>{hero.title}</h2><div className="desk-hero-meta"><strong>{hero.source}</strong><time dateTime={hero.publishedAt} title={exactTime(hero.publishedAt)}>{relativeTime(hero.publishedAt,clock)}</time><span>{hero.read} read</span></div><p className="desk-hero-summary">{hero.summary}</p><div className="desk-hero-actions"><a href={hero.articleUrl} target="_blank" rel="noreferrer">Read original story ↗</a><button type="button" className={savedIds.includes(hero.id)?"saved":""} onClick={()=>toggleSaved(hero)}>{savedIds.includes(hero.id)?"◆ Saved":"◇ Save"}</button></div></div>
+        <div className="desk-hero-copy"><p><span>TOP STORY</span>{hero.category} · {hero.region}</p><h2 data-atlas-no-ui-translate>{hero.title}</h2><div className="desk-hero-meta"><strong>{hero.source}</strong><time dateTime={hero.publishedAt} title={exactTime(hero.publishedAt)}>{relativeTime(hero.publishedAt,clock)}</time><span>{hero.read} read</span></div><p className="desk-hero-summary" data-atlas-no-ui-translate>{hero.summary}</p><div className="desk-hero-actions"><a href={hero.articleUrl} target="_blank" rel="noreferrer">Read original story ↗</a><button type="button" className={savedIds.includes(hero.id)?"saved":""} onClick={()=>toggleSaved(hero)}>{savedIds.includes(hero.id)?"◆ Saved":"◇ Save"}</button></div></div>
         <button className="desk-carousel-arrow previous" onClick={()=>stepHero(-1)} aria-label="Previous top story">‹</button><button className="desk-carousel-arrow next" onClick={()=>stepHero(1)} aria-label="Next top story">›</button>
         <div className="desk-carousel-dots">{stories.slice(0,8).map((story,index)=><button key={story.id} className={index===heroIndex?"active":""} onClick={()=>setHeroIndex(index)} aria-label={`Show story ${index+1}`}/>)}</div>
         <span className="desk-carousel-count">{String(heroIndex+1).padStart(2,"0")} / {stories.length}</span>

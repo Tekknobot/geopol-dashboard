@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import LanguageToggle from "../i18n/LanguageToggle";
 
 const items = [
   { label: "World", href: "/", glyph: "⌂" },
@@ -29,6 +30,7 @@ export default function MobileSiteNav(){
           <span aria-hidden>{item.glyph}</span><small>{item.label}</small>
         </Link>;
       })}
+      <LanguageToggle compact/>
     </div>
   </nav>;
 }
