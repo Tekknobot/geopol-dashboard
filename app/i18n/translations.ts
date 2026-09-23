@@ -716,7 +716,7 @@ function translateDateFragments(value:string){
   return out.replace(/\bAM\b/g,"மு.ப").replace(/\bPM\b/g,"பி.ப");
 }
 
-export function translateAtlasText(source:string, language:AtlasLanguage){
+export function translateAtlasText(source:string, language:AtlasLanguage): string {
   if(language==="en" || !source) return source;
   const core=source.trim();
   if(!core) return source;

@@ -14,3 +14,6 @@ This build adds a persistent `EN / தமிழ்` interface switch aimed at Sr
 
 ## Translation model
 The interface uses standard written Sri Lankan Tamil appropriate for Jaffna/Sri Lankan readers. The current implementation intentionally does not machine-translate live publisher journalism. A future `தமிழில் படிக்க` story-translation action can be added separately while preserving a visible original-source option.
+
+## 2026-09-23 TypeScript build fix
+- Added explicit `: string` return type to `translateAtlasText` to satisfy strict Next.js/Vercel type checking for its recursive translation branch.
