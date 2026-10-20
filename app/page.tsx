@@ -9,6 +9,7 @@ import { useSavedStories } from "./components/useSavedStories";
 import { StoryThreads } from "./components/NewsroomFeatures";
 import MobileSiteNav from "./components/MobileSiteNav";
 import LanguageToggle from "./i18n/LanguageToggle";
+import { fetchJsonWithRetry } from "./reliable-fetch";
 
 const WorldEventMap = dynamic(() => import("./components/WorldEventMap"), { ssr: false, loading: () => <div className="map-loading">Loading intelligence map…</div> });
 
@@ -70,13 +71,19 @@ export default function Home(){
   const [marketData,setMarketData]=useState<MarketResponse|null>(null);
   const [marketStatus,setMarketStatus]=useState<"loading"|"live"|"degraded"|"partial"|"unavailable">("loading");
   const heroTouchX=useRef<number|null>(null);
+  const newsRequest=useRef<AbortController|null>(null);
+  const marketRequest=useRef<AbortController|null>(null);
   const loadNews=useCallback(async()=>{
+    if(newsRequest.current)return;
+    const controller=new AbortController();
+    newsRequest.current=controller;
     setFeedStatus((status)=>status==="error"?"loading":status);
     try{
-      const response=await fetch("/api/news",{signal:AbortSignal.timeout(8500)});
-      if(!response.ok)throw new Error("Publisher feeds unavailable");
-      const data=await response.json() as NewsResponse;
-      if(!data.stories.length)throw new Error("No current publisher stories");
+      const data=await fetchJsonWithRetry<NewsResponse>("/api/news",{
+        signal:controller.signal,
+        isValid:(value)=>Array.isArray(value?.stories)&&value.stories.length>0&&Array.isArray(value.sources),
+      });
+      if(controller.signal.aborted)return;
       setStories(data.stories);
       setCategory((current)=>current==="All"||data.stories.some((story)=>story.category===current)?current:"All");
       setFeedSourceCount(data.sources.length);
@@ -84,28 +91,59 @@ export default function Home(){
       setFeedStatus(data.failedFeeds>0?"partial":"live");
       setHeroIndex((index)=>Math.min(index,data.stories.length-1));
     }catch{
-      setFeedStatus("error");
+      if(!controller.signal.aborted)setFeedStatus("error");
+    }finally{
+      if(newsRequest.current===controller)newsRequest.current=null;
     }
   },[]);
   const loadMarkets=useCallback(async()=>{
+    if(marketRequest.current)return;
+    const controller=new AbortController();
+    marketRequest.current=controller;
+    setMarketStatus((current)=>current==="unavailable"?"loading":current);
     try{
-      const response=await fetch("/api/markets");
-      if(!response.ok)throw new Error("Public market feeds unavailable");
-      const data=await response.json() as MarketResponse;
+      const data=await fetchJsonWithRetry<MarketResponse>("/api/markets",{
+        signal:controller.signal,
+        isValid:(value)=>Array.isArray(value?.sources)&&Array.isArray(value?.crypto)&&Array.isArray(value?.fx),
+      });
+      if(controller.signal.aborted)return;
       setMarketData(data);
       setMarketStatus(data.status);
     }catch{
-      setMarketStatus("unavailable");
+      if(!controller.signal.aborted)setMarketStatus("unavailable");
+    }finally{
+      if(marketRequest.current===controller)marketRequest.current=null;
     }
   },[]);
   useEffect(()=>{
-    const initialTimer=window.setTimeout(()=>void loadNews(),0);
-    const marketInitialTimer=window.setTimeout(()=>void loadMarkets(),0);
+    void loadNews();
+    void loadMarkets();
+    const whenActive=()=>{if(document.visibilityState==="visible"){void loadNews();void loadMarkets();}};
+    const whenOnline=()=>{void loadNews();void loadMarkets();};
+    document.addEventListener("visibilitychange",whenActive);
+    window.addEventListener("online",whenOnline);
     const newsTimer=window.setInterval(()=>{if(document.visibilityState==="visible")void loadNews();},900000);
     const marketTimer=window.setInterval(()=>{if(document.visibilityState==="visible")void loadMarkets();},300000);
     const clockTimer=window.setInterval(()=>setClock(Date.now()),60000);
-    return ()=>{window.clearTimeout(initialTimer);window.clearTimeout(marketInitialTimer);window.clearInterval(newsTimer);window.clearInterval(marketTimer);window.clearInterval(clockTimer);};
+    return ()=>{
+      newsRequest.current?.abort();newsRequest.current=null;
+      marketRequest.current?.abort();marketRequest.current=null;
+      document.removeEventListener("visibilitychange",whenActive);
+      window.removeEventListener("online",whenOnline);
+      window.clearInterval(newsTimer);window.clearInterval(marketTimer);window.clearInterval(clockTimer);
+    };
   },[loadMarkets,loadNews]);
+  // Automatically recover from exhausted first-load retries without requiring a manual refresh.
+  useEffect(()=>{
+    if(feedStatus!=="error")return;
+    const retry=window.setTimeout(()=>void loadNews(),30000);
+    return()=>window.clearTimeout(retry);
+  },[feedStatus,loadNews]);
+  useEffect(()=>{
+    if(marketStatus!=="unavailable"||marketData)return;
+    const retry=window.setTimeout(()=>void loadMarkets(),45000);
+    return()=>window.clearTimeout(retry);
+  },[marketStatus,marketData,loadMarkets]);
   const hero=stories[heroIndex]??null;
   const heroVisual=hero?mediaForStory(hero):null;
 

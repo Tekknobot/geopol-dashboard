@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import {useCallback,useEffect,useMemo,useState} from "react";
+import {useCallback,useEffect,useMemo,useRef,useState} from "react";
+import {fetchJsonWithRetry} from "../reliable-fetch";
 import type {IntelPoint,IntelSeverity} from "../components/IntelligenceMap";
 
 const IntelligenceMap=dynamic(()=>import("../components/IntelligenceMap"),{ssr:false,loading:()=><div className="intel-page-loading"><span/><strong>Building global operating picture</strong><small>Connecting attributed public sources…</small></div>});
@@ -148,16 +149,54 @@ export default function IntelligencePage(){
   const [naturalState,setNaturalState]=useState<"loading"|"live"|"partial"|"unavailable">("loading");
   const [fetchedAt,setFetchedAt]=useState<string|null>(null);
 
+  const dataRequest=useRef<AbortController|null>(null);
   const load=useCallback(async()=>{
+    if(dataRequest.current)return;
+    const controller=new AbortController();
+    dataRequest.current=controller;
     setNewsState("loading");setNaturalState("loading");
-    const [newsResult,intelResult]=await Promise.allSettled([
-      fetch("/api/news",{signal:AbortSignal.timeout(10000)}).then(async(response)=>{if(!response.ok)throw new Error("news");return response.json() as Promise<NewsResponse>;}),
-      fetch("/api/intelligence",{signal:AbortSignal.timeout(10000)}).then(async(response)=>{if(!response.ok)throw new Error("intelligence");return response.json() as Promise<IntelligenceResponse>;}),
-    ]);
-    if(newsResult.status==="fulfilled"){setStories(newsResult.value.stories);setNewsSources(newsResult.value.sources);setNewsState(newsResult.value.failedFeeds?"partial":"live");setFetchedAt(newsResult.value.fetchedAt);}else setNewsState("unavailable");
-    if(intelResult.status==="fulfilled"){setNatural(intelResult.value.events);setNaturalSources(intelResult.value.sources);setNaturalState(intelResult.value.status);setFetchedAt((current)=>current??intelResult.value.fetchedAt);}else setNaturalState("unavailable");
+    try{
+      const [newsResult,intelResult]=await Promise.allSettled([
+        fetchJsonWithRetry<NewsResponse>("/api/news",{
+          signal:controller.signal,
+          isValid:(value)=>Array.isArray(value?.stories)&&value.stories.length>0,
+        }),
+        fetchJsonWithRetry<IntelligenceResponse>("/api/intelligence",{
+          signal:controller.signal,
+          isValid:(value)=>Array.isArray(value?.events)&&Array.isArray(value?.sources),
+        }),
+      ]);
+      if(controller.signal.aborted)return;
+      if(newsResult.status==="fulfilled"){
+        setStories(newsResult.value.stories);
+        setNewsSources(newsResult.value.sources);
+        setNewsState(newsResult.value.failedFeeds?"partial":"live");
+        setFetchedAt(newsResult.value.fetchedAt);
+      }else setNewsState("unavailable");
+      if(intelResult.status==="fulfilled"){
+        setNatural(intelResult.value.events);
+        setNaturalSources(intelResult.value.sources);
+        setNaturalState(intelResult.value.status);
+        setFetchedAt((current)=>current??intelResult.value.fetchedAt);
+      }else setNaturalState("unavailable");
+    }finally{
+      if(dataRequest.current===controller)dataRequest.current=null;
+    }
   },[]);
-  useEffect(()=>{void load();const timer=setInterval(()=>{if(document.visibilityState==="visible")void load();},15*60*1000);return()=>clearInterval(timer);},[load]);
+  useEffect(()=>{
+    void load();
+    const whenActive=()=>{if(document.visibilityState==="visible")void load();};
+    const whenOnline=()=>void load();
+    document.addEventListener("visibilitychange",whenActive);
+    window.addEventListener("online",whenOnline);
+    const timer=setInterval(()=>{if(document.visibilityState==="visible")void load();},15*60*1000);
+    return()=>{
+      dataRequest.current?.abort();dataRequest.current=null;
+      document.removeEventListener("visibilitychange",whenActive);
+      window.removeEventListener("online",whenOnline);
+      clearInterval(timer);
+    };
+  },[load]);
 
   const points=useMemo<IntelPoint[]>(()=>[
     ...stories.filter((story)=>story.desk==="world"&&story.location).map((story)=>({id:`news-${story.id}`,layer:"Headlines" as const,title:story.title,summary:story.summary,lat:story.location!.lat,lng:story.location!.lng,occurredAt:story.publishedAt,severity:story.level,source:story.source,sourceUrl:story.articleUrl,location:story.location!.name,category:story.category})),

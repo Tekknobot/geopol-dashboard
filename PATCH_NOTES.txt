@@ -43,3 +43,35 @@ Validation
 - Static source validation passed: 42 World feeds / 34 World publishers and all target regions represented in feed metadata.
 - TypeScript syntax checking of the modified news files produced only expected unresolved-module errors because dependencies are not installed in this sandbox; no syntax/type errors from the patch were reported.
 - A full npm install/build could not run because registry.npmjs.org is not resolvable from this sandbox. No package versions or lockfile entries were changed.
+
+
+FIRST-VISIT HEADLINE / DATA LOAD FIX — 2026-10-20
+
+Issue
+- Client-side news requests used a single 8.5–10 second timeout. When cold server startup,
+  network latency, or publisher feed failures exhausted that request, headlines remained
+  empty until a manual browser refresh.
+- The news API also accidentally permitted intermediary caches to store empty HTTP 503
+  responses with the same long cache lifetime as healthy responses.
+
+Changes
+- Added shared, bounded fetch retries for temporary HTTP failures, timeouts and invalid/
+  empty headline payloads, using 15-second per-attempt timeouts and short backoff delays.
+- Added cancellation of in-flight requests on page unmount and prevention of overlapping
+  requests from timers, refocus or connection restoration.
+- Main homepage, World Grid, Sports, Entertainment and Intelligence Map use the resilient
+  data loading flow. Market widgets also retry on initial network failures.
+- Empty news API 503 responses now use Cache-Control: no-store and Retry-After: 10.
+- The API may serve its most recent healthy snapshot for up to 30 minutes on a publisher
+  outage within the same server instance, rather than returning an empty response.
+- Pages automatically attempt recovery after initial failed headline requests, and refetch
+  when a network connection is restored or a tab becomes visible.
+
+Validation
+- Four new automated retry tests passed (transient 503, empty success payload, permanent
+  HTTP error, cancellation on unmount).
+- TypeScript/TSX transpilation syntax checks passed for every modified source file.
+- Full production build was not run: node_modules was absent from the upload and this
+  environment could not reach the npm registry. Install packages and rebuild on deployment.
+- Included the existing dist directory unchanged; it is NOT a rebuilt production bundle.
+- No node_modules is included in the delivered ZIP.

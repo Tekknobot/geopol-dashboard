@@ -8,6 +8,7 @@ import { useSavedStories } from "./useSavedStories";
 import { ReleaseRadar, SportsMatchHub } from "./NewsroomFeatures";
 import MobileSiteNav from "./MobileSiteNav";
 import LanguageToggle from "../i18n/LanguageToggle";
+import { fetchJsonWithRetry } from "../reliable-fetch";
 
 const WorldEventMap = dynamic(() => import("./WorldEventMap"), {
   ssr: false,
@@ -76,27 +77,50 @@ export default function DeskPage({config}:{config:DeskConfig}){
   const heroTouchX=useRef<number|null>(null);
   const {savedIds,toggleSaved}=useSavedStories();
 
+  const newsRequest=useRef<AbortController|null>(null);
   const loadNews=useCallback(async()=>{
+    if(newsRequest.current)return;
+    const controller=new AbortController();
+    newsRequest.current=controller;
     setStatus((current)=>current==="error"?"loading":current);
     try{
-      const response=await fetch(`/api/news?desk=${config.desk}`,{signal:AbortSignal.timeout(8500)});
-      if(!response.ok)throw new Error("feed unavailable");
-      const data=await response.json() as NewsResponse;
+      const data=await fetchJsonWithRetry<NewsResponse>(`/api/news?desk=${config.desk}`,{
+        signal:controller.signal,
+        isValid:(value)=>Array.isArray(value?.stories)&&value.stories.some((story)=>story.desk===config.desk),
+      });
+      if(controller.signal.aborted)return;
       const deskStories=data.stories.filter((story)=>story.desk===config.desk);
-      if(!deskStories.length)throw new Error("desk empty");
       setStories(deskStories);
       setFetchedAt(data.fetchedAt);
       setStatus(data.failedFeeds>0?"partial":"live");
       setHeroIndex((current)=>Math.min(current,Math.max(0,deskStories.length-1)));
-    }catch{setStatus("error");}
+    }catch{
+      if(!controller.signal.aborted)setStatus("error");
+    }finally{
+      if(newsRequest.current===controller)newsRequest.current=null;
+    }
   },[config.desk]);
 
   useEffect(()=>{
-    const initial=window.setTimeout(()=>void loadNews(),0);
+    void loadNews();
+    const whenActive=()=>{if(document.visibilityState==="visible")void loadNews();};
+    const whenOnline=()=>void loadNews();
+    document.addEventListener("visibilitychange",whenActive);
+    window.addEventListener("online",whenOnline);
     const refresh=window.setInterval(()=>{if(document.visibilityState==="visible")void loadNews();},900000);
     const timer=window.setInterval(()=>setClock(Date.now()),60000);
-    return()=>{window.clearTimeout(initial);window.clearInterval(refresh);window.clearInterval(timer);};
+    return()=>{
+      newsRequest.current?.abort();newsRequest.current=null;
+      document.removeEventListener("visibilitychange",whenActive);
+      window.removeEventListener("online",whenOnline);
+      window.clearInterval(refresh);window.clearInterval(timer);
+    };
   },[loadNews]);
+  useEffect(()=>{
+    if(status!=="error")return;
+    const retry=window.setTimeout(()=>void loadNews(),30000);
+    return()=>window.clearTimeout(retry);
+  },[status,loadNews]);
 
   const categories=useMemo(()=>{
     const counts=new Map<string,number>();

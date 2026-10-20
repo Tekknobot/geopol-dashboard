@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import MobileSiteNav from "../components/MobileSiteNav";
 import LanguageToggle from "../i18n/LanguageToggle";
 import { useSavedStories } from "../components/useSavedStories";
+import { fetchJsonWithRetry } from "../reliable-fetch";
 
 type Story = {
   id:number;
@@ -78,27 +79,48 @@ export default function WorldGrid(){
   const sentinel=useRef<HTMLDivElement|null>(null);
   const {savedIds,toggleSaved}=useSavedStories();
 
+  const newsRequest=useRef<AbortController|null>(null);
   const loadNews=useCallback(async()=>{
+    if(newsRequest.current)return;
+    const controller=new AbortController();
+    newsRequest.current=controller;
     setStatus((current)=>current==="error"?"loading":current);
     try{
-      const response=await fetch("/api/news",{signal:AbortSignal.timeout(9000)});
-      if(!response.ok)throw new Error("Publisher feeds unavailable");
-      const data=await response.json() as NewsResponse;
-      if(!data.stories.length)throw new Error("No publisher stories");
+      const data=await fetchJsonWithRetry<NewsResponse>("/api/news",{
+        signal:controller.signal,
+        isValid:(value)=>Array.isArray(value?.stories)&&value.stories.length>0,
+      });
+      if(controller.signal.aborted)return;
       setStories(data.stories);
       setFetchedAt(data.fetchedAt);
       setStatus(data.failedFeeds>0?"partial":"live");
     }catch{
-      setStatus("error");
+      if(!controller.signal.aborted)setStatus("error");
+    }finally{
+      if(newsRequest.current===controller)newsRequest.current=null;
     }
   },[]);
 
   useEffect(()=>{
-    const initial=window.setTimeout(()=>void loadNews(),0);
+    void loadNews();
+    const whenActive=()=>{if(document.visibilityState==="visible")void loadNews();};
+    const whenOnline=()=>void loadNews();
+    document.addEventListener("visibilitychange",whenActive);
+    window.addEventListener("online",whenOnline);
     const refresh=window.setInterval(()=>{if(document.visibilityState==="visible")void loadNews();},900000);
     const ticker=window.setInterval(()=>setClock(Date.now()),60000);
-    return()=>{window.clearTimeout(initial);window.clearInterval(refresh);window.clearInterval(ticker);};
+    return()=>{
+      newsRequest.current?.abort();newsRequest.current=null;
+      document.removeEventListener("visibilitychange",whenActive);
+      window.removeEventListener("online",whenOnline);
+      window.clearInterval(refresh);window.clearInterval(ticker);
+    };
   },[loadNews]);
+  useEffect(()=>{
+    if(status!=="error")return;
+    const retry=window.setTimeout(()=>void loadNews(),30000);
+    return()=>window.clearTimeout(retry);
+  },[status,loadNews]);
 
   const sources=useMemo(()=>["All sources",...[...new Set(stories.map((story)=>story.source))].sort((a:string,b:string)=>a.localeCompare(b))],[stories]);
   const activeTopics=useMemo(()=>editorialTopics.filter((item)=>item==="All"||stories.some((story)=>story.category===item)),[stories]);

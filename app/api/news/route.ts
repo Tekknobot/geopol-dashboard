@@ -365,6 +365,19 @@ function selectBestHeadlines(candidates:FeedStory[],includeAllDesks:boolean){
   return selected.sort((left,right)=>headlineScore(right,now)-headlineScore(left,now)||Date.parse(right.publishedAt)-Date.parse(left.publishedAt)).slice(0,180);
 }
 
+type NewsPayload = {
+  stories: FeedStory[];
+  sources: string[];
+  fetchedAt: string;
+  failedFeeds: number;
+  totalFeeds: number;
+  totalPublishers: number;
+  activePublishers: number;
+  regionalCoverage: Record<string, number>;
+};
+// Best-effort per-instance fallback, not a substitute for CDN caching.
+const lastHealthyResponses = new Map<string, { data: NewsPayload; time: number }>();
+
 export async function GET(request:Request) {
   const requestedDesk=new URL(request.url).searchParams.get("desk");
   const activeFeeds=requestedDesk==="world"||requestedDesk==="entertainment"||requestedDesk==="sports"?feeds.filter((feed)=>feed.desk===requestedDesk):feeds;
@@ -381,20 +394,33 @@ export async function GET(request:Request) {
   },{});
   const failedFeeds = results.filter((result) => result.status === "rejected").length;
 
-  return Response.json(
-    {
-      stories,
-      sources,
-      fetchedAt: new Date().toISOString(),
-      failedFeeds,
-      totalFeeds: activeFeeds.length,
-      totalPublishers: configuredPublishers.length,
-      activePublishers: sources.length,
-      regionalCoverage,
-    },
-    {
-      status: stories.length ? 200 : 503,
+  const responseData = {
+    stories,
+    sources,
+    fetchedAt: new Date().toISOString(),
+    failedFeeds,
+    totalFeeds: activeFeeds.length,
+    totalPublishers: configuredPublishers.length,
+    activePublishers: sources.length,
+    regionalCoverage,
+  };
+  if (stories.length) {
+    lastHealthyResponses.set(requestedDesk ?? "all", { data: responseData, time: Date.now() });
+    return Response.json(responseData, {
       headers: { "Cache-Control": "public, max-age=300, s-maxage=900, stale-while-revalidate=3600" },
-    },
-  );
+    });
+  }
+  // A transient publisher outage should never cache an empty 503 for 15 minutes.
+  // Serve a recent successful snapshot when this instance has one; otherwise
+  // tell the client to retry without allowing intermediaries to cache failure.
+  const cached = lastHealthyResponses.get(requestedDesk ?? "all");
+  if (cached && Date.now() - cached.time < 30 * 60_000) {
+    return Response.json({ ...cached.data, failedFeeds: activeFeeds.length, stale: true }, {
+      headers: { "Cache-Control": "public, max-age=0, s-maxage=30, stale-while-revalidate=60" },
+    });
+  }
+  return Response.json(responseData, {
+    status: 503,
+    headers: { "Cache-Control": "no-store", "Retry-After": "10" },
+  });
 }
