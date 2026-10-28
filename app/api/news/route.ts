@@ -1,6 +1,8 @@
 import { XMLParser } from "fast-xml-parser";
 import { categoryForDesk, type NewsDesk } from "../../news-taxonomy";
 import { locationMatchFor, type LocationMatch, type NewsRegion } from "./location-resolver";
+import { viewerFromParam, viewerFromRequest } from "./viewer-country";
+import { headlineScore, personalizeHeadlines, type ViewerLocation } from "./headline-personalization";
 
 export const runtime = "edge";
 
@@ -12,6 +14,7 @@ type FeedDefinition = {
   // the headline and location resolver, but this gives regional publishers a
   // sensible fallback when a local headline omits its country name.
   regionFocus?: NewsRegion;
+  countryFocus?: string; // ISO 3166-1 alpha-2; only for nationally focused publishers
 };
 
 type FeedStory = {
@@ -29,6 +32,8 @@ type FeedStory = {
   articleUrl: string;
   imageUrl?: string;
   regionFocus?: NewsRegion;
+  countryCode?: string;
+  countryEvidence?: "location" | "publisher";
   location?: {
     name: string;
     lat: number;
@@ -40,20 +45,20 @@ type FeedStory = {
 const feeds: FeedDefinition[] = [
   // WORLD — Canada remains a strong home-market desk, but duplicate feeds are
   // capped so regional publishers from the rest of the world can surface.
-  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-topstories", desk: "world", regionFocus: "Canada" },
-  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-canada", desk: "world", regionFocus: "Canada" },
-  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-politics", desk: "world", regionFocus: "Canada" },
-  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-business", desk: "world", regionFocus: "Canada" },
-  { source: "Global News", url: "https://globalnews.ca/canada/feed/", desk: "world", regionFocus: "Canada" },
-  { source: "Global News", url: "https://globalnews.ca/politics/feed/", desk: "world", regionFocus: "Canada" },
-  { source: "CTV News", url: "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009", desk: "world", regionFocus: "Canada" },
-  { source: "The Narwhal", url: "https://thenarwhal.ca/feed/", desk: "world", regionFocus: "Canada" },
-  { source: "Canada's National Observer", url: "https://www.nationalobserver.com/front/rss", desk: "world", regionFocus: "Canada" },
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-topstories", desk: "world", countryFocus: "CA", regionFocus: "Canada" },
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-canada", desk: "world", countryFocus: "CA", regionFocus: "Canada" },
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-politics", desk: "world", countryFocus: "CA", regionFocus: "Canada" },
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-business", desk: "world", countryFocus: "CA", regionFocus: "Canada" },
+  { source: "Global News", url: "https://globalnews.ca/canada/feed/", desk: "world", countryFocus: "CA", regionFocus: "Canada" },
+  { source: "Global News", url: "https://globalnews.ca/politics/feed/", desk: "world", countryFocus: "CA", regionFocus: "Canada" },
+  { source: "CTV News", url: "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009", desk: "world", countryFocus: "CA", regionFocus: "Canada" },
+  { source: "The Narwhal", url: "https://thenarwhal.ca/feed/", desk: "world", countryFocus: "CA", regionFocus: "Canada" },
+  { source: "Canada's National Observer", url: "https://www.nationalobserver.com/front/rss", desk: "world", countryFocus: "CA", regionFocus: "Canada" },
 
   // United States / North American hub coverage.
   { source: "NPR", url: "https://feeds.npr.org/1004/rss.xml", desk: "world", regionFocus: "United States" },
-  { source: "PBS NewsHour", url: "https://www.pbs.org/newshour/feeds/rss/headlines", desk: "world", regionFocus: "United States" },
-  { source: "ABC News US", url: "https://feeds.abcnews.com/abcnews/topstories", desk: "world", regionFocus: "United States" },
+  { source: "PBS NewsHour", url: "https://www.pbs.org/newshour/feeds/rss/headlines", desk: "world", countryFocus: "US", regionFocus: "United States" },
+  { source: "ABC News US", url: "https://feeds.abcnews.com/abcnews/topstories", desk: "world", countryFocus: "US", regionFocus: "United States" },
 
   // Europe / transatlantic international coverage.
   { source: "BBC News", url: "https://feeds.bbci.co.uk/news/world/rss.xml", desk: "world", regionFocus: "Europe" },
@@ -73,36 +78,36 @@ const feeds: FeedDefinition[] = [
   // Africa. Pan-African + locally headquartered outlets give the desk a
   // source-origin counterweight to London/Paris coverage of the continent.
   { source: "Africanews", url: "https://www.africanews.com/feed/", desk: "world", regionFocus: "Africa" },
-  { source: "Daily Maverick", url: "https://www.dailymaverick.co.za/dmrss/", desk: "world", regionFocus: "Africa" },
+  { source: "Daily Maverick", url: "https://www.dailymaverick.co.za/dmrss/", desk: "world", countryFocus: "ZA", regionFocus: "Africa" },
   { source: "AllAfrica", url: "https://allafrica.com/tools/headlines/rdf/africa/headlines.rdf", desk: "world", regionFocus: "Africa" },
 
   // South Asia.
-  { source: "Dawn", url: "https://www.dawn.com/feeds/home", desk: "world", regionFocus: "South Asia" },
-  { source: "The Hindu", url: "https://www.thehindu.com/feeder/default.rss", desk: "world", regionFocus: "South Asia" },
-  { source: "The Indian Express", url: "https://indianexpress.com/section/india/feed/", desk: "world", regionFocus: "South Asia" },
-  { source: "Daily Mirror Sri Lanka", url: "https://www.dailymirror.lk/rss/breaking_news/108", desk: "world", regionFocus: "South Asia" },
+  { source: "Dawn", url: "https://www.dawn.com/feeds/home", desk: "world", countryFocus: "PK", regionFocus: "South Asia" },
+  { source: "The Hindu", url: "https://www.thehindu.com/feeder/default.rss", desk: "world", countryFocus: "IN", regionFocus: "South Asia" },
+  { source: "The Indian Express", url: "https://indianexpress.com/section/india/feed/", desk: "world", countryFocus: "IN", regionFocus: "South Asia" },
+  { source: "Daily Mirror Sri Lanka", url: "https://www.dailymirror.lk/rss/breaking_news/108", desk: "world", countryFocus: "LK", regionFocus: "South Asia" },
 
   // East Asia.
-  { source: "South China Morning Post", url: "https://www.scmp.com/rss/91/feed", desk: "world", regionFocus: "East Asia" },
-  { source: "The Japan Times", url: "https://www.japantimes.co.jp/feed/", desk: "world", regionFocus: "East Asia" },
-  { source: "Japan Today", url: "https://japantoday.com/feed/atom", desk: "world", regionFocus: "East Asia" },
+  { source: "South China Morning Post", url: "https://www.scmp.com/rss/91/feed", desk: "world", countryFocus: "HK", regionFocus: "East Asia" },
+  { source: "The Japan Times", url: "https://www.japantimes.co.jp/feed/", desk: "world", countryFocus: "JP", regionFocus: "East Asia" },
+  { source: "Japan Today", url: "https://japantoday.com/feed/atom", desk: "world", countryFocus: "JP", regionFocus: "East Asia" },
 
   // Southeast Asia. CNA publishes official RSS endpoints and gives Atlas a
   // strong Singapore/ASEAN reporting hub. Bangkok Post adds mainland SEA.
-  { source: "CNA", url: "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511", desk: "world", regionFocus: "Southeast Asia" },
-  { source: "CNA", url: "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=10416", desk: "world", regionFocus: "Southeast Asia" },
-  { source: "Bangkok Post", url: "https://www.bangkokpost.com/rss/data/most-recent.xml", desk: "world", regionFocus: "Southeast Asia" },
+  { source: "CNA", url: "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511", desk: "world", countryFocus: "SG", regionFocus: "Southeast Asia" },
+  { source: "CNA", url: "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=10416", desk: "world", countryFocus: "SG", regionFocus: "Southeast Asia" },
+  { source: "Bangkok Post", url: "https://www.bangkokpost.com/rss/data/most-recent.xml", desk: "world", countryFocus: "TH", regionFocus: "Southeast Asia" },
 
   // Oceania / Pacific.
-  { source: "ABC News Australia", url: "https://www.abc.net.au/news/feed/51120/rss.xml", desk: "world", regionFocus: "Oceania & Pacific" },
+  { source: "ABC News Australia", url: "https://www.abc.net.au/news/feed/51120/rss.xml", desk: "world", countryFocus: "AU", regionFocus: "Oceania & Pacific" },
   { source: "RNZ", url: "https://www.rnz.co.nz/rss/world.xml", desk: "world", regionFocus: "Oceania & Pacific" },
   { source: "RNZ Pacific", url: "https://www.rnz.co.nz/rss/pacific.xml", desk: "world", regionFocus: "Oceania & Pacific" },
 
   // Latin America & Caribbean. English-language regional feeds are kept local
   // to the region rather than relying entirely on US/European correspondents.
   { source: "MercoPress", url: "https://en.mercopress.com/rss/latin-america", desk: "world", regionFocus: "Latin America & Caribbean" },
-  { source: "Buenos Aires Herald", url: "https://buenosairesherald.com/feed", desk: "world", regionFocus: "Latin America & Caribbean" },
-  { source: "Buenos Aires Times", url: "https://www.batimes.com.ar/feed", desk: "world", regionFocus: "Latin America & Caribbean" },
+  { source: "Buenos Aires Herald", url: "https://buenosairesherald.com/feed", desk: "world", countryFocus: "AR", regionFocus: "Latin America & Caribbean" },
+  { source: "Buenos Aires Times", url: "https://www.batimes.com.ar/feed", desk: "world", countryFocus: "AR", regionFocus: "Latin America & Caribbean" },
 
   // International institutions.
   { source: "UN News", url: "https://news.un.org/feed/subscribe/en/news/all/rss.xml", desk: "world", regionFocus: "Global" },
@@ -114,16 +119,16 @@ const feeds: FeedDefinition[] = [
   { source: "The Guardian Music", url: "https://www.theguardian.com/music/rss", desk: "entertainment", regionFocus: "Europe" },
   { source: "The Guardian Games", url: "https://www.theguardian.com/games/rss", desk: "entertainment", regionFocus: "Europe" },
   { source: "NPR Arts & Life", url: "https://feeds.npr.org/1008/rss.xml", desk: "entertainment", regionFocus: "United States" },
-  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-arts", desk: "entertainment", regionFocus: "Canada" },
-  { source: "Global News", url: "https://globalnews.ca/entertainment/feed/", desk: "entertainment", regionFocus: "Canada" },
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-arts", desk: "entertainment", countryFocus: "CA", regionFocus: "Canada" },
+  { source: "Global News", url: "https://globalnews.ca/entertainment/feed/", desk: "entertainment", countryFocus: "CA", regionFocus: "Canada" },
 
   // SPORTS
   { source: "BBC Sport", url: "https://feeds.bbci.co.uk/sport/rss.xml", desk: "sports", regionFocus: "Europe" },
   { source: "The Guardian Sport", url: "https://www.theguardian.com/sport/rss", desk: "sports", regionFocus: "Europe" },
   { source: "The Guardian Football", url: "https://www.theguardian.com/football/rss", desk: "sports", regionFocus: "Europe" },
   { source: "ESPN", url: "https://www.espn.com/espn/rss/news", desk: "sports", regionFocus: "United States" },
-  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-sports", desk: "sports", regionFocus: "Canada" },
-  { source: "Global News", url: "https://globalnews.ca/sports/feed/", desk: "sports", regionFocus: "Canada" },
+  { source: "CBC News", url: "https://www.cbc.ca/cmlink/rss-sports", desk: "sports", countryFocus: "CA", regionFocus: "Canada" },
+  { source: "Global News", url: "https://globalnews.ca/sports/feed/", desk: "sports", countryFocus: "CA", regionFocus: "Canada" },
 ];
 
 const parser = new XMLParser({
@@ -290,6 +295,8 @@ export function parseFeed(xml: string, feed: FeedDefinition): FeedStory[] {
       articleUrl,
       imageUrl: imageLink(item, rawDescription),
       regionFocus: feed.regionFocus,
+      countryCode: matchedLocation?.countryCode ?? (matchedLocation ? undefined : feed.countryFocus),
+      countryEvidence: matchedLocation?.countryCode ? "location" : matchedLocation ? undefined : feed.countryFocus ? "publisher" : undefined,
       location: matchedLocation?{name:matchedLocation.name,lat:matchedLocation.lat,lng:matchedLocation.lng,precision:matchedLocation.precision}:undefined,
     }];
   });
@@ -304,15 +311,8 @@ async function loadFeed(feed: FeedDefinition) {
   return parseFeed(await response.text(), feed);
 }
 
-const headlineScore=(story:FeedStory,now:number)=>{
-  const ageHours=Math.max(0,(now-Date.parse(story.publishedAt))/3_600_000);
-  const recency=Math.max(0,120-ageHours*1.4);
-  const completeness=(story.imageUrl?14:0)+(story.summary.length>=120?7:story.summary.length>=60?3:0)+(story.location?4:0);
-  const urgency=story.level==="critical"?10:story.level==="elevated"?6:story.level==="watch"?2:0;
-  return recency+completeness+urgency;
-};
 
-function selectBestHeadlines(candidates:FeedStory[],includeAllDesks:boolean){
+function selectBestHeadlines(candidates:FeedStory[],includeAllDesks:boolean,viewer:ViewerLocation|null){
   const now=Date.now();
   const byScore=[...candidates].sort((left,right)=>headlineScore(right,now)-headlineScore(left,now)||Date.parse(right.publishedAt)-Date.parse(left.publishedAt));
   const selected:FeedStory[]=[];
@@ -362,7 +362,9 @@ function selectBestHeadlines(candidates:FeedStory[],includeAllDesks:boolean){
   }
 
   add(byScore);
-  return selected.sort((left,right)=>headlineScore(right,now)-headlineScore(left,now)||Date.parse(right.publishedAt)-Date.parse(left.publishedAt)).slice(0,180);
+  // Apply national priority before the final 180-story limit. This keeps
+  // domestic headlines from disappearing due to total feed volume.
+  return personalizeHeadlines(selected,viewer,now).slice(0,180);
 }
 
 type NewsPayload = {
@@ -379,13 +381,20 @@ type NewsPayload = {
 const lastHealthyResponses = new Map<string, { data: NewsPayload; time: number }>();
 
 export async function GET(request:Request) {
-  const requestedDesk=new URL(request.url).searchParams.get("desk");
+  const params = new URL(request.url).searchParams;
+  const requestedDesk=params.get("desk");
+  // Explicit country query makes regional news caches safely vary by URL.
+  // Direct API calls without a query can still use the edge location, but
+  // must not be stored in a shared CDN cache under a generic path.
+  const explicitlySegmented = params.has("country");
+  const viewer = explicitlySegmented ? viewerFromParam(params.get("country")) : viewerFromRequest(request);
+  const cacheKey = `${requestedDesk ?? "all"}:${viewer?.countryCode ?? "GLOBAL"}`;
   const activeFeeds=requestedDesk==="world"||requestedDesk==="entertainment"||requestedDesk==="sports"?feeds.filter((feed)=>feed.desk===requestedDesk):feeds;
   const results=await Promise.allSettled(activeFeeds.map((feed)=>loadFeed(feed)));
   const candidates = results
     .flatMap((result) => result.status === "fulfilled" ? result.value : [])
     .filter((story, index, all) => all.findIndex((candidate) => candidate.articleUrl === story.articleUrl) === index)
-  const stories=selectBestHeadlines(candidates,!requestedDesk);
+  const stories=selectBestHeadlines(candidates,!requestedDesk,viewer);
   const sources = [...new Set(stories.map((story) => story.source))];
   const configuredPublishers = [...new Set(activeFeeds.map((feed) => feed.source))];
   const regionalCoverage = stories.reduce<Record<string,number>>((counts,story)=>{
@@ -403,20 +412,21 @@ export async function GET(request:Request) {
     totalPublishers: configuredPublishers.length,
     activePublishers: sources.length,
     regionalCoverage,
+    viewerCountry: viewer?.countryCode ?? null,
   };
   if (stories.length) {
-    lastHealthyResponses.set(requestedDesk ?? "all", { data: responseData, time: Date.now() });
+    lastHealthyResponses.set(cacheKey, { data: responseData, time: Date.now() });
     return Response.json(responseData, {
-      headers: { "Cache-Control": "public, max-age=300, s-maxage=900, stale-while-revalidate=3600" },
+      headers: { "Cache-Control": explicitlySegmented ? "public, max-age=300, s-maxage=900, stale-while-revalidate=3600" : "private, no-store" },
     });
   }
   // A transient publisher outage should never cache an empty 503 for 15 minutes.
   // Serve a recent successful snapshot when this instance has one; otherwise
   // tell the client to retry without allowing intermediaries to cache failure.
-  const cached = lastHealthyResponses.get(requestedDesk ?? "all");
+  const cached = lastHealthyResponses.get(cacheKey);
   if (cached && Date.now() - cached.time < 30 * 60_000) {
     return Response.json({ ...cached.data, failedFeeds: activeFeeds.length, stale: true }, {
-      headers: { "Cache-Control": "public, max-age=0, s-maxage=30, stale-while-revalidate=60" },
+      headers: { "Cache-Control": explicitlySegmented ? "public, max-age=0, s-maxage=30, stale-while-revalidate=60" : "private, no-store" },
     });
   }
   return Response.json(responseData, {

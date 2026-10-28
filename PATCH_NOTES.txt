@@ -75,3 +75,23 @@ Validation
   environment could not reach the npm registry. Install packages and rebuild on deployment.
 - Included the existing dist directory unchanged; it is NOT a rebuilt production bundle.
 - No node_modules is included in the delivered ZIP.
+
+VIEWER-LOCAL HEADLINE MIX — 2026-10-28
+
+Goal
+- Prioritize headline relevance to the reader's country without replacing the international news mix or locking the wire to one country.
+
+Changes
+- Added country-level detection from Cloudflare/Vercel/CloudFront/Netlify edge geolocation (no GPS prompt or third-party location API).
+- Added a non-cacheable /api/news/viewer endpoint. Browser news requests use a country-specific query parameter so shared CDN caching cannot mix country rankings.
+- Leading local headlines alternate with world stories (two domestic / three international when sufficient fresh, country-specific stories are available).
+- Keep a relevance-first approach: stale domestic articles (>36h old) cannot displace fresh global news at the top. When a country has no represented local articles, boost its wider region slightly instead.
+- Enhanced article country detection for named hotspots and common nationality adjectives; nationally focused publisher metadata fills in when no explicit location is present.
+- Applied ordering to the main Best 180 carousel and the Sports and Entertainment desks, while retaining the existing region filters and publisher distribution rules.
+- Added repeatable ranking tests in tests/headline-personalization.test.mjs.
+
+Testing
+- node --experimental-strip-types --test tests/headline-personalization.test.mjs
+- Verify client geolocation on the deployed host using /api/news/viewer (local preview normally has no edge country and defaults to global).
+- Country-specific requests can be checked manually with /api/news?country=CA or /api/news?country=LK.
+- npm ci/build needs dependencies and a network-enabled environment; the attached source archive is not a prebuilt deployment.

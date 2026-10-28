@@ -9,6 +9,7 @@ import { useSavedStories } from "./components/useSavedStories";
 import { StoryThreads } from "./components/NewsroomFeatures";
 import MobileSiteNav from "./components/MobileSiteNav";
 import LanguageToggle from "./i18n/LanguageToggle";
+import { newsUrl } from "./news-location-client";
 import { fetchJsonWithRetry } from "./reliable-fetch";
 
 const WorldEventMap = dynamic(() => import("./components/WorldEventMap"), { ssr: false, loading: () => <div className="map-loading">Loading intelligence map…</div> });
@@ -79,7 +80,9 @@ export default function Home(){
     newsRequest.current=controller;
     setFeedStatus((status)=>status==="error"?"loading":status);
     try{
-      const data=await fetchJsonWithRetry<NewsResponse>("/api/news",{
+      const url = await newsUrl();
+      if(controller.signal.aborted)return;
+      const data=await fetchJsonWithRetry<NewsResponse>(url,{
         signal:controller.signal,
         isValid:(value)=>Array.isArray(value?.stories)&&value.stories.length>0&&Array.isArray(value.sources),
       });

@@ -8,6 +8,7 @@ import { useSavedStories } from "./useSavedStories";
 import { ReleaseRadar, SportsMatchHub } from "./NewsroomFeatures";
 import MobileSiteNav from "./MobileSiteNav";
 import LanguageToggle from "../i18n/LanguageToggle";
+import { newsUrl } from "../news-location-client";
 import { fetchJsonWithRetry } from "../reliable-fetch";
 
 const WorldEventMap = dynamic(() => import("./WorldEventMap"), {
@@ -84,7 +85,9 @@ export default function DeskPage({config}:{config:DeskConfig}){
     newsRequest.current=controller;
     setStatus((current)=>current==="error"?"loading":current);
     try{
-      const data=await fetchJsonWithRetry<NewsResponse>(`/api/news?desk=${config.desk}`,{
+      const url = await newsUrl(config.desk);
+      if(controller.signal.aborted)return;
+      const data=await fetchJsonWithRetry<NewsResponse>(url,{
         signal:controller.signal,
         isValid:(value)=>Array.isArray(value?.stories)&&value.stories.some((story)=>story.desk===config.desk),
       });

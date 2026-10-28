@@ -9,6 +9,7 @@ export type LocationMatch = {
   precision: "country" | "hotspot";
   aliases: string[];
   region?: NewsRegion;
+  countryCode?: string;
 };
 
 const hotspotLocations: LocationMatch[] = [
@@ -43,7 +44,7 @@ const hotspotLocations: LocationMatch[] = [
   {name:"London",lat:51.51,lng:-0.13,precision:"hotspot",aliases:["London","Wembley"],region:"Europe"},
   {name:"Paris",lat:48.86,lng:2.35,precision:"hotspot",aliases:["Paris","Roland Garros"],region:"Europe"},
   {name:"Cannes",lat:43.55,lng:7.02,precision:"hotspot",aliases:["Cannes"],region:"Europe"},
-  {name:"Toronto",lat:43.65,lng:-79.38,precision:"hotspot",aliases:["Toronto"]},
+  {name:"Toronto",lat:43.65,lng:-79.38,precision:"hotspot",aliases:["Toronto"],region:"Canada"},
   {name:"Mumbai",lat:19.08,lng:72.88,precision:"hotspot",aliases:["Mumbai","Bollywood"],region:"South Asia"},
   {name:"Colombo",lat:6.9271,lng:79.8612,precision:"hotspot",aliases:["Colombo"],region:"South Asia"},
   {name:"Seoul",lat:37.57,lng:126.98,precision:"hotspot",aliases:["Seoul"],region:"East Asia"},
@@ -107,14 +108,43 @@ const countryLocations: LocationMatch[] = countries.flatMap((country) => {
   if (country.cca3 === "JOR") aliases.push("Hashemite Kingdom of Jordan","Jordanian","Amman");
   if (country.cca3 === "COD") aliases.push("DR Congo","DRC");
   if (country.cca3 === "COG") aliases.push("Republic of Congo");
-  if (country.cca3 === "USA") aliases.push("United States","U.S.","USA");
-  if (country.cca3 === "GBR") aliases.push("United Kingdom","Britain","UK");
+  if (country.cca3 === "USA") aliases.push("United States","U.S.","USA","American");
+  if (country.cca3 === "CAN") aliases.push("Canadian");
+  if (country.cca3 === "LKA") aliases.push("Sri Lankan");
+  if (country.cca3 === "IND") aliases.push("Indian");
+  if (country.cca3 === "AUS") aliases.push("Australian");
+  if (country.cca3 === "JPN") aliases.push("Japanese");
+  if (country.cca3 === "FRA") aliases.push("French");
+  if (country.cca3 === "DEU") aliases.push("German");
+  if (country.cca3 === "CHN") aliases.push("Chinese");
+  if (country.cca3 === "PAK") aliases.push("Pakistani");
+  if (country.cca3 === "NGA") aliases.push("Nigerian");
+  if (country.cca3 === "UKR") aliases.push("Ukrainian");
+  if (country.cca3 === "BRA") aliases.push("Brazilian");
+  if (country.cca3 === "GBR") aliases.push("United Kingdom","Britain","UK","British");
   if (country.cca3 === "KOR") aliases.push("South Korea");
   if (country.cca3 === "PRK") aliases.push("North Korea");
   if (country.cca3 === "TUR") aliases.push("Turkey");
   if (country.cca3 === "CIV") aliases.push("Ivory Coast");
-  return [{name:country.name.common,lat:country.latlng[0],lng:country.latlng[1],precision:"country" as const,aliases,region:countryRegion(country.region,country.subregion,country.cca3)}];
+  return [{name:country.name.common,lat:country.latlng[0],lng:country.latlng[1],precision:"country" as const,aliases,region:countryRegion(country.region,country.subregion,country.cca3),countryCode:country.cca2}];
 });
+
+for (const hotspot of hotspotLocations) {
+  if (hotspot.region === "Canada") hotspot.countryCode = "CA";
+  else if (hotspot.region === "United States") hotspot.countryCode = "US";
+  else if (["London"].includes(hotspot.name)) hotspot.countryCode = "GB";
+  else if (["Paris", "Cannes"].includes(hotspot.name)) hotspot.countryCode = "FR";
+  else if (hotspot.name === "Colombo") hotspot.countryCode = "LK";
+  else if (hotspot.name === "Mumbai") hotspot.countryCode = "IN";
+  else if (hotspot.name === "Tokyo") hotspot.countryCode = "JP";
+  else if (hotspot.name === "Seoul") hotspot.countryCode = "KR";
+  else if (hotspot.name === "Melbourne") hotspot.countryCode = "AU";
+}
+
+export const viewerRegionForCountry = (code: string): NewsRegion | null => {
+  const country = countries.find((entry) => entry.cca2 === code.trim().toUpperCase());
+  return country ? countryRegion(country.region, country.subregion, country.cca3) : null;
+};
 
 const locationMatches = [...hotspotLocations,...countryLocations]
   .flatMap((location) => location.aliases.map((alias) => ({location,alias})))
